@@ -231,6 +231,22 @@
     color: #fff;
     box-shadow: 0 2px 8px rgba(233,69,96,0.5);
   }
+  .note-dot.pressed,
+  .key-white.pressed,
+  .key-black.pressed {
+    outline: 3px solid var(--highlight);
+    outline-offset: 1px;
+    box-shadow: 0 0 16px rgba(245,208,66,0.7);
+  }
+  .fret-cell.pressed::after {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    border: 2px solid var(--highlight);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 3;
+  }
   .note-dot .dot-degree {
     font-size: 8px;
     font-weight: 500;
@@ -346,6 +362,54 @@
   .legend-swatch.root { background: var(--root); }
   .legend-swatch.note { background: var(--note); }
 
+  /* MIDI controls */
+  .midi-panel {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .midi-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .midi-btn:disabled { opacity: 0.5; cursor: default; }
+  .midi-btn.connected { background: #4ecca3; color: #003; }
+  .midi-status {
+    color: var(--muted);
+    font-size: 13px;
+    flex: 1;
+    min-width: 0;
+  }
+  .midi-status.error { color: var(--accent); }
+  .midi-status.ok { color: #4ecca3; }
+  .midi-feedback {
+    margin-top: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.25);
+    font-size: 14px;
+    min-height: 22px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .midi-feedback .pill {
+    background: var(--accent2);
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .midi-feedback.in-scale .verdict { color: #4ecca3; }
+  .midi-feedback.off-scale .verdict { color: var(--accent); }
+
   footer {
     text-align: center;
     color: var(--muted);
@@ -386,6 +450,18 @@
     <div class="scale-title" id="scale-name">C-duuri</div>
     <div class="scale-notes" id="scale-notes"></div>
     <div class="formula" id="scale-formula"></div>
+  </div>
+
+  <div class="panel">
+    <h2>MIDI-syöte</h2>
+    <div class="midi-panel">
+      <button id="midi-btn" class="midi-btn">Yhdistä MIDI-laite</button>
+      <div id="midi-status" class="midi-status">Ei yhdistetty. Toimii Chrome/Edge/Firefox-selaimilla (ei Safari).</div>
+    </div>
+    <div id="midi-feedback" class="midi-feedback" style="display:none;">
+      <span class="pill" id="midi-note-pill">–</span>
+      <span class="verdict" id="midi-verdict">Soita kosketin</span>
+    </div>
   </div>
 
   <div class="panel">
@@ -547,6 +623,7 @@ function renderGuitar(scaleNotes, rootIdx, scaleIntervals) {
 
       const noteAt = (str.open + f) % 12;
       const noteOctave = str.octave + Math.floor((str.open + f) / 12);
+      cell.dataset.noteIdx = noteAt;
 
       if (scaleNotes.includes(noteAt)) {
         const dot = document.createElement("div");
@@ -605,6 +682,7 @@ function renderPiano(scaleNotes, rootIdx) {
     whiteNotes.forEach((wn) => {
       const key = document.createElement("div");
       key.className = "key-white";
+      key.dataset.noteIdx = wn;
       if (scaleNotes.includes(wn)) key.classList.add("active");
       if (wn === rootIdx) key.classList.add("root");
       key.textContent = NOTES_FI[wn];
@@ -615,6 +693,7 @@ function renderPiano(scaleNotes, rootIdx) {
         const bn = blackAfter[wn];
         const black = document.createElement("div");
         black.className = "key-black";
+        black.dataset.noteIdx = bn;
         if (scaleNotes.includes(bn)) black.classList.add("active");
         if (bn === rootIdx) black.classList.add("root");
         black.textContent = NOTES_FI[bn];
@@ -665,10 +744,141 @@ function render() {
   renderInfo(scaleNotes, rootIdx, scaleKey);
   renderGuitar(scaleNotes, rootIdx, scaleIntervals);
   renderPiano(scaleNotes, rootIdx);
+  if (typeof updatePressedHighlights === "function") updatePressedHighlights();
 }
 
 populateSelectors();
 render();
+
+// ========== MIDI ==========
+// MIDI note number -> { noteIdx (0-11), octave }
+// MIDI 60 = C4. Our NOTES_FI index 0 = C.
+function midiToNote(midiNum) {
+  const noteIdx = midiNum % 12;
+  const octave = Math.floor(midiNum / 12) - 1;
+  return { noteIdx, octave };
+}
+
+const pressedNotes = new Set(); // pitch classes 0-11 currently held
+
+function updatePressedHighlights() {
+  // Piano keys
+  document.querySelectorAll(".key-white, .key-black").forEach(el => {
+    el.classList.remove("pressed");
+  });
+  // Note dots on guitar
+  document.querySelectorAll(".note-dot").forEach(el => {
+    el.classList.remove("pressed");
+  });
+  // Guitar fret cells (for notes outside the scale that still get pressed)
+  document.querySelectorAll(".fret-cell").forEach(el => {
+    el.classList.remove("pressed");
+  });
+
+  if (pressedNotes.size === 0) return;
+
+  // Piano: match by data attribute or simple lookup via text content of the key
+  document.querySelectorAll(".key-white, .key-black").forEach(el => {
+    const noteIdx = parseInt(el.dataset.noteIdx);
+    if (!isNaN(noteIdx) && pressedNotes.has(noteIdx)) {
+      el.classList.add("pressed");
+    }
+  });
+
+  // Guitar
+  document.querySelectorAll(".fret-cell").forEach(cell => {
+    const noteIdx = parseInt(cell.dataset.noteIdx);
+    if (!isNaN(noteIdx) && pressedNotes.has(noteIdx)) {
+      cell.classList.add("pressed");
+      const dot = cell.querySelector(".note-dot");
+      if (dot) dot.classList.add("pressed");
+    }
+  });
+}
+
+function updateFeedback(lastNoteIdx) {
+  const fb = document.getElementById("midi-feedback");
+  if (lastNoteIdx === null || lastNoteIdx === undefined) {
+    fb.style.display = "none";
+    return;
+  }
+  fb.style.display = "flex";
+  const rootIdx = parseInt(document.getElementById("root-note").value);
+  const scaleKey = document.getElementById("scale-type").value;
+  const scaleNotes = getScaleNotes(rootIdx, scaleKey);
+  const inScale = scaleNotes.includes(lastNoteIdx);
+  const isRoot = lastNoteIdx === rootIdx;
+
+  document.getElementById("midi-note-pill").textContent = NOTES_FI[lastNoteIdx];
+  const verdict = document.getElementById("midi-verdict");
+  if (isRoot) {
+    verdict.textContent = "Perussävel ✓";
+    fb.className = "midi-feedback in-scale";
+  } else if (inScale) {
+    const degree = getDegreeForNote(lastNoteIdx, rootIdx, SCALES[scaleKey].intervals);
+    verdict.textContent = "Asteikossa · " + degree + ". aste";
+    fb.className = "midi-feedback in-scale";
+  } else {
+    verdict.textContent = "Ei kuulu asteikkoon";
+    fb.className = "midi-feedback off-scale";
+  }
+}
+
+function handleMIDIMessage(event) {
+  const [status, data1, data2] = event.data;
+  const command = status & 0xf0;
+  if (command === 0x90 && data2 > 0) {
+    // Note on
+    const { noteIdx, octave } = midiToNote(data1);
+    pressedNotes.add(noteIdx);
+    updatePressedHighlights();
+    updateFeedback(noteIdx);
+    playTone(noteIdx, octave, 0.5);
+  } else if (command === 0x80 || (command === 0x90 && data2 === 0)) {
+    // Note off
+    const { noteIdx } = midiToNote(data1);
+    pressedNotes.delete(noteIdx);
+    updatePressedHighlights();
+  }
+}
+
+const midiBtn = document.getElementById("midi-btn");
+const midiStatus = document.getElementById("midi-status");
+
+if (!navigator.requestMIDIAccess) {
+  midiBtn.disabled = true;
+  midiStatus.textContent = "Selaimesi ei tue Web MIDI -rajapintaa.";
+  midiStatus.classList.add("error");
+} else {
+  midiBtn.addEventListener("click", async () => {
+    midiBtn.disabled = true;
+    midiStatus.textContent = "Yhdistetään…";
+    try {
+      const access = await navigator.requestMIDIAccess();
+      const attach = () => {
+        const inputs = Array.from(access.inputs.values());
+        if (inputs.length === 0) {
+          midiStatus.textContent = "Ei MIDI-laitetta. Kytke laite ja kokeile uudestaan.";
+          midiStatus.classList.add("error");
+          midiBtn.disabled = false;
+          return;
+        }
+        inputs.forEach(input => { input.onmidimessage = handleMIDIMessage; });
+        midiStatus.textContent = "Yhdistetty: " + inputs.map(i => i.name).join(", ");
+        midiStatus.classList.remove("error");
+        midiStatus.classList.add("ok");
+        midiBtn.textContent = "Yhdistetty";
+        midiBtn.classList.add("connected");
+      };
+      attach();
+      access.onstatechange = attach;
+    } catch (err) {
+      midiBtn.disabled = false;
+      midiStatus.textContent = "MIDI-pääsy hylätty: " + (err.message || err);
+      midiStatus.classList.add("error");
+    }
+  });
+}
 </script>
 </body>
 </html>
