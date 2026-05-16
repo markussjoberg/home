@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skaalaopisto - Kitara & Koskettimet</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --panel: #16213e;
+    --accent: #e94560;
+    --accent2: #0f3460;
+    --text: #eaeaea;
+    --muted: #8892a6;
+    --highlight: #f5d042;
+    --root: #e94560;
+    --note: #4ecca3;
+    --fret: #2a2a3e;
+    --string: #b8b8b8;
+    --wood: #3d2817;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 20px;
+    min-height: 100vh;
+  }
+  h1 {
+    margin: 0 0 8px;
+    color: var(--accent);
+    font-size: 28px;
+  }
+  .subtitle { color: var(--muted); margin-bottom: 24px; }
+  .container { max-width: 1200px; margin: 0 auto; }
+  .controls {
+    background: var(--panel);
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+  }
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+  }
+  select, button {
+    background: var(--accent2);
+    color: var(--text);
+    border: 1px solid var(--accent2);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  select:hover, button:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  button.primary:hover { background: #ff5775; }
+  .panel {
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+  .panel h2 {
+    margin: 0 0 16px;
+    font-size: 18px;
+    color: var(--highlight);
+  }
+  /* Piano */
+  .piano-wrapper {
+    overflow-x: auto;
+    padding: 8px 0;
+  }
+  .piano {
+    position: relative;
+    display: inline-flex;
+    background: #000;
+    padding: 8px;
+    border-radius: 8px;
+    user-select: none;
+    height: 196px;
+  }
+  .key-white {
+    width: 44px;
+    height: 180px;
+    background: #f5f5f5;
+    border: 1px solid #333;
+    border-radius: 0 0 6px 6px;
+    position: relative;
+    margin-right: 1px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 8px;
+    color: #555;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .key-white:hover { background: #e0e0e0; }
+  .key-white.active {
+    background: var(--note);
+    color: #000;
+  }
+  .key-white.root {
+    background: var(--root);
+    color: #fff;
+  }
+  .key-black {
+    position: absolute;
+    width: 28px;
+    height: 110px;
+    background: #1a1a1a;
+    border-radius: 0 0 4px 4px;
+    z-index: 2;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 6px;
+    color: #888;
+    font-size: 10px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .key-black:hover { background: #333; }
+  .key-black.active {
+    background: var(--note);
+    color: #000;
+  }
+  .key-black.root {
+    background: var(--root);
+    color: #fff;
+  }
+  /* Guitar */
+  .guitar-wrapper {
+    overflow-x: auto;
+  }
+  .guitar {
+    display: grid;
+    grid-template-columns: 50px repeat(13, 1fr);
+    gap: 0;
+    background: var(--wood);
+    padding: 16px 8px;
+    border-radius: 8px;
+    min-width: 900px;
+  }
+  .fret-number {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 4px;
+  }
+  .string-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--highlight);
+    font-weight: 600;
+    font-size: 14px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 4px;
+    margin: 2px 4px 2px 0;
+  }
+  .fret-cell {
+    position: relative;
+    height: 40px;
+    border-right: 2px solid #888;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .fret-cell.open {
+    border-right: 4px solid #fff;
+    background: rgba(0,0,0,0.2);
+  }
+  .fret-cell::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 2px;
+    background: var(--string);
+  }
+  .note-dot {
+    position: relative;
+    z-index: 2;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--note);
+    color: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+  }
+  .note-dot.root {
+    background: var(--root);
+    color: #fff;
+  }
+  .fret-marker {
+    position: absolute;
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.3);
+  }
+  /* Info */
+  .scale-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .note-badge {
+    background: var(--accent2);
+    padding: 8px 14px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .note-badge.root {
+    background: var(--root);
+  }
+  .formula {
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 8px;
+    font-family: monospace;
+  }
+  /* Quiz */
+  .quiz {
+    display: none;
+  }
+  .quiz.active { display: block; }
+  .quiz-question {
+    font-size: 20px;
+    margin-bottom: 16px;
+  }
+  .quiz-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .quiz-option {
+    background: var(--accent2);
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+  }
+  .quiz-option:hover {
+    border-color: var(--accent);
+  }
+  .quiz-option.correct {
+    background: var(--note);
+    color: #000;
+  }
+  .quiz-option.wrong {
+    background: #c0392b;
+  }
+  .quiz-score {
+    color: var(--highlight);
+    font-weight: 600;
+  }
+  .quiz-feedback {
+    margin-top: 12px;
+    min-height: 24px;
+    font-weight: 600;
+  }
+  .tab-buttons {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .tab-btn {
+    background: var(--accent2);
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text);
+  }
+  .tab-btn.active {
+    background: var(--accent);
+  }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 32px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Skaalaopisto</h1>
+  <p class="subtitle">Opettele asteikkoja koskettimilla ja kitaralla</p>
+
+  <div class="tab-buttons">
+    <button class="tab-btn active" data-tab="learn">Opi</button>
+    <button class="tab-btn" data-tab="quiz">Harjoittele</button>
+  </div>
+
+  <!-- LEARN TAB -->
+  <div id="tab-learn" class="tab-content active">
+    <div class="controls">
+      <div class="control-group">
+        <label for="root-note">Perussävel</label>
+        <select id="root-note"></select>
+      </div>
+      <div class="control-group">
+        <label for="scale-type">Asteikko</label>
+        <select id="scale-type"></select>
+      </div>
+      <div class="control-group">
+        <label>&nbsp;</label>
+        <button class="primary" id="play-btn">Soita asteikko</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 id="scale-name">C-duuri</h2>
+      <div class="scale-info" id="scale-notes"></div>
+      <div class="formula" id="scale-formula"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Koskettimet</h2>
+      <div class="piano-wrapper">
+        <div class="piano" id="piano"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Kitara (vakiovire E-A-D-G-B-E)</h2>
+      <div class="guitar-wrapper">
+        <div class="guitar" id="guitar"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUIZ TAB -->
+  <div id="tab-quiz" class="tab-content">
+    <div class="panel">
+      <h2>Harjoitustila</h2>
+      <div style="margin-bottom: 16px;">
+        <label style="display:block; margin-bottom:8px;">Tyyppi:</label>
+        <select id="quiz-type">
+          <option value="scale-notes">Tunnista asteikon sävelet</option>
+          <option value="note-in-scale">Onko sävel asteikossa?</option>
+          <option value="interval">Tunnista intervalli</option>
+        </select>
+      </div>
+      <button class="primary" id="quiz-start">Aloita uusi kysymys</button>
+      <div class="quiz-score" id="quiz-score" style="margin-top:16px;">Oikein: 0 / 0</div>
+
+      <div id="quiz-content" style="margin-top:24px;"></div>
+    </div>
+  </div>
+
+  <footer>Tehty oppimiseen · klikkaa nuotteja kuullaksesi äänen</footer>
+</div>
+
+<script>
+const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const NOTES_FI = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "H"];
+
+const SCALES = {
+  "major":           { name: "Duuri",                intervals: [0,2,4,5,7,9,11], formula: "W-W-H-W-W-W-H" },
+  "natural-minor":   { name: "Luonnollinen molli",   intervals: [0,2,3,5,7,8,10], formula: "W-H-W-W-H-W-W" },
+  "harmonic-minor":  { name: "Harmoninen molli",     intervals: [0,2,3,5,7,8,11], formula: "W-H-W-W-H-W+H-H" },
+  "melodic-minor":   { name: "Melodinen molli",      intervals: [0,2,3,5,7,9,11], formula: "W-H-W-W-W-W-H" },
+  "pentatonic-maj":  { name: "Pentatoninen duuri",   intervals: [0,2,4,7,9],      formula: "W-W-m3-W-m3" },
+  "pentatonic-min":  { name: "Pentatoninen molli",   intervals: [0,3,5,7,10],     formula: "m3-W-W-m3-W" },
+  "blues":           { name: "Blues",                intervals: [0,3,5,6,7,10],   formula: "m3-W-H-H-m3-W" },
+  "dorian":          { name: "Doorinen",             intervals: [0,2,3,5,7,9,10], formula: "W-H-W-W-W-H-W" },
+  "phrygian":        { name: "Fryyginen",            intervals: [0,1,3,5,7,8,10], formula: "H-W-W-W-H-W-W" },
+  "lydian":          { name: "Lyydinen",             intervals: [0,2,4,6,7,9,11], formula: "W-W-W-H-W-W-H" },
+  "mixolydian":      { name: "Miksolyydinen",        intervals: [0,2,4,5,7,9,10], formula: "W-W-H-W-W-H-W" },
+  "locrian":         { name: "Lokrinen",             intervals: [0,1,3,5,6,8,10], formula: "H-W-W-H-W-W-W" },
+  "chromatic":       { name: "Kromaattinen",         intervals: [0,1,2,3,4,5,6,7,8,9,10,11], formula: "H-H-H-H-H-H-H-H-H-H-H-H" }
+};
+
+const INTERVAL_NAMES = {
+  0: "Priimi", 1: "Pieni sekunti", 2: "Suuri sekunti", 3: "Pieni terssi",
+  4: "Suuri terssi", 5: "Kvartti", 6: "Tritonus", 7: "Kvintti",
+  8: "Pieni seksti", 9: "Suuri seksti", 10: "Pieni septimi",
+  11: "Suuri septimi", 12: "Oktaavi"
+};
+
+const GUITAR_TUNING = [4, 11, 7, 2, 9, 4]; // High E to Low E (E, B, G, D, A, E) - reversed below
+const FRETS = 12;
+
+let audioCtx = null;
+function getAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function noteFreq(noteIndex, octave) {
+  const a4 = 440;
+  const semitonesFromA4 = (octave - 4) * 12 + (noteIndex - 9);
+  return a4 * Math.pow(2, semitonesFromA4 / 12);
+}
+
+function playTone(noteIndex, octave = 4, duration = 0.4) {
+  const ctx = getAudio();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "triangle";
+  osc.frequency.value = noteFreq(noteIndex, octave);
+  gain.gain.setValueAtTime(0.001, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + duration);
+}
+
+function getScaleNotes(rootIdx, scaleKey) {
+  const scale = SCALES[scaleKey];
+  return scale.intervals.map(i => (rootIdx + i) % 12);
+}
+
+function populateSelectors() {
+  const rootSel = document.getElementById("root-note");
+  NOTES_FI.forEach((n, i) => {
+    const opt = document.createElement("option");
+    opt.value = i;
+    opt.textContent = n;
+    rootSel.appendChild(opt);
+  });
+
+  const scaleSel = document.getElementById("scale-type");
+  Object.entries(SCALES).forEach(([key, val]) => {
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = val.name;
+    scaleSel.appendChild(opt);
+  });
+
+  rootSel.addEventListener("change", render);
+  scaleSel.addEventListener("change", render);
+}
+
+function renderPiano(scaleNotes, rootIdx) {
+  const piano = document.getElementById("piano");
+  piano.innerHTML = "";
+  // 3 octaves starting from C3
+  const whiteNotes = [0, 2, 4, 5, 7, 9, 11];
+  const blackNotes = { 0: 1, 2: 3, 5: 6, 7: 8, 9: 10 }; // index in whiteNotes -> black note
+  const totalOctaves = 3;
+  const startOctave = 3;
+
+  let whiteIndex = 0;
+  for (let oct = 0; oct < totalOctaves; oct++) {
+    whiteNotes.forEach((wn, i) => {
+      const key = document.createElement("div");
+      key.className = "key-white";
+      if (scaleNotes.includes(wn)) key.classList.add("active");
+      if (wn === rootIdx) key.classList.add("root");
+      key.textContent = NOTES_FI[wn];
+      const octave = startOctave + oct;
+      key.addEventListener("click", () => playTone(wn, octave));
+      piano.appendChild(key);
+
+      // Add black key if applicable
+      if (blackNotes[wn] !== undefined) {
+        const bn = blackNotes[wn];
+        const black = document.createElement("div");
+        black.className = "key-black";
+        if (scaleNotes.includes(bn)) black.classList.add("active");
+        if (bn === rootIdx) black.classList.add("root");
+        black.textContent = NOTES_FI[bn];
+        // Position: left edge of next white key minus half black width
+        const leftPx = 8 + (whiteIndex + 1) * 45 - 14;
+        black.style.left = leftPx + "px";
+        black.addEventListener("click", (e) => {
+          e.stopPropagation();
+          playTone(bn, octave);
+        });
+        piano.appendChild(black);
+      }
+      whiteIndex++;
+    });
+  }
+}
+
+function renderGuitar(scaleNotes, rootIdx) {
+  const guitar = document.getElementById("guitar");
+  guitar.innerHTML = "";
+
+  // Empty top-left cell
+  const corner = document.createElement("div");
+  guitar.appendChild(corner);
+
+  // Fret numbers
+  for (let f = 0; f <= FRETS; f++) {
+    const fn = document.createElement("div");
+    fn.className = "fret-number";
+    fn.textContent = f;
+    guitar.appendChild(fn);
+  }
+
+  // Strings (high to low visually = E B G D A E from top)
+  const strings = [4, 11, 7, 2, 9, 4]; // E B G D A E
+  const stringLabels = ["E", "H", "G", "D", "A", "E"];
+
+  strings.forEach((openNote, sIdx) => {
+    const label = document.createElement("div");
+    label.className = "string-label";
+    label.textContent = stringLabels[sIdx];
+    guitar.appendChild(label);
+
+    const octaveBase = sIdx <= 2 ? 4 : 3; // rough octaves
+    for (let f = 0; f <= FRETS; f++) {
+      const cell = document.createElement("div");
+      cell.className = "fret-cell";
+      if (f === 0) cell.classList.add("open");
+
+      // Fret markers at 3, 5, 7, 9, 12
+      if (sIdx === 5 && [3, 5, 7, 9, 12].includes(f)) {
+        const marker = document.createElement("div");
+        marker.className = "fret-marker";
+        cell.appendChild(marker);
+        if (f === 12) {
+          const m2 = document.createElement("div");
+          m2.className = "fret-marker";
+          m2.style.left = "30%";
+          cell.appendChild(m2);
+          const m3 = document.createElement("div");
+          m3.className = "fret-marker";
+          m3.style.left = "70%";
+          cell.appendChild(m3);
+        }
+      }
+
+      const noteAt = (openNote + f) % 12;
+      if (scaleNotes.includes(noteAt)) {
+        const dot = document.createElement("div");
+        dot.className = "note-dot";
+        if (noteAt === rootIdx) dot.classList.add("root");
+        dot.textContent = NOTES_FI[noteAt];
+        cell.appendChild(dot);
+      }
+
+      cell.addEventListener("click", () => {
+        playTone(noteAt, octaveBase + Math.floor((openNote + f) / 12));
+      });
+      guitar.appendChild(cell);
+    }
+  });
+}
+
+function renderInfo(scaleNotes, rootIdx, scaleKey) {
+  const scale = SCALES[scaleKey];
+  document.getElementById("scale-name").textContent =
+    NOTES_FI[rootIdx] + " " + scale.name.toLowerCase();
+
+  const notesEl = document.getElementById("scale-notes");
+  notesEl.innerHTML = "";
+  scaleNotes.forEach(n => {
+    const badge = document.createElement("div");
+    badge.className = "note-badge";
+    if (n === rootIdx) badge.classList.add("root");
+    badge.textContent = NOTES_FI[n];
+    badge.addEventListener("click", () => playTone(n, 4));
+    notesEl.appendChild(badge);
+  });
+
+  document.getElementById("scale-formula").textContent =
+    "Kaava: " + scale.formula + "  (W = kokosävel, H = puolisävel, m3 = pieni terssi)";
+}
+
+function render() {
+  const rootIdx = parseInt(document.getElementById("root-note").value);
+  const scaleKey = document.getElementById("scale-type").value;
+  const scaleNotes = getScaleNotes(rootIdx, scaleKey);
+  renderInfo(scaleNotes, rootIdx, scaleKey);
+  renderPiano(scaleNotes, rootIdx);
+  renderGuitar(scaleNotes, rootIdx);
+}
+
+function playScale() {
+  const rootIdx = parseInt(document.getElementById("root-note").value);
+  const scaleKey = document.getElementById("scale-type").value;
+  const scale = SCALES[scaleKey];
+  const ctx = getAudio();
+  const stepMs = 280;
+  scale.intervals.forEach((iv, i) => {
+    setTimeout(() => {
+      const noteIdx = (rootIdx + iv) % 12;
+      const octave = 4 + Math.floor((rootIdx + iv) / 12);
+      playTone(noteIdx, octave, 0.3);
+    }, i * stepMs);
+  });
+  // Top octave
+  setTimeout(() => playTone(rootIdx, 5, 0.4), scale.intervals.length * stepMs);
+}
+
+// ===== QUIZ =====
+let quizScore = { correct: 0, total: 0 };
+let currentQuiz = null;
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function newQuiz() {
+  const type = document.getElementById("quiz-type").value;
+  const content = document.getElementById("quiz-content");
+  content.innerHTML = "";
+
+  if (type === "scale-notes") {
+    const rootIdx = Math.floor(Math.random() * 12);
+    const scaleKeys = ["major", "natural-minor", "dorian", "mixolydian", "pentatonic-min"];
+    const scaleKey = scaleKeys[Math.floor(Math.random() * scaleKeys.length)];
+    const correct = getScaleNotes(rootIdx, scaleKey).sort((a,b) => a-b);
+    const correctStr = correct.map(n => NOTES_FI[n]).join(" ");
+
+    // Build 3 wrong options
+    const wrongs = new Set();
+    while (wrongs.size < 3) {
+      const r = Math.floor(Math.random() * 12);
+      const s = scaleKeys[Math.floor(Math.random() * scaleKeys.length)];
+      const ns = getScaleNotes(r, s).sort((a,b) => a-b).map(n => NOTES_FI[n]).join(" ");
+      if (ns !== correctStr) wrongs.add(ns);
+    }
+    const options = shuffle([correctStr, ...wrongs]);
+
+    currentQuiz = { correct: correctStr };
+    const q = document.createElement("div");
+    q.className = "quiz-question";
+    q.textContent = "Mitkä sävelet kuuluvat asteikkoon " +
+      NOTES_FI[rootIdx] + " " + SCALES[scaleKey].name.toLowerCase() + "?";
+    content.appendChild(q);
+
+    const opts = document.createElement("div");
+    opts.className = "quiz-options";
+    options.forEach(o => {
+      const btn = document.createElement("div");
+      btn.className = "quiz-option";
+      btn.textContent = o;
+      btn.addEventListener("click", () => answerQuiz(btn, o === correctStr));
+      opts.appendChild(btn);
+    });
+    content.appendChild(opts);
+
+  } else if (type === "note-in-scale") {
+    const rootIdx = Math.floor(Math.random() * 12);
+    const scaleKeys = ["major", "natural-minor", "blues", "dorian"];
+    const scaleKey = scaleKeys[Math.floor(Math.random() * scaleKeys.length)];
+    const scaleNotes = getScaleNotes(rootIdx, scaleKey);
+    const testNote = Math.floor(Math.random() * 12);
+    const inScale = scaleNotes.includes(testNote);
+    currentQuiz = { correct: inScale ? "Kyllä" : "Ei" };
+
+    const q = document.createElement("div");
+    q.className = "quiz-question";
+    q.textContent = "Kuuluuko sävel " + NOTES_FI[testNote] +
+      " asteikkoon " + NOTES_FI[rootIdx] + " " + SCALES[scaleKey].name.toLowerCase() + "?";
+    content.appendChild(q);
+
+    const opts = document.createElement("div");
+    opts.className = "quiz-options";
+    ["Kyllä", "Ei"].forEach(o => {
+      const btn = document.createElement("div");
+      btn.className = "quiz-option";
+      btn.textContent = o;
+      btn.addEventListener("click", () => answerQuiz(btn, o === currentQuiz.correct));
+      opts.appendChild(btn);
+    });
+    content.appendChild(opts);
+
+  } else if (type === "interval") {
+    const rootIdx = Math.floor(Math.random() * 12);
+    const interval = Math.floor(Math.random() * 12) + 1;
+    const targetNote = (rootIdx + interval) % 12;
+    const correctName = INTERVAL_NAMES[interval];
+    currentQuiz = { correct: correctName };
+
+    // Play the interval
+    playTone(rootIdx, 4, 0.5);
+    setTimeout(() => playTone(targetNote, 4 + Math.floor((rootIdx + interval) / 12), 0.5), 600);
+
+    const q = document.createElement("div");
+    q.className = "quiz-question";
+    q.innerHTML = "Mikä intervalli soitettiin? <br><small style='color:var(--muted);font-size:14px'>Sävelistä " +
+      NOTES_FI[rootIdx] + " → " + NOTES_FI[targetNote] + "</small>";
+    content.appendChild(q);
+
+    const replayBtn = document.createElement("button");
+    replayBtn.textContent = "Soita uudelleen";
+    replayBtn.style.marginBottom = "12px";
+    replayBtn.addEventListener("click", () => {
+      playTone(rootIdx, 4, 0.5);
+      setTimeout(() => playTone(targetNote, 4 + Math.floor((rootIdx + interval) / 12), 0.5), 600);
+    });
+    content.appendChild(replayBtn);
+
+    // Build 4 options
+    const wrongs = new Set();
+    while (wrongs.size < 3) {
+      const r = Math.floor(Math.random() * 12) + 1;
+      if (INTERVAL_NAMES[r] !== correctName) wrongs.add(INTERVAL_NAMES[r]);
+    }
+    const options = shuffle([correctName, ...wrongs]);
+
+    const opts = document.createElement("div");
+    opts.className = "quiz-options";
+    options.forEach(o => {
+      const btn = document.createElement("div");
+      btn.className = "quiz-option";
+      btn.textContent = o;
+      btn.addEventListener("click", () => answerQuiz(btn, o === correctName));
+      opts.appendChild(btn);
+    });
+    content.appendChild(opts);
+  }
+
+  const feedback = document.createElement("div");
+  feedback.className = "quiz-feedback";
+  feedback.id = "quiz-feedback";
+  content.appendChild(feedback);
+}
+
+function answerQuiz(btn, isCorrect) {
+  const allOptions = btn.parentElement.querySelectorAll(".quiz-option");
+  allOptions.forEach(o => {
+    o.style.pointerEvents = "none";
+    if (o.textContent === currentQuiz.correct) o.classList.add("correct");
+  });
+  if (!isCorrect) btn.classList.add("wrong");
+
+  quizScore.total++;
+  if (isCorrect) quizScore.correct++;
+  document.getElementById("quiz-score").textContent =
+    "Oikein: " + quizScore.correct + " / " + quizScore.total;
+
+  const fb = document.getElementById("quiz-feedback");
+  fb.textContent = isCorrect ? "Oikein!" : "Väärin. Oikea vastaus: " + currentQuiz.correct;
+  fb.style.color = isCorrect ? "var(--note)" : "var(--accent)";
+}
+
+// ===== TABS =====
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+  });
+});
+
+// ===== INIT =====
+populateSelectors();
+render();
+document.getElementById("play-btn").addEventListener("click", playScale);
+document.getElementById("quiz-start").addEventListener("click", newQuiz);
+</script>
+</body>
+</html>
