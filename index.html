@@ -2,8 +2,11 @@
 <html lang="fi">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Skaalaopisto - Kitara & Koskettimet</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a1a2e">
+<title>Skaalaopisto</title>
 <style>
   :root {
     --bg: #1a1a2e;
@@ -15,35 +18,39 @@
     --highlight: #f5d042;
     --root: #e94560;
     --note: #4ecca3;
-    --fret: #2a2a3e;
-    --string: #b8b8b8;
-    --wood: #3d2817;
+    --wood: #4a2f1a;
+    --wood-light: #6b4423;
+    --string: #d4d4d4;
+    --fret-metal: #aaa;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
   }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { overscroll-behavior: none; }
   body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     background: var(--bg);
     color: var(--text);
-    padding: 20px;
+    padding: calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bottom));
     min-height: 100vh;
   }
   h1 {
-    margin: 0 0 8px;
+    margin: 0 0 4px;
     color: var(--accent);
-    font-size: 28px;
+    font-size: 24px;
   }
-  .subtitle { color: var(--muted); margin-bottom: 24px; }
-  .container { max-width: 1200px; margin: 0 auto; }
+  .subtitle { color: var(--muted); margin: 0 0 20px; font-size: 14px; }
+  .container { max-width: 900px; margin: 0 auto; }
+
   .controls {
     background: var(--panel);
-    padding: 20px;
+    padding: 16px;
     border-radius: 12px;
-    margin-bottom: 24px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
-    align-items: center;
+    margin-bottom: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
   }
   .control-group {
     display: flex;
@@ -51,150 +58,144 @@
     gap: 6px;
   }
   label {
-    font-size: 12px;
+    font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--muted);
   }
-  select, button {
+  select {
     background: var(--accent2);
     color: var(--text);
     border: 1px solid var(--accent2);
-    padding: 10px 14px;
+    padding: 12px 14px;
     border-radius: 8px;
-    font-size: 14px;
+    font-size: 16px;
     cursor: pointer;
-    transition: all 0.2s;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%23eaeaea' d='M6 8L0 0h12z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
   }
-  select:hover, button:hover {
-    background: var(--accent);
-    border-color: var(--accent);
-  }
-  button.primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    font-weight: 600;
-  }
-  button.primary:hover { background: #ff5775; }
+
   .panel {
     background: var(--panel);
     border-radius: 12px;
-    padding: 24px;
-    margin-bottom: 24px;
+    padding: 16px;
+    margin-bottom: 16px;
   }
   .panel h2 {
-    margin: 0 0 16px;
-    font-size: 18px;
+    margin: 0 0 12px;
+    font-size: 16px;
     color: var(--highlight);
   }
-  /* Piano */
-  .piano-wrapper {
-    overflow-x: auto;
-    padding: 8px 0;
+
+  .scale-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 12px;
   }
-  .piano {
-    position: relative;
-    display: inline-flex;
-    background: #000;
-    padding: 8px;
-    border-radius: 8px;
-    user-select: none;
-    height: 196px;
-  }
-  .key-white {
-    width: 44px;
-    height: 180px;
-    background: #f5f5f5;
-    border: 1px solid #333;
-    border-radius: 0 0 6px 6px;
-    position: relative;
-    margin-right: 1px;
+  .scale-notes {
     display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    padding-bottom: 8px;
-    color: #555;
-    font-size: 11px;
-    font-weight: 600;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .note-badge {
+    background: var(--accent2);
+    padding: 10px 16px;
+    border-radius: 24px;
+    font-weight: 700;
+    font-size: 15px;
+    min-width: 48px;
+    text-align: center;
     cursor: pointer;
-    transition: background 0.1s;
+    transition: transform 0.1s;
   }
-  .key-white:hover { background: #e0e0e0; }
-  .key-white.active {
-    background: var(--note);
-    color: #000;
-  }
-  .key-white.root {
+  .note-badge:active { transform: scale(0.95); }
+  .note-badge.root {
     background: var(--root);
     color: #fff;
   }
-  .key-black {
-    position: absolute;
-    width: 28px;
-    height: 110px;
-    background: #1a1a1a;
-    border-radius: 0 0 4px 4px;
-    z-index: 2;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    padding-bottom: 6px;
-    color: #888;
+  .degree {
+    display: block;
     font-size: 10px;
-    cursor: pointer;
-    transition: background 0.1s;
+    color: var(--muted);
+    margin-top: 2px;
+    font-weight: 500;
   }
-  .key-black:hover { background: #333; }
-  .key-black.active {
-    background: var(--note);
-    color: #000;
+  .note-badge.root .degree { color: rgba(255,255,255,0.75); }
+  .formula {
+    color: var(--muted);
+    font-size: 12px;
+    font-family: monospace;
+    margin-top: 8px;
   }
-  .key-black.root {
-    background: var(--root);
-    color: #fff;
-  }
-  /* Guitar */
+
+  /* ========== GUITAR ========== */
   .guitar-wrapper {
     overflow-x: auto;
+    overflow-y: hidden;
+    padding: 4px 0;
+    -webkit-overflow-scrolling: touch;
   }
+  .guitar-wrapper::-webkit-scrollbar { height: 6px; }
+  .guitar-wrapper::-webkit-scrollbar-thumb { background: var(--accent2); border-radius: 3px; }
+
   .guitar {
-    display: grid;
-    grid-template-columns: 50px repeat(13, 1fr);
-    gap: 0;
-    background: var(--wood);
-    padding: 16px 8px;
+    display: inline-block;
+    background: linear-gradient(180deg, var(--wood-light) 0%, var(--wood) 100%);
+    padding: 8px 4px 16px;
     border-radius: 8px;
-    min-width: 900px;
+    box-shadow: inset 0 0 30px rgba(0,0,0,0.3);
+    min-width: 100%;
+  }
+  .fret-row {
+    display: grid;
+    grid-template-columns: 36px repeat(13, minmax(50px, 1fr));
+    align-items: center;
+  }
+  .fret-row.numbers {
+    margin-bottom: 4px;
+  }
+  .fret-row.markers {
+    height: 16px;
+    margin-top: 4px;
   }
   .fret-number {
     text-align: center;
-    color: var(--muted);
-    font-size: 12px;
-    padding: 4px;
+    color: rgba(255,255,255,0.7);
+    font-size: 11px;
+    font-weight: 600;
   }
   .string-label {
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--highlight);
-    font-weight: 600;
-    font-size: 14px;
-    background: rgba(0,0,0,0.3);
-    border-radius: 4px;
-    margin: 2px 4px 2px 0;
+    font-weight: 700;
+    font-size: 16px;
+    background: rgba(0,0,0,0.4);
+    border-radius: 6px;
+    height: 36px;
+    margin-right: 4px;
   }
   .fret-cell {
     position: relative;
-    height: 40px;
-    border-right: 2px solid #888;
+    height: 36px;
+    border-right: 2px solid var(--fret-metal);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    box-shadow: inset -1px 0 0 rgba(0,0,0,0.3);
   }
   .fret-cell.open {
-    border-right: 4px solid #fff;
-    background: rgba(0,0,0,0.2);
+    border-right: 4px solid #f0f0f0;
+    background: rgba(0,0,0,0.25);
+    box-shadow: inset -2px 0 4px rgba(0,0,0,0.4);
   }
   .fret-cell::before {
     content: "";
@@ -203,231 +204,253 @@
     right: 0;
     top: 50%;
     height: 2px;
-    background: var(--string);
+    background: linear-gradient(180deg, rgba(255,255,255,0.4) 0%, var(--string) 50%, rgba(0,0,0,0.4) 100%);
+    transform: translateY(-50%);
+    pointer-events: none;
   }
+  .fret-cell:active { background: rgba(255,255,255,0.1); }
   .note-dot {
     position: relative;
     z-index: 2;
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     background: var(--note);
-    color: #000;
+    color: #003;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-size: 11px;
-    font-weight: 700;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    font-size: 12px;
+    font-weight: 800;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    line-height: 1;
   }
   .note-dot.root {
     background: var(--root);
     color: #fff;
+    box-shadow: 0 2px 8px rgba(233,69,96,0.5);
   }
-  .fret-marker {
-    position: absolute;
-    bottom: -10px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 8px;
-    height: 8px;
+  .note-dot .dot-degree {
+    font-size: 8px;
+    font-weight: 500;
+    opacity: 0.75;
+    margin-top: 1px;
+  }
+  .inlay {
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.4);
+    margin: 0 auto;
   }
-  /* Info */
-  .scale-info {
+  .inlay-double {
     display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    margin-bottom: 16px;
+    justify-content: center;
+    gap: 6px;
   }
-  .note-badge {
-    background: var(--accent2);
-    padding: 8px 14px;
-    border-radius: 20px;
+  .inlay-double .inlay { width: 10px; height: 10px; }
+
+  /* ========== PIANO ========== */
+  .piano-wrapper {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 8px 0;
+    -webkit-overflow-scrolling: touch;
+  }
+  .piano-wrapper::-webkit-scrollbar { height: 6px; }
+  .piano-wrapper::-webkit-scrollbar-thumb { background: var(--accent2); border-radius: 3px; }
+  .piano {
+    position: relative;
+    display: inline-flex;
+    background: #000;
+    padding: 8px;
+    border-radius: 8px;
+    user-select: none;
+    height: 170px;
+  }
+  .key-white {
+    width: 38px;
+    height: 154px;
+    background: linear-gradient(to bottom, #fafafa, #e8e8e8);
+    border: 1px solid #222;
+    border-radius: 0 0 5px 5px;
+    position: relative;
+    margin-right: 2px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 8px;
+    color: #555;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .key-white:last-child { margin-right: 0; }
+  .key-white:active { background: #ccc; }
+  .key-white.active {
+    background: linear-gradient(to bottom, #6fe7c3, #4ecca3);
+    color: #003;
+  }
+  .key-white.root {
+    background: linear-gradient(to bottom, #ff6b85, #e94560);
+    color: #fff;
+  }
+  .key-black {
+    position: absolute;
+    width: 24px;
+    height: 96px;
+    background: linear-gradient(to bottom, #2a2a2a, #0a0a0a);
+    border-radius: 0 0 4px 4px;
+    z-index: 2;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 6px;
+    color: #aaa;
+    font-size: 9px;
     font-weight: 600;
-    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 0 3px 4px rgba(0,0,0,0.6);
   }
-  .note-badge.root {
-    background: var(--root);
+  .key-black:active { background: #444; }
+  .key-black.active {
+    background: linear-gradient(to bottom, #4ecca3, #3aa583);
+    color: #003;
   }
-  .formula {
+  .key-black.root {
+    background: linear-gradient(to bottom, #e94560, #c0334d);
+    color: #fff;
+  }
+
+  .hint {
     color: var(--muted);
-    font-size: 13px;
+    font-size: 12px;
+    text-align: center;
     margin-top: 8px;
-    font-family: monospace;
   }
-  /* Quiz */
-  .quiz {
-    display: none;
-  }
-  .quiz.active { display: block; }
-  .quiz-question {
-    font-size: 20px;
-    margin-bottom: 16px;
-  }
-  .quiz-options {
+  .legend {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 16px;
-  }
-  .quiz-option {
-    background: var(--accent2);
-    padding: 10px 18px;
-    border-radius: 8px;
-    cursor: pointer;
-    border: 2px solid transparent;
-    transition: all 0.2s;
-  }
-  .quiz-option:hover {
-    border-color: var(--accent);
-  }
-  .quiz-option.correct {
-    background: var(--note);
-    color: #000;
-  }
-  .quiz-option.wrong {
-    background: #c0392b;
-  }
-  .quiz-score {
-    color: var(--highlight);
-    font-weight: 600;
-  }
-  .quiz-feedback {
+    gap: 16px;
     margin-top: 12px;
-    min-height: 24px;
-    font-weight: 600;
+    font-size: 12px;
+    color: var(--muted);
+    flex-wrap: wrap;
   }
-  .tab-buttons {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
   }
-  .tab-btn {
-    background: var(--accent2);
-    border: none;
-    padding: 10px 20px;
-    border-radius: 8px;
-    cursor: pointer;
-    color: var(--text);
-  }
-  .tab-btn.active {
-    background: var(--accent);
-  }
-  .tab-content { display: none; }
-  .tab-content.active { display: block; }
+  .legend-swatch.root { background: var(--root); }
+  .legend-swatch.note { background: var(--note); }
+
   footer {
     text-align: center;
     color: var(--muted);
-    font-size: 12px;
-    margin-top: 32px;
+    font-size: 11px;
+    margin-top: 24px;
+  }
+
+  @media (max-width: 480px) {
+    h1 { font-size: 20px; }
+    .panel { padding: 12px; }
+    .scale-title { font-size: 18px; }
+    .fret-row {
+      grid-template-columns: 30px repeat(13, minmax(44px, 1fr));
+    }
+    .string-label { font-size: 14px; height: 32px; }
+    .fret-cell { height: 32px; }
+    .note-dot { width: 28px; height: 28px; font-size: 11px; }
   }
 </style>
 </head>
 <body>
 <div class="container">
   <h1>Skaalaopisto</h1>
-  <p class="subtitle">Opettele asteikkoja koskettimilla ja kitaralla</p>
+  <p class="subtitle">Selaa asteikoita kitaralla ja koskettimilla</p>
 
-  <div class="tab-buttons">
-    <button class="tab-btn active" data-tab="learn">Opi</button>
-    <button class="tab-btn" data-tab="quiz">Harjoittele</button>
-  </div>
-
-  <!-- LEARN TAB -->
-  <div id="tab-learn" class="tab-content active">
-    <div class="controls">
-      <div class="control-group">
-        <label for="root-note">Perussävel</label>
-        <select id="root-note"></select>
-      </div>
-      <div class="control-group">
-        <label for="scale-type">Asteikko</label>
-        <select id="scale-type"></select>
-      </div>
-      <div class="control-group">
-        <label>&nbsp;</label>
-        <button class="primary" id="play-btn">Soita asteikko</button>
-      </div>
+  <div class="controls">
+    <div class="control-group">
+      <label for="root-note">Perussävel</label>
+      <select id="root-note"></select>
     </div>
-
-    <div class="panel">
-      <h2 id="scale-name">C-duuri</h2>
-      <div class="scale-info" id="scale-notes"></div>
-      <div class="formula" id="scale-formula"></div>
-    </div>
-
-    <div class="panel">
-      <h2>Koskettimet</h2>
-      <div class="piano-wrapper">
-        <div class="piano" id="piano"></div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <h2>Kitara (vakiovire E-A-D-G-B-E)</h2>
-      <div class="guitar-wrapper">
-        <div class="guitar" id="guitar"></div>
-      </div>
+    <div class="control-group">
+      <label for="scale-type">Asteikko</label>
+      <select id="scale-type"></select>
     </div>
   </div>
 
-  <!-- QUIZ TAB -->
-  <div id="tab-quiz" class="tab-content">
-    <div class="panel">
-      <h2>Harjoitustila</h2>
-      <div style="margin-bottom: 16px;">
-        <label style="display:block; margin-bottom:8px;">Tyyppi:</label>
-        <select id="quiz-type">
-          <option value="scale-notes">Tunnista asteikon sävelet</option>
-          <option value="note-in-scale">Onko sävel asteikossa?</option>
-          <option value="interval">Tunnista intervalli</option>
-        </select>
-      </div>
-      <button class="primary" id="quiz-start">Aloita uusi kysymys</button>
-      <div class="quiz-score" id="quiz-score" style="margin-top:16px;">Oikein: 0 / 0</div>
+  <div class="panel">
+    <div class="scale-title" id="scale-name">C-duuri</div>
+    <div class="scale-notes" id="scale-notes"></div>
+    <div class="formula" id="scale-formula"></div>
+  </div>
 
-      <div id="quiz-content" style="margin-top:24px;"></div>
+  <div class="panel">
+    <h2>Kitara · vakiovire E A D G H E</h2>
+    <div class="guitar-wrapper" id="guitar-wrapper">
+      <div class="guitar" id="guitar"></div>
+    </div>
+    <div class="hint">Vieritä sivusuunnassa nähdäksesi koko otelaudan · napauta nuottia kuullaksesi sen</div>
+    <div class="legend">
+      <div class="legend-item"><span class="legend-swatch root"></span> Perussävel</div>
+      <div class="legend-item"><span class="legend-swatch note"></span> Asteikon sävel</div>
     </div>
   </div>
 
-  <footer>Tehty oppimiseen · klikkaa nuotteja kuullaksesi äänen</footer>
+  <div class="panel">
+    <h2>Koskettimet</h2>
+    <div class="piano-wrapper" id="piano-wrapper">
+      <div class="piano" id="piano"></div>
+    </div>
+    <div class="hint">Vieritä sivusuunnassa · napauta kosketinta</div>
+  </div>
+
+  <footer>Tehty oppimiseen</footer>
 </div>
 
 <script>
-const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const NOTES_FI = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "H"];
 
 const SCALES = {
-  "major":           { name: "Duuri",                intervals: [0,2,4,5,7,9,11], formula: "W-W-H-W-W-W-H" },
-  "natural-minor":   { name: "Luonnollinen molli",   intervals: [0,2,3,5,7,8,10], formula: "W-H-W-W-H-W-W" },
-  "harmonic-minor":  { name: "Harmoninen molli",     intervals: [0,2,3,5,7,8,11], formula: "W-H-W-W-H-W+H-H" },
-  "melodic-minor":   { name: "Melodinen molli",      intervals: [0,2,3,5,7,9,11], formula: "W-H-W-W-W-W-H" },
-  "pentatonic-maj":  { name: "Pentatoninen duuri",   intervals: [0,2,4,7,9],      formula: "W-W-m3-W-m3" },
-  "pentatonic-min":  { name: "Pentatoninen molli",   intervals: [0,3,5,7,10],     formula: "m3-W-W-m3-W" },
-  "blues":           { name: "Blues",                intervals: [0,3,5,6,7,10],   formula: "m3-W-H-H-m3-W" },
-  "dorian":          { name: "Doorinen",             intervals: [0,2,3,5,7,9,10], formula: "W-H-W-W-W-H-W" },
-  "phrygian":        { name: "Fryyginen",            intervals: [0,1,3,5,7,8,10], formula: "H-W-W-W-H-W-W" },
-  "lydian":          { name: "Lyydinen",             intervals: [0,2,4,6,7,9,11], formula: "W-W-W-H-W-W-H" },
-  "mixolydian":      { name: "Miksolyydinen",        intervals: [0,2,4,5,7,9,10], formula: "W-W-H-W-W-H-W" },
-  "locrian":         { name: "Lokrinen",             intervals: [0,1,3,5,6,8,10], formula: "H-W-W-H-W-W-W" },
-  "chromatic":       { name: "Kromaattinen",         intervals: [0,1,2,3,4,5,6,7,8,9,10,11], formula: "H-H-H-H-H-H-H-H-H-H-H-H" }
+  "major":           { name: "duuri",                intervals: [0,2,4,5,7,9,11],  formula: "W-W-H-W-W-W-H" },
+  "natural-minor":   { name: "luonnollinen molli",   intervals: [0,2,3,5,7,8,10],  formula: "W-H-W-W-H-W-W" },
+  "harmonic-minor":  { name: "harmoninen molli",     intervals: [0,2,3,5,7,8,11],  formula: "W-H-W-W-H-W+H-H" },
+  "melodic-minor":   { name: "melodinen molli",      intervals: [0,2,3,5,7,9,11],  formula: "W-H-W-W-W-W-H" },
+  "pentatonic-maj":  { name: "pentatoninen duuri",   intervals: [0,2,4,7,9],       formula: "W-W-m3-W-m3" },
+  "pentatonic-min":  { name: "pentatoninen molli",   intervals: [0,3,5,7,10],      formula: "m3-W-W-m3-W" },
+  "blues":           { name: "blues",                intervals: [0,3,5,6,7,10],    formula: "m3-W-H-H-m3-W" },
+  "dorian":          { name: "doorinen",             intervals: [0,2,3,5,7,9,10],  formula: "W-H-W-W-W-H-W" },
+  "phrygian":        { name: "fryyginen",            intervals: [0,1,3,5,7,8,10],  formula: "H-W-W-W-H-W-W" },
+  "lydian":          { name: "lyydinen",             intervals: [0,2,4,6,7,9,11],  formula: "W-W-W-H-W-W-H" },
+  "mixolydian":      { name: "miksolyydinen",        intervals: [0,2,4,5,7,9,10],  formula: "W-W-H-W-W-H-W" },
+  "locrian":         { name: "lokrinen",             intervals: [0,1,3,5,6,8,10],  formula: "H-W-W-H-W-W-W" },
+  "chromatic":       { name: "kromaattinen",         intervals: [0,1,2,3,4,5,6,7,8,9,10,11], formula: "kaikki puolisävelet" }
 };
 
-const INTERVAL_NAMES = {
-  0: "Priimi", 1: "Pieni sekunti", 2: "Suuri sekunti", 3: "Pieni terssi",
-  4: "Suuri terssi", 5: "Kvartti", 6: "Tritonus", 7: "Kvintti",
-  8: "Pieni seksti", 9: "Suuri seksti", 10: "Pieni septimi",
-  11: "Suuri septimi", 12: "Oktaavi"
-};
-
-const GUITAR_TUNING = [4, 11, 7, 2, 9, 4]; // High E to Low E (E, B, G, D, A, E) - reversed below
 const FRETS = 12;
+// Strings from high to low (visual top to bottom): E4, B3, G3, D3, A2, E2
+const GUITAR_STRINGS = [
+  { open: 4,  label: "E", octave: 4 },
+  { open: 11, label: "H", octave: 3 },
+  { open: 7,  label: "G", octave: 3 },
+  { open: 2,  label: "D", octave: 3 },
+  { open: 9,  label: "A", octave: 2 },
+  { open: 4,  label: "E", octave: 2 }
+];
+
+function getDegreeLabels(intervals) {
+  return intervals.map((_, i) => String(i + 1));
+}
 
 let audioCtx = null;
 function getAudio() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) audioCtx = new AC();
+  }
   return audioCtx;
 }
 
@@ -437,23 +460,37 @@ function noteFreq(noteIndex, octave) {
   return a4 * Math.pow(2, semitonesFromA4 / 12);
 }
 
-function playTone(noteIndex, octave = 4, duration = 0.4) {
+function playTone(noteIndex, octave = 4, duration = 0.7) {
   const ctx = getAudio();
-  const osc = ctx.createOscillator();
+  if (!ctx) return;
+  if (ctx.state === "suspended") ctx.resume();
+  const now = ctx.currentTime;
+  const freq = noteFreq(noteIndex, octave);
   const gain = ctx.createGain();
-  osc.type = "triangle";
-  osc.frequency.value = noteFreq(noteIndex, octave);
-  gain.gain.setValueAtTime(0.001, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-  osc.connect(gain).connect(ctx.destination);
-  osc.start();
-  osc.stop(ctx.currentTime + duration);
+  gain.connect(ctx.destination);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.22, now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+  [1, 2, 3].forEach((mult, i) => {
+    const osc = ctx.createOscillator();
+    osc.type = i === 0 ? "triangle" : "sine";
+    osc.frequency.value = freq * mult;
+    const partial = ctx.createGain();
+    partial.gain.value = i === 0 ? 1 : (0.15 / mult);
+    osc.connect(partial).connect(gain);
+    osc.start(now);
+    osc.stop(now + duration);
+  });
 }
 
 function getScaleNotes(rootIdx, scaleKey) {
-  const scale = SCALES[scaleKey];
-  return scale.intervals.map(i => (rootIdx + i) % 12);
+  return SCALES[scaleKey].intervals.map(i => (rootIdx + i) % 12);
+}
+
+function getDegreeForNote(noteIdx, rootIdx, scaleIntervals) {
+  const offset = (noteIdx - rootIdx + 12) % 12;
+  const idx = scaleIntervals.indexOf(offset);
+  return idx >= 0 ? String(idx + 1) : "";
 }
 
 function populateSelectors() {
@@ -469,7 +506,7 @@ function populateSelectors() {
   Object.entries(SCALES).forEach(([key, val]) => {
     const opt = document.createElement("option");
     opt.value = key;
-    opt.textContent = val.name;
+    opt.textContent = val.name.charAt(0).toUpperCase() + val.name.slice(1);
     scaleSel.appendChild(opt);
   });
 
@@ -477,37 +514,112 @@ function populateSelectors() {
   scaleSel.addEventListener("change", render);
 }
 
+function renderGuitar(scaleNotes, rootIdx, scaleIntervals) {
+  const guitar = document.getElementById("guitar");
+  guitar.innerHTML = "";
+
+  // Fret numbers row
+  const numRow = document.createElement("div");
+  numRow.className = "fret-row numbers";
+  numRow.appendChild(document.createElement("div"));
+  for (let f = 0; f <= FRETS; f++) {
+    const fn = document.createElement("div");
+    fn.className = "fret-number";
+    fn.textContent = f;
+    numRow.appendChild(fn);
+  }
+  guitar.appendChild(numRow);
+
+  // Strings
+  GUITAR_STRINGS.forEach((str) => {
+    const row = document.createElement("div");
+    row.className = "fret-row";
+
+    const label = document.createElement("div");
+    label.className = "string-label";
+    label.textContent = str.label;
+    row.appendChild(label);
+
+    for (let f = 0; f <= FRETS; f++) {
+      const cell = document.createElement("div");
+      cell.className = "fret-cell";
+      if (f === 0) cell.classList.add("open");
+
+      const noteAt = (str.open + f) % 12;
+      const noteOctave = str.octave + Math.floor((str.open + f) / 12);
+
+      if (scaleNotes.includes(noteAt)) {
+        const dot = document.createElement("div");
+        dot.className = "note-dot";
+        if (noteAt === rootIdx) dot.classList.add("root");
+        const degree = getDegreeForNote(noteAt, rootIdx, scaleIntervals);
+        dot.innerHTML = NOTES_FI[noteAt] +
+          "<span class='dot-degree'>" + degree + "</span>";
+        cell.appendChild(dot);
+      }
+
+      cell.addEventListener("click", () => playTone(noteAt, noteOctave));
+      row.appendChild(cell);
+    }
+    guitar.appendChild(row);
+  });
+
+  // Inlay markers row
+  const markerRow = document.createElement("div");
+  markerRow.className = "fret-row markers";
+  markerRow.appendChild(document.createElement("div"));
+  for (let f = 0; f <= FRETS; f++) {
+    const cell = document.createElement("div");
+    if (f === 12) {
+      const dbl = document.createElement("div");
+      dbl.className = "inlay-double";
+      dbl.appendChild(Object.assign(document.createElement("div"), { className: "inlay" }));
+      dbl.appendChild(Object.assign(document.createElement("div"), { className: "inlay" }));
+      cell.appendChild(dbl);
+    } else if ([3, 5, 7, 9].includes(f)) {
+      const inlay = document.createElement("div");
+      inlay.className = "inlay";
+      cell.appendChild(inlay);
+    }
+    markerRow.appendChild(cell);
+  }
+  guitar.appendChild(markerRow);
+}
+
 function renderPiano(scaleNotes, rootIdx) {
   const piano = document.getElementById("piano");
   piano.innerHTML = "";
-  // 3 octaves starting from C3
   const whiteNotes = [0, 2, 4, 5, 7, 9, 11];
-  const blackNotes = { 0: 1, 2: 3, 5: 6, 7: 8, 9: 10 }; // index in whiteNotes -> black note
+  const blackAfter = { 0: 1, 2: 3, 5: 6, 7: 8, 9: 10 };
   const totalOctaves = 3;
   const startOctave = 3;
+  const whiteWidth = 38;
+  const whiteMargin = 2;
+  const stride = whiteWidth + whiteMargin;
+  const padding = 8;
+  const blackWidth = 24;
 
   let whiteIndex = 0;
   for (let oct = 0; oct < totalOctaves; oct++) {
-    whiteNotes.forEach((wn, i) => {
+    const octave = startOctave + oct;
+    whiteNotes.forEach((wn) => {
       const key = document.createElement("div");
       key.className = "key-white";
       if (scaleNotes.includes(wn)) key.classList.add("active");
       if (wn === rootIdx) key.classList.add("root");
       key.textContent = NOTES_FI[wn];
-      const octave = startOctave + oct;
       key.addEventListener("click", () => playTone(wn, octave));
       piano.appendChild(key);
 
-      // Add black key if applicable
-      if (blackNotes[wn] !== undefined) {
-        const bn = blackNotes[wn];
+      if (blackAfter[wn] !== undefined) {
+        const bn = blackAfter[wn];
         const black = document.createElement("div");
         black.className = "key-black";
         if (scaleNotes.includes(bn)) black.classList.add("active");
         if (bn === rootIdx) black.classList.add("root");
         black.textContent = NOTES_FI[bn];
-        // Position: left edge of next white key minus half black width
-        const leftPx = 8 + (whiteIndex + 1) * 45 - 14;
+        const rightEdgeOfCurrent = padding + (whiteIndex + 1) * stride - whiteMargin;
+        const leftPx = rightEdgeOfCurrent - blackWidth / 2;
         black.style.left = leftPx + "px";
         black.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -518,284 +630,45 @@ function renderPiano(scaleNotes, rootIdx) {
       whiteIndex++;
     });
   }
-}
-
-function renderGuitar(scaleNotes, rootIdx) {
-  const guitar = document.getElementById("guitar");
-  guitar.innerHTML = "";
-
-  // Empty top-left cell
-  const corner = document.createElement("div");
-  guitar.appendChild(corner);
-
-  // Fret numbers
-  for (let f = 0; f <= FRETS; f++) {
-    const fn = document.createElement("div");
-    fn.className = "fret-number";
-    fn.textContent = f;
-    guitar.appendChild(fn);
-  }
-
-  // Strings (high to low visually = E B G D A E from top)
-  const strings = [4, 11, 7, 2, 9, 4]; // E B G D A E
-  const stringLabels = ["E", "H", "G", "D", "A", "E"];
-
-  strings.forEach((openNote, sIdx) => {
-    const label = document.createElement("div");
-    label.className = "string-label";
-    label.textContent = stringLabels[sIdx];
-    guitar.appendChild(label);
-
-    const octaveBase = sIdx <= 2 ? 4 : 3; // rough octaves
-    for (let f = 0; f <= FRETS; f++) {
-      const cell = document.createElement("div");
-      cell.className = "fret-cell";
-      if (f === 0) cell.classList.add("open");
-
-      // Fret markers at 3, 5, 7, 9, 12
-      if (sIdx === 5 && [3, 5, 7, 9, 12].includes(f)) {
-        const marker = document.createElement("div");
-        marker.className = "fret-marker";
-        cell.appendChild(marker);
-        if (f === 12) {
-          const m2 = document.createElement("div");
-          m2.className = "fret-marker";
-          m2.style.left = "30%";
-          cell.appendChild(m2);
-          const m3 = document.createElement("div");
-          m3.className = "fret-marker";
-          m3.style.left = "70%";
-          cell.appendChild(m3);
-        }
-      }
-
-      const noteAt = (openNote + f) % 12;
-      if (scaleNotes.includes(noteAt)) {
-        const dot = document.createElement("div");
-        dot.className = "note-dot";
-        if (noteAt === rootIdx) dot.classList.add("root");
-        dot.textContent = NOTES_FI[noteAt];
-        cell.appendChild(dot);
-      }
-
-      cell.addEventListener("click", () => {
-        playTone(noteAt, octaveBase + Math.floor((openNote + f) / 12));
-      });
-      guitar.appendChild(cell);
-    }
-  });
+  piano.style.width = (padding * 2 + whiteIndex * stride - whiteMargin) + "px";
 }
 
 function renderInfo(scaleNotes, rootIdx, scaleKey) {
   const scale = SCALES[scaleKey];
   document.getElementById("scale-name").textContent =
-    NOTES_FI[rootIdx] + " " + scale.name.toLowerCase();
+    NOTES_FI[rootIdx] + "-" + scale.name;
 
   const notesEl = document.getElementById("scale-notes");
   notesEl.innerHTML = "";
-  scaleNotes.forEach(n => {
+  const degrees = getDegreeLabels(scale.intervals);
+  scaleNotes.forEach((n, i) => {
     const badge = document.createElement("div");
     badge.className = "note-badge";
     if (n === rootIdx) badge.classList.add("root");
-    badge.textContent = NOTES_FI[n];
-    badge.addEventListener("click", () => playTone(n, 4));
+    badge.innerHTML = NOTES_FI[n] + "<span class='degree'>" + degrees[i] + "</span>";
+    badge.addEventListener("click", () => {
+      const octave = 4 + Math.floor(scale.intervals[i] / 12);
+      playTone(n, octave);
+    });
     notesEl.appendChild(badge);
   });
 
   document.getElementById("scale-formula").textContent =
-    "Kaava: " + scale.formula + "  (W = kokosävel, H = puolisävel, m3 = pieni terssi)";
+    "Kaava: " + scale.formula + "  (W = kokosävelaskel, H = puolisävelaskel)";
 }
 
 function render() {
   const rootIdx = parseInt(document.getElementById("root-note").value);
   const scaleKey = document.getElementById("scale-type").value;
+  const scaleIntervals = SCALES[scaleKey].intervals;
   const scaleNotes = getScaleNotes(rootIdx, scaleKey);
   renderInfo(scaleNotes, rootIdx, scaleKey);
+  renderGuitar(scaleNotes, rootIdx, scaleIntervals);
   renderPiano(scaleNotes, rootIdx);
-  renderGuitar(scaleNotes, rootIdx);
 }
 
-function playScale() {
-  const rootIdx = parseInt(document.getElementById("root-note").value);
-  const scaleKey = document.getElementById("scale-type").value;
-  const scale = SCALES[scaleKey];
-  const ctx = getAudio();
-  const stepMs = 280;
-  scale.intervals.forEach((iv, i) => {
-    setTimeout(() => {
-      const noteIdx = (rootIdx + iv) % 12;
-      const octave = 4 + Math.floor((rootIdx + iv) / 12);
-      playTone(noteIdx, octave, 0.3);
-    }, i * stepMs);
-  });
-  // Top octave
-  setTimeout(() => playTone(rootIdx, 5, 0.4), scale.intervals.length * stepMs);
-}
-
-// ===== QUIZ =====
-let quizScore = { correct: 0, total: 0 };
-let currentQuiz = null;
-
-function shuffle(arr) {
-  const a = arr.slice();
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-function newQuiz() {
-  const type = document.getElementById("quiz-type").value;
-  const content = document.getElementById("quiz-content");
-  content.innerHTML = "";
-
-  if (type === "scale-notes") {
-    const rootIdx = Math.floor(Math.random() * 12);
-    const scaleKeys = ["major", "natural-minor", "dorian", "mixolydian", "pentatonic-min"];
-    const scaleKey = scaleKeys[Math.floor(Math.random() * scaleKeys.length)];
-    const correct = getScaleNotes(rootIdx, scaleKey).sort((a,b) => a-b);
-    const correctStr = correct.map(n => NOTES_FI[n]).join(" ");
-
-    // Build 3 wrong options
-    const wrongs = new Set();
-    while (wrongs.size < 3) {
-      const r = Math.floor(Math.random() * 12);
-      const s = scaleKeys[Math.floor(Math.random() * scaleKeys.length)];
-      const ns = getScaleNotes(r, s).sort((a,b) => a-b).map(n => NOTES_FI[n]).join(" ");
-      if (ns !== correctStr) wrongs.add(ns);
-    }
-    const options = shuffle([correctStr, ...wrongs]);
-
-    currentQuiz = { correct: correctStr };
-    const q = document.createElement("div");
-    q.className = "quiz-question";
-    q.textContent = "Mitkä sävelet kuuluvat asteikkoon " +
-      NOTES_FI[rootIdx] + " " + SCALES[scaleKey].name.toLowerCase() + "?";
-    content.appendChild(q);
-
-    const opts = document.createElement("div");
-    opts.className = "quiz-options";
-    options.forEach(o => {
-      const btn = document.createElement("div");
-      btn.className = "quiz-option";
-      btn.textContent = o;
-      btn.addEventListener("click", () => answerQuiz(btn, o === correctStr));
-      opts.appendChild(btn);
-    });
-    content.appendChild(opts);
-
-  } else if (type === "note-in-scale") {
-    const rootIdx = Math.floor(Math.random() * 12);
-    const scaleKeys = ["major", "natural-minor", "blues", "dorian"];
-    const scaleKey = scaleKeys[Math.floor(Math.random() * scaleKeys.length)];
-    const scaleNotes = getScaleNotes(rootIdx, scaleKey);
-    const testNote = Math.floor(Math.random() * 12);
-    const inScale = scaleNotes.includes(testNote);
-    currentQuiz = { correct: inScale ? "Kyllä" : "Ei" };
-
-    const q = document.createElement("div");
-    q.className = "quiz-question";
-    q.textContent = "Kuuluuko sävel " + NOTES_FI[testNote] +
-      " asteikkoon " + NOTES_FI[rootIdx] + " " + SCALES[scaleKey].name.toLowerCase() + "?";
-    content.appendChild(q);
-
-    const opts = document.createElement("div");
-    opts.className = "quiz-options";
-    ["Kyllä", "Ei"].forEach(o => {
-      const btn = document.createElement("div");
-      btn.className = "quiz-option";
-      btn.textContent = o;
-      btn.addEventListener("click", () => answerQuiz(btn, o === currentQuiz.correct));
-      opts.appendChild(btn);
-    });
-    content.appendChild(opts);
-
-  } else if (type === "interval") {
-    const rootIdx = Math.floor(Math.random() * 12);
-    const interval = Math.floor(Math.random() * 12) + 1;
-    const targetNote = (rootIdx + interval) % 12;
-    const correctName = INTERVAL_NAMES[interval];
-    currentQuiz = { correct: correctName };
-
-    // Play the interval
-    playTone(rootIdx, 4, 0.5);
-    setTimeout(() => playTone(targetNote, 4 + Math.floor((rootIdx + interval) / 12), 0.5), 600);
-
-    const q = document.createElement("div");
-    q.className = "quiz-question";
-    q.innerHTML = "Mikä intervalli soitettiin? <br><small style='color:var(--muted);font-size:14px'>Sävelistä " +
-      NOTES_FI[rootIdx] + " → " + NOTES_FI[targetNote] + "</small>";
-    content.appendChild(q);
-
-    const replayBtn = document.createElement("button");
-    replayBtn.textContent = "Soita uudelleen";
-    replayBtn.style.marginBottom = "12px";
-    replayBtn.addEventListener("click", () => {
-      playTone(rootIdx, 4, 0.5);
-      setTimeout(() => playTone(targetNote, 4 + Math.floor((rootIdx + interval) / 12), 0.5), 600);
-    });
-    content.appendChild(replayBtn);
-
-    // Build 4 options
-    const wrongs = new Set();
-    while (wrongs.size < 3) {
-      const r = Math.floor(Math.random() * 12) + 1;
-      if (INTERVAL_NAMES[r] !== correctName) wrongs.add(INTERVAL_NAMES[r]);
-    }
-    const options = shuffle([correctName, ...wrongs]);
-
-    const opts = document.createElement("div");
-    opts.className = "quiz-options";
-    options.forEach(o => {
-      const btn = document.createElement("div");
-      btn.className = "quiz-option";
-      btn.textContent = o;
-      btn.addEventListener("click", () => answerQuiz(btn, o === correctName));
-      opts.appendChild(btn);
-    });
-    content.appendChild(opts);
-  }
-
-  const feedback = document.createElement("div");
-  feedback.className = "quiz-feedback";
-  feedback.id = "quiz-feedback";
-  content.appendChild(feedback);
-}
-
-function answerQuiz(btn, isCorrect) {
-  const allOptions = btn.parentElement.querySelectorAll(".quiz-option");
-  allOptions.forEach(o => {
-    o.style.pointerEvents = "none";
-    if (o.textContent === currentQuiz.correct) o.classList.add("correct");
-  });
-  if (!isCorrect) btn.classList.add("wrong");
-
-  quizScore.total++;
-  if (isCorrect) quizScore.correct++;
-  document.getElementById("quiz-score").textContent =
-    "Oikein: " + quizScore.correct + " / " + quizScore.total;
-
-  const fb = document.getElementById("quiz-feedback");
-  fb.textContent = isCorrect ? "Oikein!" : "Väärin. Oikea vastaus: " + currentQuiz.correct;
-  fb.style.color = isCorrect ? "var(--note)" : "var(--accent)";
-}
-
-// ===== TABS =====
-document.querySelectorAll(".tab-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-    btn.classList.add("active");
-    document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
-  });
-});
-
-// ===== INIT =====
 populateSelectors();
 render();
-document.getElementById("play-btn").addEventListener("click", playScale);
-document.getElementById("quiz-start").addEventListener("click", newQuiz);
 </script>
 </body>
 </html>
