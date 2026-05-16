@@ -465,6 +465,19 @@
   </div>
 
   <div class="panel">
+    <h2>Mikrofonisyöte</h2>
+    <div class="midi-panel">
+      <button id="mic-btn" class="midi-btn">Yhdistä mikrofoni</button>
+      <div id="mic-status" class="midi-status">Soita yksi sävel kerrallaan. Toimii myös iPhone Safarissa.</div>
+    </div>
+    <div id="mic-feedback" class="midi-feedback" style="display:none;">
+      <span class="pill" id="mic-note-pill">–</span>
+      <span class="verdict" id="mic-verdict">Soita sävel</span>
+      <span class="midi-status" id="mic-freq" style="text-align:right;"></span>
+    </div>
+  </div>
+
+  <div class="panel">
     <h2>Kitara · vakiovire E A D G H E</h2>
     <div class="guitar-wrapper" id="guitar-wrapper">
       <div class="guitar" id="guitar"></div>
@@ -841,6 +854,171 @@ function handleMIDIMessage(event) {
     updatePressedHighlights();
   }
 }
+
+// ========== MICROPHONE PITCH DETECTION ==========
+// Autocorrelation-based pitch detector (Chris Wilson / standard approach)
+function autoCorrelate(buf, sampleRate) {
+  const SIZE = buf.length;
+  let rms = 0;
+  for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
+  rms = Math.sqrt(rms / SIZE);
+  if (rms < 0.01) return -1; // too quiet
+
+  // Trim silent edges
+  let r1 = 0, r2 = SIZE - 1, thres = 0.2;
+  for (let i = 0; i < SIZE / 2; i++) if (Math.abs(buf[i]) < thres) { r1 = i; break; }
+  for (let i = 1; i < SIZE / 2; i++) if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; }
+  const trimmed = buf.slice(r1, r2);
+  const N = trimmed.length;
+
+  const c = new Array(N).fill(0);
+  for (let i = 0; i < N; i++)
+    for (let j = 0; j < N - i; j++)
+      c[i] += trimmed[j] * trimmed[j + i];
+
+  let d = 0;
+  while (c[d] > c[d + 1]) d++;
+  let maxval = -1, maxpos = -1;
+  for (let i = d; i < N; i++) {
+    if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
+  }
+  let T0 = maxpos;
+  if (T0 <= 0) return -1;
+
+  // Parabolic interpolation for sub-sample accuracy
+  const x1 = c[T0 - 1] || 0, x2 = c[T0], x3 = c[T0 + 1] || 0;
+  const a = (x1 + x3 - 2 * x2) / 2;
+  const b = (x3 - x1) / 2;
+  if (a) T0 = T0 - b / (2 * a);
+
+  return sampleRate / T0;
+}
+
+function freqToMidi(freq) {
+  return 69 + 12 * Math.log2(freq / 440);
+}
+
+const micBtn = document.getElementById("mic-btn");
+const micStatus = document.getElementById("mic-status");
+const micFeedback = document.getElementById("mic-feedback");
+const micNotePill = document.getElementById("mic-note-pill");
+const micVerdict = document.getElementById("mic-verdict");
+const micFreqEl = document.getElementById("mic-freq");
+
+let micStream = null;
+let micAnalyser = null;
+let micBuffer = null;
+let micPressedNote = null;
+let micActive = false;
+let micRecentNotes = []; // smoothing buffer
+let micSilenceFrames = 0;
+
+function detectLoop() {
+  if (!micActive) return;
+  micAnalyser.getFloatTimeDomainData(micBuffer);
+  const freq = autoCorrelate(micBuffer, audioCtx.sampleRate);
+  if (freq > 50 && freq < 2000) {
+    const midiNum = freqToMidi(freq);
+    const rounded = Math.round(midiNum);
+    const cents = Math.round((midiNum - rounded) * 100);
+    // Only count if within 35 cents of a note (filter noise)
+    if (Math.abs(cents) < 35) {
+      micRecentNotes.push(rounded);
+      if (micRecentNotes.length > 5) micRecentNotes.shift();
+      // Mode of recent notes
+      const counts = {};
+      micRecentNotes.forEach(n => counts[n] = (counts[n] || 0) + 1);
+      let best = micRecentNotes[0], bestCount = 0;
+      for (const k in counts) if (counts[k] > bestCount) { bestCount = counts[k]; best = parseInt(k); }
+      if (bestCount >= 3) {
+        const noteIdx = ((best % 12) + 12) % 12;
+        if (noteIdx !== micPressedNote) {
+          if (micPressedNote !== null) pressedNotes.delete(micPressedNote);
+          micPressedNote = noteIdx;
+          pressedNotes.add(noteIdx);
+          updatePressedHighlights();
+          updateMicFeedback(noteIdx, freq, cents);
+        } else {
+          updateMicFeedback(noteIdx, freq, cents);
+        }
+        micSilenceFrames = 0;
+      }
+    }
+  } else {
+    micSilenceFrames++;
+    if (micSilenceFrames > 15 && micPressedNote !== null) {
+      pressedNotes.delete(micPressedNote);
+      micPressedNote = null;
+      micRecentNotes = [];
+      updatePressedHighlights();
+      micVerdict.textContent = "Soita sävel";
+      micNotePill.textContent = "–";
+      micFreqEl.textContent = "";
+      micFeedback.className = "midi-feedback";
+    }
+  }
+  requestAnimationFrame(detectLoop);
+}
+
+function updateMicFeedback(noteIdx, freq, cents) {
+  micFeedback.style.display = "flex";
+  const rootIdx = parseInt(document.getElementById("root-note").value);
+  const scaleKey = document.getElementById("scale-type").value;
+  const scaleNotes = getScaleNotes(rootIdx, scaleKey);
+  const inScale = scaleNotes.includes(noteIdx);
+  const isRoot = noteIdx === rootIdx;
+
+  micNotePill.textContent = NOTES_FI[noteIdx];
+  micFreqEl.textContent = freq.toFixed(1) + " Hz · " + (cents >= 0 ? "+" : "") + cents + "¢";
+
+  if (isRoot) {
+    micVerdict.textContent = "Perussävel ✓";
+    micFeedback.className = "midi-feedback in-scale";
+  } else if (inScale) {
+    const degree = getDegreeForNote(noteIdx, rootIdx, SCALES[scaleKey].intervals);
+    micVerdict.textContent = "Asteikossa · " + degree + ". aste";
+    micFeedback.className = "midi-feedback in-scale";
+  } else {
+    micVerdict.textContent = "Ei asteikossa";
+    micFeedback.className = "midi-feedback off-scale";
+  }
+}
+
+micBtn.addEventListener("click", async () => {
+  if (micActive) return;
+  micBtn.disabled = true;
+  micStatus.textContent = "Pyydetään mikrofonia…";
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      }
+    });
+    micStream = stream;
+    const ctx = getAudio();
+    if (ctx.state === "suspended") await ctx.resume();
+    const source = ctx.createMediaStreamSource(stream);
+    micAnalyser = ctx.createAnalyser();
+    micAnalyser.fftSize = 2048;
+    micBuffer = new Float32Array(micAnalyser.fftSize);
+    source.connect(micAnalyser);
+    // Do NOT connect to destination to avoid feedback
+    micActive = true;
+    micStatus.textContent = "Kuunnellaan… soita yksi sävel kerrallaan.";
+    micStatus.classList.remove("error");
+    micStatus.classList.add("ok");
+    micBtn.textContent = "Kuunnellaan";
+    micBtn.classList.add("connected");
+    micFeedback.style.display = "flex";
+    detectLoop();
+  } catch (err) {
+    micBtn.disabled = false;
+    micStatus.textContent = "Mikrofoniin ei saatu pääsyä: " + (err.message || err);
+    micStatus.classList.add("error");
+  }
+});
 
 const midiBtn = document.getElementById("midi-btn");
 const midiStatus = document.getElementById("midi-status");
