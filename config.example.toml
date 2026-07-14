@@ -1,0 +1,48 @@
+# Posetiivin asetukset. Kopioi nimelle config.toml ja muokkaa.
+
+[lyria]
+model = "models/lyria-realtime-exp"
+# API-avain luetaan ympäristömuuttujasta GEMINI_API_KEY.
+
+# Musiikin tyyli: painotettuja prompteja, joita Lyria sekoittaa keskenään.
+[[lyria.prompts]]
+text = "street organ waltz"
+weight = 1.0
+
+[[lyria.prompts]]
+text = "music box"
+weight = 0.5
+
+[lyria.generation]
+bpm = 110          # huom: bpm:n muutos kesken soiton vaatii kontekstin resetin
+scale = ""         # esim. "C_MAJOR_A_MINOR", tyhjä = mallin oma valinta
+temperature = 1.1
+guidance = 4.0
+
+[crank]
+# Input-laitteen polku, esim. "/dev/input/event3".
+# Tyhjä = etsi automaattisesti ensimmäinen laite jolla on rulla (REL_WHEEL).
+device = ""
+# Rullapykälää sekunnissa joka lasketaan "täydeksi vauhdiksi".
+full_speed_ticks_per_sec = 30.0
+# Kuinka monta sekuntia ilman pykälää tulkitaan pysähtyneeksi kammeksi.
+stop_timeout_sec = 0.35
+
+[mapping]
+# Veivausnopeus (0..1) -> Lyrian density/brightness (0..1)
+density_min = 0.2
+density_max = 0.9
+brightness_min = 0.3
+brightness_max = 0.8
+# Varispeed: toistonopeus seuraa kampea kuten mekaanisessa posetiivissa.
+varispeed = false
+varispeed_min_rate = 0.6
+varispeed_max_rate = 1.15
+
+[audio]
+# Tyhjä = ALSA:n oletuslaite. Nimi tai indeksi sounddevicelle.
+output_device = ""
+# Sisään/ulosfeidauksen kesto sekunteina kun kampi pysähtyy/lähtee käyntiin.
+fade_sec = 0.6
+# Puskurin tavoitekoko sekunteina ennen toiston aloitusta.
+prebuffer_sec = 1.5

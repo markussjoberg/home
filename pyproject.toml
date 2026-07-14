@@ -1,0 +1,21 @@
+[project]
+name = "posetiivi"
+version = "0.1.0"
+description = "Digitaalinen posetiivi: kampi ohjaa Lyria RealTime -musiikkia Raspberry Pilla"
+requires-python = ">=3.11"
+dependencies = [
+    "google-genai>=1.16",
+    "evdev>=1.7; platform_system == 'Linux'",
+    "sounddevice>=0.4.6",
+    "numpy>=1.26",
+]
+
+[project.scripts]
+posetiivi = "posetiivi.main:cli"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["posetiivi"]

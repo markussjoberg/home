@@ -1,0 +1,18 @@
+# Posetiivi käynnistyy bootissa. Muokkaa polut, käyttäjä ja API-avain,
+# kopioi /etc/systemd/system/ ja aja: sudo systemctl enable --now posetiivi
+[Unit]
+Description=Digitaalinen Lyria-posetiivi
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+User=pi
+SupplementaryGroups=input audio
+WorkingDirectory=/home/pi/posetiivi
+Environment=GEMINI_API_KEY=VAIHDA_TAHAN
+ExecStart=/usr/bin/python3 -m posetiivi
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
