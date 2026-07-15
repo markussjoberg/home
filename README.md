@@ -80,8 +80,17 @@ tarvitse API-avainta, joten Environment-rivin voi silloin poistaa.
 `--null-synth` korvaa FluidSynthin nuottitulostuksella — koko putken voi
 siis testata millä tahansa koneella ilman ääntä ja rautaa.
 
+## Posetiivi-LLM (training/)
+
+Kolmas koneisto työn alla: oma pieni MIDI-kielimalli (~5–10 M parametria),
+jota ohjataan **jatkuvilla genre-vivuilla** (esim. 60 % valssi + 40 % tango)
+ja mood-akseleilla. Treenataan M4 Maxilla illassa, ajetaan Pi:llä.
+Suunnitelma ja valmiit skriptit: [training/PLAN.md](training/PLAN.md) —
+putki (prepare → train → generate CFG-vivuilla) on testattu päästä päähän
+synteettisellä datalla.
+
 ## Jatkoideoita
 
 - Markov-melodia omista MIDI-tiedostoista (v1-posetiivin nauhat tyylilähteeksi)
-- GPIO-napit ja pyörivä valitsin LiveParams-säätöihin
-- RAVE-koneisto kolmanneksi moodiksi (reaaliaikainen neurosynteesi pyörii Pi 4/5:llä)
+- GPIO-napit, genre-liu'ut (MCP3008-ADC) ja pyörivä valitsin LiveParams-säätöihin
+- RAVE-koneisto neljänneksi moodiksi (reaaliaikainen neurosynteesi pyörii Pi 4/5:llä)
