@@ -150,7 +150,10 @@ class WaltzComposer:
             near = self._nearest(pc, prev)
             for cand in (near - 12, near, near + 12):
                 dist = abs(cand - prev) + abs(cand - center) * 0.3
-                candidates.append((cand, 1.0 / (1.0 + dist ** (2 - p.temperature))))
+                w = 1.0 / (1.0 + dist ** (2 - p.temperature))
+                if cand == prev:
+                    w *= 0.3  # saman sävelen jankkaus kuriin
+                candidates.append((cand, w))
         pitches, weights = zip(*candidates)
         pitch = self.rng.choices(pitches, weights)[0]
         self.prev_pitch = pitch
