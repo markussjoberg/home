@@ -1,5 +1,19 @@
 # Posetiivin asetukset. Kopioi nimelle config.toml ja muokkaa.
 
+# "midi" = lokaali generatiivinen koneisto (FluidSynth, ei nettiä eikä APIa)
+# "lyria" = Googlen Lyria RealTime pilvessä (vaatii GEMINI_API_KEY:n)
+engine = "midi"
+
+[midi]
+# SoundFont: sudo apt install fluid-soundfont-gm
+soundfont = "/usr/share/sounds/sf2/FluidR3_GM.sf2"
+# Säestyksen GM-soundi (21 = harmonikka, 19 = kirkkourut, 20 = harmoni)
+accomp_program = 21
+audio_driver = "alsa"
+# Kampi ohjaa tempoa suoraan tällä välillä.
+tempo_min_bpm = 50.0
+tempo_max_bpm = 170.0
+
 [lyria]
 model = "models/lyria-realtime-exp"
 # API-avain luetaan ympäristömuuttujasta GEMINI_API_KEY.

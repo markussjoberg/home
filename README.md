@@ -1,80 +1,87 @@
 # Posetiivi 🎵🐒
 
-Digitaalinen posetiivi, versio 2: Raspberry Piin kiinnitetty kampi (hiiren rulla
-tangossa) ohjaa **Googlen Lyria RealTime** -musiikkigeneraatiota. Kun veivaat,
-musiikki soi ja elää — kun lopetat, musiikki hiljenee.
+Digitaalinen posetiivi, versio 2: Raspberry Piin kiinnitetty kampi (hiiren
+rulla tangossa) pyörittää generatiivista musiikkia. Kun veivaat, musiikki soi
+ja elää — kun lopetat, kello pysähtyy kuin oikeassa posetiivissa.
 
-## Miksi ei täysin lokaalisti?
+Kaksi koneistoa samassa laitteessa:
 
-Lyriaa **ei jaeta mallipainoina**, joten sitä ei voi ajaa Raspilla (eikä millään
-muullakaan omalla raudalla). Se on saatavilla vain Gemini API:n kautta
-reaaliaikaisena WebSocket-striiminä (`models/lyria-realtime-exp`, vaatii
-maksullisen tierin). Googlen avoin sisarmalli Magenta RealTime 2 pyörii
-lokaalisti, mutta vaatii Apple Silicon -Macin tai GPU:n — Raspi ei riitä.
+| | **MIDI** (oletus) | **Lyria** |
+|---|---|---|
+| Musiikki | Generatiivinen valssi, FluidSynth-soundit | Googlen Lyria RealTime |
+| Missä generoituu | **Lokaalisti Pi:llä** | Googlen pilvessä |
+| Vaatii | Ei nettiä, ei APIa | GEMINI_API_KEY, maksullinen tier |
+| Kampi → tempo | Suoraan ja välittömästi (MIDI-kello) | Play/pause + density/brightness |
+| Suunnan ohjaus | Näppäimet soiton aikana | Promptit configissa |
 
-Siksi arkkitehtuuri on:
+## Lokaali MIDI-koneisto
+
+Säveltäjä (`midigen.py`) tuottaa loputonta 3/4-valssia tahti kerrallaan:
+sointukulut valitaan Markov-ketjulla (vahva paluu toonikalle, dominantti
+purkautuu aina), basso–humppa-säestys ja melodia joka suosii sointusäveliä
+ja pieniä askelia. Ei neuroverkkoa — siksi se pyörii millä tahansa Pi:llä
+ja reagoi parametreihin heti.
+
+**Kampi** ohjaa tempoa (50–170 bpm) ja melodian tiheyttä suoraan: MIDI-kello
+etenee vain kun veivaat. Pysähdys vaientaa piiput, ja veivauksen jatkuessa
+musiikki jatkuu täsmälleen siitä mihin jäi.
+
+**Suuntaa ohjataan soiton aikana näppäimillä** (uusi arvo kuuluu seuraavasta
+tahdista):
 
 ```
-[kampi / hiiren rulla]                        [Google Cloud]
-        │ evdev (REL_WHEEL)                          │
-        ▼                                            │
-[Raspberry Pi] ── prompts, density, play/pause ──►  Lyria RealTime
-        ▲                                            │
-        └────────── PCM 48 kHz s16le stereo ─────────┘
-        │
-        ▼
-   [kaiutin / ALSA]
+m      duuri ↔ molli
+k / K  sävellaji kvinttiympyrää eteen/taakse
+t / T  temperature alas/ylös (kuinka kauas sointusävelistä uskalletaan)
+r / R  melodian rekisteri alas/ylös
+p      soundi: harmonikka → kirkkourut → harmoni → celesta → soittorasia → piano
 ```
 
-Raspi on siis kampi, ohjain ja äänikortti; itse musiikki generoituu pilvessä.
-Raspi 3/4/5 riittää tähän mainiosti — työ on pelkkää WebSocket-liikennettä ja
-äänen toistoa.
+(GPIO-napit voi kytkeä samoihin parametreihin myöhemmin — LiveParams on
+jaettu olio jota voi säätää mistä tahansa taskista.)
 
-## Miten kampi vaikuttaa musiikkiin
+## Lyria-koneisto (pilvi)
 
-| Kampi                | Vaikutus                                              |
-|----------------------|-------------------------------------------------------|
-| Pysähdyksissä        | Ääni feidautuu hiljaiseksi, striimi pauselle          |
-| Veivaus alkaa        | Striimi jatkuu, ääni feidautuu kuuluviin              |
-| Veivausnopeus        | `density` ja `brightness` (tiheämpi/kirkkaampi soitto)|
-| Veivausnopeus (opt.) | Varispeed: toistonopeus elää kammen mukana kuten oikeassa posetiivissa (`[mapping] varispeed = true`) |
+Lyriaa ei jaeta mallipainoina, joten sitä ei voi ajaa lokaalisti millään
+raudalla — se on saatavilla vain Gemini API:n WebSocket-striiminä
+(`models/lyria-realtime-exp`). Tässä moodissa Raspi striimaa PCM:ää
+(48 kHz s16le stereo) pilvestä ja kampi ohjaa play/pausea, feidejä ja
+densityä/brightnessia. Valinnainen varispeed venyttää toistonopeutta kammen
+mukana. Käyttö: `--engine lyria` ja `export GEMINI_API_KEY=...`.
 
-Musiikin tyyli määritellään painotettuina prompteina `config.toml`-tiedostossa,
-esim. `"street organ waltz"` + `"music box"`.
-
-## Asennus (Raspberry Pi OS)
+## Asennus (Raspberry Pi OS, Pi 3/4/5)
 
 ```bash
-sudo apt install python3-pip libportaudio2
+sudo apt install python3-pip fluidsynth libfluidsynth3 fluid-soundfont-gm
 git clone <tämä repo> && cd posetiivi
-pip install .
-```
-
-API-avain (Google AI Studio, maksullinen tier):
-
-```bash
-export GEMINI_API_KEY="..."
-```
-
-Anna käyttäjälle oikeus lukea input-laitteita:
-
-```bash
-sudo usermod -aG input $USER   # kirjaudu ulos ja sisään
+pip install .              # MIDI-koneisto
+pip install .[lyria]       # + pilvikoneisto jos haluat molemmat
+sudo usermod -aG input $USER   # oikeus lukea kampea; kirjaudu ulos ja sisään
 ```
 
 ## Käyttö
 
 ```bash
-cp config.example.toml config.toml   # muokkaa promptit yms.
-python -m posetiivi                  # etsii rullahiiren automaattisesti
-python -m posetiivi --mock           # testaus ilman kampea (simuloitu veivi)
+cp config.example.toml config.toml   # soundfont, tempoalue, soundit yms.
+python -m posetiivi                  # MIDI-koneisto, etsii rullahiiren itse
+python -m posetiivi --engine lyria   # pilvikoneisto
+python -m posetiivi --mock           # simuloitu kampi (testaus ilman rautaa)
+python -m posetiivi --mock --null-synth  # ei ääntäkään, tulostaa nuotit
 python -m posetiivi --list-devices   # listaa input-laitteet
 ```
 
-Käynnistys bootissa: `systemd/posetiivi.service` (muokkaa polut ja avain,
-`sudo cp` → `/etc/systemd/system/` → `systemctl enable`).
+Käynnistys bootissa: `systemd/posetiivi.service` (muokkaa polut,
+`sudo cp` → `/etc/systemd/system/` → `systemctl enable`). MIDI-koneisto ei
+tarvitse API-avainta, joten Environment-rivin voi silloin poistaa.
 
 ## Kehitys ilman Raspia
 
-`--mock` simuloi kampea joka kiihtyy ja hidastuu sinimäisesti, joten koko
-putkea (Lyria-yhteys, mappaus, audio) voi testata millä tahansa koneella.
+`--mock` simuloi kampea joka kiihtyy ja hidastuu sinimäisesti, ja
+`--null-synth` korvaa FluidSynthin nuottitulostuksella — koko putken voi
+siis testata millä tahansa koneella ilman ääntä ja rautaa.
+
+## Jatkoideoita
+
+- Markov-melodia omista MIDI-tiedostoista (v1-posetiivin nauhat tyylilähteeksi)
+- GPIO-napit ja pyörivä valitsin LiveParams-säätöihin
+- RAVE-koneisto kolmanneksi moodiksi (reaaliaikainen neurosynteesi pyörii Pi 4/5:llä)

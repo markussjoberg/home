@@ -7,14 +7,12 @@ import asyncio
 import sys
 
 from . import config as config_mod
-from .audio import Player
 from .crank import CrankSpeed, run_crank, run_mock_crank
-from .lyria import LyriaSession
 
 CONTROL_INTERVAL = 0.1  # s: kuinka usein kammen tila luetaan ja mapataan
 
 
-async def control_loop(speed: CrankSpeed, lyria: LyriaSession, player: Player) -> None:
+async def control_loop(speed: CrankSpeed, lyria, player) -> None:
     """Mappaa veivausnopeus musiikkiin: play/pause, feidi, density/brightness."""
     m = player.map
     idle_since = 0.0
@@ -41,13 +39,13 @@ async def control_loop(speed: CrankSpeed, lyria: LyriaSession, player: Player) -
         await asyncio.sleep(CONTROL_INTERVAL)
 
 
-async def run(cfg: config_mod.Config, mock: bool) -> None:
-    speed = CrankSpeed(cfg.crank)
+async def run_lyria(cfg: config_mod.Config, speed: CrankSpeed, crank_task) -> None:
+    from .audio import Player
+    from .lyria import LyriaSession
+
     player = Player(cfg.audio, cfg.mapping)
     lyria = LyriaSession(cfg.lyria, on_audio=player.feed)
-
     player.start()
-    crank_task = run_mock_crank(speed) if mock else run_crank(speed)
     try:
         async with asyncio.TaskGroup() as tg:
             tg.create_task(lyria.run())
@@ -57,10 +55,37 @@ async def run(cfg: config_mod.Config, mock: bool) -> None:
         player.stop()
 
 
+async def run_midi(cfg: config_mod.Config, speed: CrankSpeed, crank_task, null_synth: bool) -> None:
+    from .midi_engine import MidiEngine, run_keyboard
+    from .synth import NullSynth, Synth
+
+    synth = NullSynth() if null_synth else Synth(cfg.midi)
+    engine = MidiEngine(cfg, speed, synth)
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(engine.run())
+        tg.create_task(crank_task)
+        tg.create_task(run_keyboard(engine.params))
+
+
+async def run(cfg: config_mod.Config, engine: str, mock: bool, null_synth: bool) -> None:
+    speed = CrankSpeed(cfg.crank)
+    crank_task = run_mock_crank(speed) if mock else run_crank(speed)
+    if engine == "lyria":
+        await run_lyria(cfg, speed, crank_task)
+    else:
+        await run_midi(cfg, speed, crank_task, null_synth)
+
+
 def cli() -> None:
-    parser = argparse.ArgumentParser(description="Digitaalinen Lyria-posetiivi")
+    parser = argparse.ArgumentParser(description="Digitaalinen posetiivi")
     parser.add_argument("--config", default="config.toml", help="polku config.tomliin")
+    parser.add_argument(
+        "--engine", choices=("midi", "lyria"), help="ohita configin engine-valinta"
+    )
     parser.add_argument("--mock", action="store_true", help="simuloitu kampi (ei rautaa)")
+    parser.add_argument(
+        "--null-synth", action="store_true", help="MIDI-koneisto ilman ääntä (testaus)"
+    )
     parser.add_argument(
         "--list-devices", action="store_true", help="listaa input-laitteet ja lopeta"
     )
@@ -73,8 +98,9 @@ def cli() -> None:
         return
 
     cfg = config_mod.load(args.config)
+    engine = args.engine or cfg.engine
     try:
-        asyncio.run(run(cfg, mock=args.mock))
+        asyncio.run(run(cfg, engine, mock=args.mock, null_synth=args.null_synth))
     except KeyboardInterrupt:
         print("\nPosetiivi sammutettu.")
         sys.exit(0)

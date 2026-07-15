@@ -26,6 +26,15 @@ class LyriaCfg:
 
 
 @dataclass
+class MidiCfg:
+    soundfont: str = "/usr/share/sounds/sf2/FluidR3_GM.sf2"
+    accomp_program: int = 21  # GM-soundi säestykselle (21 = harmonikka)
+    audio_driver: str = "alsa"
+    tempo_min_bpm: float = 50.0
+    tempo_max_bpm: float = 170.0
+
+
+@dataclass
 class CrankCfg:
     device: str = ""
     full_speed_ticks_per_sec: float = 30.0
@@ -52,7 +61,9 @@ class AudioCfg:
 
 @dataclass
 class Config:
+    engine: str = "midi"  # "midi" (lokaali) tai "lyria" (pilvi)
     lyria: LyriaCfg = field(default_factory=LyriaCfg)
+    midi: MidiCfg = field(default_factory=MidiCfg)
     crank: CrankCfg = field(default_factory=CrankCfg)
     mapping: MappingCfg = field(default_factory=MappingCfg)
     audio: AudioCfg = field(default_factory=AudioCfg)
@@ -81,4 +92,12 @@ def load(path: str | Path = "config.toml") -> Config:
     crank = CrankCfg(**raw.get("crank", {}))
     mapping = MappingCfg(**raw.get("mapping", {}))
     audio = AudioCfg(**raw.get("audio", {}))
-    return Config(lyria=lyria, crank=crank, mapping=mapping, audio=audio)
+    midi = MidiCfg(**raw.get("midi", {}))
+    return Config(
+        engine=raw.get("engine", "midi"),
+        lyria=lyria,
+        midi=midi,
+        crank=crank,
+        mapping=mapping,
+        audio=audio,
+    )
