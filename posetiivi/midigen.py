@@ -42,6 +42,9 @@ class LiveParams:
     temperature: float = 0.4  # 0..1: kuinka kauas sointusävelistä uskalletaan
     register: int = 0  # melodian oktaavisiirto -1..+2
     program_ix: int = 0  # indeksi PROGRAMS-listaan
+    genre_ix: int = 0  # LLM-lähteen genre (llm_source asettaa genre_names)
+
+    genre_names = ()  # luokkataso; LLMComposer täyttää
 
     @property
     def program(self) -> int:
@@ -49,10 +52,13 @@ class LiveParams:
 
     def describe(self) -> str:
         laji = "molli" if self.minor else "duuri"
-        return (
+        s = (
             f"{KEY_NAMES[self.key % 12]}-{laji}  temp={self.temperature:.1f}  "
             f"rekisteri={self.register:+d}  soundi={PROGRAM_NAMES[self.program]}"
         )
+        if self.genre_names:
+            s += f"  genre={self.genre_names[self.genre_ix % len(self.genre_names)]}"
+        return s
 
 
 @dataclass

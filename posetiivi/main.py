@@ -61,6 +61,11 @@ async def run_midi(cfg: config_mod.Config, speed: CrankSpeed, crank_task, null_s
 
     synth = NullSynth() if null_synth else Synth(cfg.midi)
     engine = MidiEngine(cfg, speed, synth)
+    if cfg.midi.source == "llm":
+        from .llm_source import LLMComposer
+
+        engine.composer = LLMComposer(cfg.midi.llm_checkpoint, engine.params)
+        print(f"Melodialähde: LLM ({cfg.midi.llm_checkpoint})")
     async with asyncio.TaskGroup() as tg:
         tg.create_task(engine.run())
         tg.create_task(crank_task)

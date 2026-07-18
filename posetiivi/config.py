@@ -32,6 +32,8 @@ class MidiCfg:
     audio_driver: str = "alsa"
     tempo_min_bpm: float = 50.0
     tempo_max_bpm: float = 170.0
+    source: str = "algo"  # "algo" = WaltzComposer, "llm" = treenattu malli
+    llm_checkpoint: str = "training/ckpt/best.pt"
 
 
 @dataclass

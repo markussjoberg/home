@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import math
 
-from tokenizer import NoteEv
+try:
+    from tokenizer import NoteEv
+except ImportError:  # paketti-importti ajon aikana (posetiivi/llm_source.py)
+    from .tokenizer import NoteEv
 
 GENRES = ["valssi", "masurkka", "polska", "menuetti",
           "polkka", "jenkka", "humppa", "marssi", "ragtime", "tango"]

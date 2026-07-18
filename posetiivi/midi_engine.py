@@ -11,6 +11,7 @@ Näppäimet:
   t / T    temperature alas/ylös
   r / R    rekisteri alas/ylös
   p        vaihda soundia
+  g        vaihda genreä (vain LLM-lähteellä)
   ?        näytä tila
 """
 
@@ -30,12 +31,12 @@ TICK = 0.005  # s: kellon resoluutio
 
 
 class MidiEngine:
-    def __init__(self, cfg: Config, speed: CrankSpeed, synth):
+    def __init__(self, cfg: Config, speed: CrankSpeed, synth, composer=None):
         self.cfg = cfg
         self.speed = speed
         self.synth = synth
         self.params = LiveParams()
-        self.composer = WaltzComposer(self.params)
+        self.composer = composer or WaltzComposer(self.params)
         self._events: list[tuple[float, int, str, int, int]] = []  # heap
         self._seq = 0
         self._composed_until = 0.0  # iskuina
@@ -46,13 +47,22 @@ class MidiEngine:
         self._seq += 1
 
     def _compose_ahead(self, clock: float, density: float) -> None:
-        """Pidä vähintään tahti sävellettyä materiaalia kellon edellä."""
-        while self._composed_until < clock + WaltzComposer.BEATS_PER_BAR:
+        """Pidä pari tahtia sävellettyä materiaalia kellon edellä.
+
+        next_bar voi palauttaa None (LLM-lähde ei vielä ehtinyt) — silloin
+        ei edetä: jo aikataulutettu musiikki jatkuu ja yritetään uudelleen
+        seuraavalla tikillä.
+        """
+        beats = self.composer.BEATS_PER_BAR
+        while self._composed_until < clock + 2 * beats:
+            bar = self.composer.next_bar(density)
+            if bar is None:
+                break
             bar_start = self._composed_until
-            for n in self.composer.next_bar(density):
+            for n in bar:
                 self._push(bar_start + n.beat, "on", n.channel, n.pitch, n.velocity)
                 self._push(bar_start + n.beat + n.duration, "off", n.channel, n.pitch)
-            self._composed_until = bar_start + WaltzComposer.BEATS_PER_BAR
+            self._composed_until = bar_start + beats
 
     async def run(self) -> None:
         m = self.cfg.mapping
@@ -132,6 +142,8 @@ async def run_keyboard(params: LiveParams) -> None:
                 params.register = min(2, params.register + 1)
             elif ch == "p":
                 params.program_ix += 1
+            elif ch == "g":
+                params.genre_ix += 1
             elif ch != "?":
                 continue
             print(f"  -> {params.describe()}")

@@ -13,6 +13,10 @@ audio_driver = "alsa"
 # Kampi ohjaa tempoa suoraan tällä välillä.
 tempo_min_bpm = 50.0
 tempo_max_bpm = 170.0
+# Tahtien lähde: "algo" = sisäänrakennettu säveltäjä, "llm" = treenattu
+# posetiivi-LLM (ks. training/PLAN.md). LLM vaatii: pip install torch
+source = "algo"
+llm_checkpoint = "training/ckpt/best.pt"
 
 [lyria]
 model = "models/lyria-realtime-exp"
