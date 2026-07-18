@@ -70,6 +70,43 @@ def _extract(score) -> tuple[list[NoteEv], int, float] | None:
     return notes, beats, bpm
 
 
+def auto_accompany(notes: list[NoteEv], beats: int) -> list[NoteEv]:
+    """Lisää basso + soinnut melodiadataan (esim. The Session on yksiäänistä).
+
+    Tahdin sointu = parhaiten tahdin sävelhistogrammiin sopiva duuri/molli-
+    kolmisointu. Ilman tätä malli ei koskaan näe CH_ACC-kanavaa eikä opi
+    säestämään.
+    """
+    if any(n.channel == 1 for n in notes):
+        return notes  # säestys on jo
+    n_bars = max(n.bar for n in notes) + 1
+    hist = [[0.0] * 12 for _ in range(n_bars)]
+    for n in notes:
+        hist[n.bar][n.pitch % 12] += n.dur
+    prev_root = None
+    out = list(notes)
+    for bar in range(n_bars):
+        h = hist[bar]
+        if not any(h):
+            continue
+        best, best_score = (0, False), -1.0
+        for root in range(12):
+            for minor in (False, True):
+                triad = (root, (root + (3 if minor else 4)) % 12, (root + 7) % 12)
+                score = sum(h[pc] for pc in triad) + (0.5 if root == prev_root else 0)
+                if score > best_score:
+                    best, best_score = (root, minor), score
+        root, minor = best
+        prev_root = root
+        bass = 36 + root if root >= 5 else 48 + root  # A2-tienoo
+        triad = [48 + root + iv for iv in (0, 3 if minor else 4, 7)]
+        out.append(NoteEv(bar, 0, 1, bass, GRID - 1, 88))
+        for beat in range(1, beats):
+            for p in triad:
+                out.append(NoteEv(bar, beat * GRID, 1, p, GRID - 1, 64))
+    return out
+
+
 def genre_for(path: Path, mapping: list[tuple[str, str]]) -> str | None:
     s = str(path).lower()
     for pattern, genre in mapping:
@@ -83,6 +120,8 @@ def main() -> None:
     ap.add_argument("--midi-dir", required=True, type=Path)
     ap.add_argument("--genre-map", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
+    ap.add_argument("--no-auto-accomp", action="store_true",
+                    help="älä lisää bassoa+sointuja yksiäänisiin tiedostoihin")
     args = ap.parse_args()
 
     mapping = [(r[0].lower(), r[1].strip()) for r in csv.reader(args.genre_map.open())
@@ -99,6 +138,8 @@ def main() -> None:
             skipped += 1
             continue
         notes, beats, bpm = loaded
+        if not args.no_auto_accomp:
+            notes = auto_accompany(notes, beats)
         tokens = encode(notes, beats)
         conds = bar_conds(notes, beats, smooth_genre(genre), bpm)
         bars = [b + cond_offset for b in bar_ids(tokens)]

@@ -19,7 +19,20 @@ import torch
 
 from features import COND_DIM
 from model import ModelCfg, PosetiiviLM
-from tokenizer import VOCAB_SIZE
+from tokenizer import NOTE_HI, NOTE_LO, TOK, VOCAB_SIZE
+
+NOTE_ID_LO, NOTE_ID_HI = TOK[f"NOTE_{NOTE_LO}"], TOK[f"NOTE_{NOTE_HI}"]
+
+
+def transpose_aug(x: torch.Tensor, y: torch.Tensor) -> None:
+    """Siirrä NOTE-tokeneita satunnaisesti -5..+6 puolisävelaskelta (in place).
+
+    Ilmaista dataa (x12) pienelle korpukselle; sävellajit tasoittuvat.
+    """
+    delta = torch.randint(-5, 7, (x.shape[0], 1))
+    for t in (x, y):
+        mask = (t >= NOTE_ID_LO) & (t <= NOTE_ID_HI)
+        t[mask] = (t + delta.expand_as(t))[mask].clamp(NOTE_ID_LO, NOTE_ID_HI)
 
 
 def pick_device() -> str:
@@ -98,6 +111,7 @@ def main() -> None:
         for g in opt.param_groups:
             g["lr"] = lr_at(step)
         x, y, c = data.batch(args.batch, "train", device)
+        transpose_aug(x, y)
         with autocast:
             _, loss = model(x, c, y)
         opt.zero_grad(set_to_none=True)

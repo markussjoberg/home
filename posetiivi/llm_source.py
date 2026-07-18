@@ -91,9 +91,13 @@ class LLMComposer:
                 bar.append(nxt)
         notes, _ = self.tk.decode(self._prefix() + bar)
         grid = self.tk.GRID
+        # k-näppäimen sävellaji = transponointi (malli generoi C-maailmassa,
+        # transpoosiaugmentoinnin ansiosta siirto kuulostaa luontevalta).
+        shift = self.params.key % 12
+        shift = shift - 12 if shift > 6 else shift
         return [
-            Note(beat=n.pos / grid, pitch=n.pitch, velocity=n.velocity,
-                 duration=n.dur / grid, channel=n.channel)
+            Note(beat=n.pos / grid, pitch=min(max(n.pitch + shift, 21), 108),
+                 velocity=n.velocity, duration=n.dur / grid, channel=n.channel)
             for n in notes
         ]
 

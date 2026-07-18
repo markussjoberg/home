@@ -60,6 +60,19 @@ harmonian väri (Krumhansl-korrelaatio), energia = tempo × density.
 ABC → MIDI: `abc2midi` (apt/brew: `abcmidi`). Suodatus: tahtilajit 3/4, 2/4
 ja 4/4; kesto 8–256 tahtia; kvantisointi 1/16-gridiin.
 
+**Huom. genrekattavuus:** The Session kattaa vain valssin, polkan, masurkan
+ja marssin. Genret joilla ei ole dataa jäävät vipuina kohinaksi — aja
+ensimmäinen treeni näillä neljällä ja laajenna sanastoa kun FolkWiki
+(polska, jenkka) ja tango/ragtime-MIDIt on lisätty.
+
+**Yksiäänisyys:** The Session on melodiadataa. `prepare_data.py` lisää
+automaattisesti basson + soinnut (per-tahti kolmisointusovitus) jotta malli
+oppii myös säestyskanavan; pois kytkettävissä lipulla `--no-auto-accomp`.
+
+**Augmentointi:** treeni transponoi NOTE-tokeneita satunnaisesti ±6
+puolisävelaskelta per näyte — ilmaista dataa (~×12) ja mahdollistaa
+sävellajinsiirron ajossa (k-näppäin toimii myös LLM-lähteellä).
+
 Tokenibudjetti: ~30 k sävelmää × ~1 k tokenia = 30 M tokenia → 3–5 M
 parametrin malli on turvallinen aloitus (Chinchilla ~20:1, pienelle
 tuotantomallille mielellään reilusti yli). Lakh-osajoukolla pääsee
