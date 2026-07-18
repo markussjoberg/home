@@ -53,7 +53,10 @@ mukana. Käyttö: `--engine lyria` ja `export GEMINI_API_KEY=...`.
 
 ```bash
 sudo apt install python3-pip fluidsynth libfluidsynth3 fluid-soundfont-gm
-git clone <tämä repo> && cd posetiivi
+# Projekti asuu toistaiseksi home-repon branchilla:
+git clone -b claude/raspi-lyria-midi-controller-saculz \
+    https://github.com/markussjoberg/home posetiivi
+cd posetiivi
 pip install .              # MIDI-koneisto
 pip install .[lyria]       # + pilvikoneisto jos haluat molemmat
 sudo usermod -aG input $USER   # oikeus lukea kampea; kirjaudu ulos ja sisään
