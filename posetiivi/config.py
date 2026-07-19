@@ -29,7 +29,7 @@ class LyriaCfg:
 class MidiCfg:
     soundfont: str = "/usr/share/sounds/sf2/FluidR3_GM.sf2"
     accomp_program: int = 21  # GM-soundi säestykselle (21 = harmonikka)
-    audio_driver: str = "alsa"
+    audio_driver: str = ""  # tyhjä = automaattinen (alsa / coreaudio)
     tempo_min_bpm: float = 50.0
     tempo_max_bpm: float = 170.0
     source: str = "algo"  # "algo" = WaltzComposer, "llm" = treenattu malli

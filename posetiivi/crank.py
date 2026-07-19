@@ -83,6 +83,28 @@ async def run_crank(speed: CrankSpeed) -> None:
             speed.tick(abs(event.value))
 
 
+async def run_pynput_crank(speed: CrankSpeed) -> None:
+    """Mac-simulaattori: hiiren/trackpadin scrollaus kampena (pynput).
+
+    Vaatii macOS:n Syötteen valvonta -luvan terminaalille
+    (Järjestelmäasetukset > Tietosuoja > Input Monitoring).
+    """
+    from pynput import mouse
+
+    def on_scroll(_x, _y, _dx, dy):
+        if dy:
+            speed.tick(abs(int(dy)) or 1)
+
+    listener = mouse.Listener(on_scroll=on_scroll)
+    listener.start()
+    print("Kampi: hiiren rulla / trackpad-scrollaus (pynput)")
+    try:
+        while True:
+            await asyncio.sleep(1.0)
+    finally:
+        listener.stop()
+
+
 async def run_mock_crank(speed: CrankSpeed) -> None:
     """Simuloitu kampi: veivaa aaltoillen, välillä pysähtyen (testaukseen)."""
     print("Kampi: simuloitu (--mock)")

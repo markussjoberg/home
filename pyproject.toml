@@ -15,6 +15,10 @@ lyria = [
     "sounddevice>=0.4.6",
     "numpy>=1.26",
 ]
+# Mac-simulaattori (scrollaus kampena): pip install .[mac]
+mac = ["pynput>=1.7"]
+# LLM-lähde (source = "llm"): pip install .[llm]
+llm = ["torch>=2.1"]
 
 [project.scripts]
 posetiivi = "posetiivi.main:cli"

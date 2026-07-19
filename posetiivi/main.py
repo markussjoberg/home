@@ -74,7 +74,14 @@ async def run_midi(cfg: config_mod.Config, speed: CrankSpeed, crank_task, null_s
 
 async def run(cfg: config_mod.Config, engine: str, mock: bool, null_synth: bool) -> None:
     speed = CrankSpeed(cfg.crank)
-    crank_task = run_mock_crank(speed) if mock else run_crank(speed)
+    if mock:
+        crank_task = run_mock_crank(speed)
+    elif sys.platform == "darwin":
+        from .crank import run_pynput_crank
+
+        crank_task = run_pynput_crank(speed)
+    else:
+        crank_task = run_crank(speed)
     if engine == "lyria":
         await run_lyria(cfg, speed, crank_task)
     else:

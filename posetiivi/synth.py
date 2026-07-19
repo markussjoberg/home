@@ -5,15 +5,20 @@ Kanava 0 = melodia, kanava 1 = säestys (basso + soinnut).
 
 from __future__ import annotations
 
+import sys
+
 from .config import MidiCfg
 
 
 class Synth:
     def __init__(self, cfg: MidiCfg):
-        import fluidsynth  # pip: pyFluidSynth, vaatii apt: libfluidsynth3
+        import fluidsynth  # pip: pyFluidSynth; apt: libfluidsynth3 / brew: fluid-synth
 
         self.fs = fluidsynth.Synth(samplerate=48000, gain=0.8)
-        self.fs.start(driver=cfg.audio_driver or "alsa")
+        driver = cfg.audio_driver or (
+            "coreaudio" if sys.platform == "darwin" else "alsa"
+        )
+        self.fs.start(driver=driver)
         self.sfid = self.fs.sfload(cfg.soundfont)
         if self.sfid < 0:
             raise RuntimeError(f"SoundFontin lataus epäonnistui: {cfg.soundfont}")

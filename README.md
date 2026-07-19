@@ -77,7 +77,25 @@ Käynnistys bootissa: `systemd/posetiivi.service` (muokkaa polut,
 `sudo cp` → `/etc/systemd/system/` → `systemctl enable`). MIDI-koneisto ei
 tarvitse API-avainta, joten Environment-rivin voi silloin poistaa.
 
-## Kehitys ilman Raspia
+## Mac-simulaattori
+
+Macilla soitin toimii sellaisenaan ja **hiiren rulla / trackpadin scrollaus
+on kampi** — sama liike kuin oikeassa laitteessa:
+
+```bash
+brew install fluid-synth
+pip install .[mac,llm]
+# SoundFont (FluidR3_GM.sf2), esim.:
+curl -Lo FluidR3_GM.sf2 https://github.com/urish/cinto/raw/master/media/FluidR3%20GM.sf2
+# config.toml: soundfont = "FluidR3_GM.sf2", source = "llm"
+python -m posetiivi
+```
+
+Anna terminaalille Syötteen valvonta -lupa (Tietosuoja > Input Monitoring),
+jotta scrollaus näkyy ohjelmalle. Näppäinohjaus toimii kuten Raspilla:
+`g` genre, `m` molli, `k` sävellaji, `t/T` temperature, `p` soundi.
+
+## Kehitys ilman rautaa
 
 `--mock` simuloi kampea joka kiihtyy ja hidastuu sinimäisesti, ja
 `--null-synth` korvaa FluidSynthin nuottitulostuksella — koko putken voi
