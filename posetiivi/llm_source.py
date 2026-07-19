@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import atexit
 import queue
+import random
 import threading
 
 from .midigen import LiveParams, Note
@@ -42,6 +43,9 @@ class LLMComposer:
         self.params = params
         self._density = 0.5
         self._seq = self._prefix()
+        self._bar_in_tune = 0
+        self._tune_len = 24
+        self._prev_bars: list[tuple] = []
         self._queue: queue.Queue[list[Note]] = queue.Queue(maxsize=2)
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._worker, daemon=True)
@@ -65,30 +69,59 @@ class LLMComposer:
         g[p.genre_ix % len(self.genres)] = 1.0
         register = min(max(0.5 + 0.25 * p.register, 0.0), 1.0)
         valence = 0.3 if p.minor else 0.75
-        return g + [valence, d, d, register]
+        # Fraasipositio ja biisin etenemä: biisi on "lause" BOS:sta EOS:iin.
+        phrase = (self._bar_in_tune % 8) / 8.0
+        progress = min(self._bar_in_tune / max(self._tune_len - 1, 1), 1.0)
+        cond = g + [valence, d, d, register, phrase, progress]
+        cd = self.model.cfg.cond_dim  # vanha ckpt: 14 -> pudota rakennepiirteet
+        return cond[:cd] + [0.0] * (cd - len(cond))
+
+    def _is_loop(self, sig: tuple) -> bool:
+        """Kolmas identtinen tahti peräkkäin tai ABAB-jumi."""
+        p = self._prev_bars
+        if len(p) >= 2 and sig == p[-1] == p[-2]:
+            return True
+        return len(p) >= 3 and sig == p[-2] and p[-1] == p[-3]
 
     def _generate_bar(self) -> list[Note]:
         torch, t = self.torch, self.tk.TOK
-        temp = 0.7 + 0.5 * self.params.temperature
+        base_temp = 0.7 + 0.5 * self.params.temperature
         bar: list[int] = []
-        with torch.no_grad():
-            for _ in range(160):
-                window = self._seq[-WINDOW:]
-                x = torch.tensor([window])
-                c = torch.tensor(self._cond()).view(1, 1, -1).expand(1, len(window), -1)
-                logits, _ = self.model(x, c)
-                logits = logits[0, -1] / temp
-                logits[t["PAD"]] = -float("inf")
-                kth = torch.topk(logits, TOP_K).values[-1]
-                logits[logits < kth] = -float("inf")
-                nxt = int(torch.multinomial(torch.softmax(logits, -1), 1))
-                if nxt == t["EOS"]:
-                    self._seq = self._prefix()  # kappale loppui: uusi alkaa
-                    break
-                self._seq.append(nxt)
-                if nxt == t["BAR"]:
-                    break
-                bar.append(nxt)
+        for attempt in range(4):
+            bar = []
+            temp = base_temp * 1.25**attempt
+            with torch.no_grad():
+                for _ in range(160):
+                    window = self._seq[-WINDOW:]
+                    x = torch.tensor([window])
+                    c = torch.tensor(self._cond()).view(1, 1, -1).expand(
+                        1, len(window), -1
+                    )
+                    logits, _ = self.model(x, c)
+                    logits = logits[0, -1] / temp
+                    logits[t["PAD"]] = -float("inf")
+                    kth = torch.topk(logits, TOP_K).values[-1]
+                    logits[logits < kth] = -float("inf")
+                    nxt = int(torch.multinomial(torch.softmax(logits, -1), 1))
+                    if nxt == t["EOS"]:
+                        # Piste: biisi päättyi. Uusi lause alkaa puhtaalta
+                        # pöydältä ja väliin jää hengähdystahti.
+                        self._seq = self._prefix()
+                        self._bar_in_tune = 0
+                        self._tune_len = random.randint(16, 32)
+                        self._prev_bars = []
+                        return []
+                    self._seq.append(nxt)
+                    if nxt == t["BAR"]:
+                        break
+                    bar.append(nxt)
+            sig = tuple(bar)
+            if bar and self._is_loop(sig):
+                del self._seq[len(self._seq) - len(bar) - 1:]  # hylkää, kuumemmin
+                continue
+            break
+        self._prev_bars.append(tuple(bar))
+        self._bar_in_tune += 1
         notes, _ = self.tk.decode(self._prefix() + bar)
         grid = self.tk.GRID
         # k-näppäimen sävellaji = transponointi (malli generoi C-maailmassa,

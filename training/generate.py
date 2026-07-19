@@ -16,7 +16,34 @@ import torch
 
 from features import COND_DIM, GENRES
 from model import ModelCfg, PosetiiviLM
-from tokenizer import GRID, TOK, VOCAB_SIZE, decode
+from tokenizer import GRID, NOTE_HI, NOTE_LO, TOK, VOCAB_SIZE, decode
+
+# Skaalamaski: pakota generointi mihin tahansa asteikkoon (vrt. Ian Ringin
+# A Study of Scales -katalogi — mikä tahansa sävelluokkajoukko käy tähän).
+# Malli fraseeraa kuten on oppinut, mutta sävelvaranto vaihtuu.
+SCALES = {
+    "major": [0, 2, 4, 5, 7, 9, 11],
+    "minor": [0, 2, 3, 5, 7, 8, 10],
+    "harmonic_minor": [0, 2, 3, 5, 7, 8, 11],
+    "dorian": [0, 2, 3, 5, 7, 9, 10],
+    "mixolydian": [0, 2, 4, 5, 7, 9, 10],
+    "freygish": [0, 1, 4, 5, 7, 8, 10],  # klezmer/ahava rabbah
+    "hungarian_minor": [0, 2, 3, 6, 7, 8, 11],
+    "pentatonic": [0, 2, 4, 7, 9],
+    "whole_tone": [0, 2, 4, 6, 8, 10],
+}
+
+
+def scale_mask(scale: str, key: int, device) -> torch.Tensor | None:
+    """Bool-maski kielletyille NOTE-tokeneille, tai None jos ei rajata."""
+    if not scale:
+        return None
+    pcs = {(key + x) % 12 for x in SCALES[scale]}
+    banned = [TOK[f"NOTE_{p}"] for p in range(NOTE_LO, NOTE_HI + 1)
+              if p % 12 not in pcs]
+    mask = torch.zeros(VOCAB_SIZE, dtype=torch.bool, device=device)
+    mask[banned] = True
+    return mask
 
 
 def parse_genre(spec: str) -> list[float]:
@@ -28,33 +55,85 @@ def parse_genre(spec: str) -> list[float]:
     return [p / total for p in probs]
 
 
+def fit_cond(cond: list[float], model) -> list[float]:
+    """Sovita ehdollistusvektori mallin cond_dimiin (vanha ckpt: 14, uusi 16)."""
+    cd = model.cfg.cond_dim
+    return cond[:cd] + [0.0] * (cd - len(cond))
+
+
+def is_loop(prev: list[tuple], sig: tuple) -> bool:
+    """Kolmas identtinen tahti peräkkäin tai ABAB kolmatta kierrosta."""
+    if len(prev) >= 2 and sig == prev[-1] == prev[-2]:
+        return True
+    return len(prev) >= 3 and sig == prev[-2] and prev[-1] == prev[-3]
+
+
 @torch.no_grad()
-def sample(model, cond_vec, beats, max_bars, temperature, top_k, guidance, device):
-    meter_tok = TOK[f"METER_{beats}"]
-    seq = torch.tensor([[TOK["BOS"], meter_tok, TOK["BAR"]]], device=device)
-    cond = torch.tensor(cond_vec, device=device).view(1, 1, -1)
-    zero = torch.zeros_like(cond)
-    bars = 0
-    while bars < max_bars and seq.shape[1] < 4096:
-        window = seq[:, -1024:]
-        c = cond.expand(1, window.shape[1], -1)
+def sample(model, cond_base, beats, max_bars, temperature, top_k, guidance, device,
+           rng=None, banned_notes=None):
+    """Generoi biisejä peräkkäin ("biisi, jonka jälkeen toinen").
+
+    - EOS ei lopeta vaan aloittaa uuden sävelmän tuoreella kontekstilla.
+    - Looppivahti: identtisen tahdin kolmas toisto (tai ABAB-jumi) hylätään
+      ja tahti generoidaan uudelleen kuumemmalla lämpötilalla.
+    - Fraasipositio ja biisin etenemä syötetään ehdollistukseen (mallit
+      jotka on treenattu niitä näkemään; vanhalle ckpt:lle nollataan pois).
+    """
+    import random as _random
+    rng = rng or _random
+    t = TOK
+    meter_tok = t[f"METER_{beats}"]
+    prefix = [t["BOS"], meter_tok, t["BAR"]]
+    seq: list[int] = list(prefix)
+    bars_total, bar_in_tune = 0, 0
+    tune_len = rng.randint(16, 32)
+    prev_bars: list[tuple] = []
+    cur: list[int] = []
+    attempts = 0
+    while bars_total < max_bars and len(seq) < 16384:
+        cond_vec = fit_cond(
+            list(cond_base)
+            + [(bar_in_tune % 8) / 8.0, min(bar_in_tune / max(tune_len - 1, 1), 1.0)],
+            model,
+        )
+        window = torch.tensor([seq[-1024:]], device=device)
+        c = torch.tensor(cond_vec, device=device).view(1, 1, -1).expand(
+            1, window.shape[1], -1
+        )
         logits, _ = model(window, c)
         logits = logits[:, -1]
         if guidance != 1.0:
-            uncond_logits, _ = model(window, zero.expand_as(c))
-            logits = uncond_logits[:, -1] + guidance * (logits - uncond_logits[:, -1])
-        logits = logits / temperature
-        logits[:, TOK["PAD"]] = -float("inf")
+            uncond, _ = model(window, torch.zeros_like(c))
+            logits = uncond[:, -1] + guidance * (logits - uncond[:, -1])
+        logits = logits / (temperature * 1.25**attempts)
+        logits[:, t["PAD"]] = -float("inf")
+        if banned_notes is not None:
+            logits[:, banned_notes] = -float("inf")
         if top_k:
             kth = torch.topk(logits, top_k).values[:, -1, None]
             logits[logits < kth] = -float("inf")
-        nxt = torch.multinomial(torch.softmax(logits, -1), 1)
-        if nxt.item() == TOK["EOS"]:
-            break
-        if nxt.item() == TOK["BAR"]:
-            bars += 1
-        seq = torch.cat([seq, nxt], dim=1)
-    return seq[0].tolist()
+        nxt = int(torch.multinomial(torch.softmax(logits, -1), 1))
+        if nxt == t["EOS"]:
+            # Biisi päättyi: pieni tauko ja uusi sävelmä puhtaalta pöydältä.
+            seq += [t["EOS"], *prefix]
+            bar_in_tune, prev_bars, cur, attempts = 0, [], [], 0
+            tune_len = rng.randint(16, 32)
+            continue
+        if nxt == t["BAR"]:
+            sig = tuple(cur)
+            if attempts < 3 and cur and is_loop(prev_bars, sig):
+                del seq[len(seq) - len(cur):]  # hylkää tahti, yritä kuumemmin
+                cur = []
+                attempts += 1
+                continue
+            prev_bars.append(sig)
+            cur, attempts = [], 0
+            bars_total += 1
+            bar_in_tune += 1
+        else:
+            cur.append(nxt)
+        seq.append(nxt)
+    return seq
 
 
 def write_midi(tokens: list[int], out: Path, bpm: float) -> None:
@@ -90,6 +169,9 @@ def main() -> None:
     ap.add_argument("--temperature", type=float, default=0.95)
     ap.add_argument("--top-k", type=int, default=24)
     ap.add_argument("--guidance", type=float, default=2.0)
+    ap.add_argument("--scale", default="", choices=[""] + sorted(SCALES),
+                    help="pakota asteikkoon, esim. freygish")
+    ap.add_argument("--key", type=int, default=0, help="skaalan perussävel 0-11")
     ap.add_argument("--out", type=Path, default=Path("demo.mid"))
     args = ap.parse_args()
 
@@ -100,9 +182,9 @@ def main() -> None:
 
     cond = parse_genre(args.genre) + [args.valence, args.energy,
                                       args.density, args.register]
-    assert len(cond) == COND_DIM
     tokens = sample(model, cond, args.beats, args.bars, args.temperature,
-                    args.top_k, args.guidance, "cpu")
+                    args.top_k, args.guidance, "cpu",
+                    banned_notes=scale_mask(args.scale, args.key, "cpu"))
     write_midi(tokens, args.out, args.bpm)
     print(f"{args.out}: {len(tokens)} tokenia, genre={args.genre}")
 

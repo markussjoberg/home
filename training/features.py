@@ -17,7 +17,11 @@ except ImportError:  # paketti-importti ajon aikana (posetiivi/llm_source.py)
 
 GENRES = ["valssi", "masurkka", "polska", "menuetti",
           "polkka", "jenkka", "humppa", "marssi", "ragtime", "tango"]
-COND_DIM = len(GENRES) + 4
+# cond = genre-jakauma + [valence, energia, density, rekisteri,
+#         fraasipositio (tahti % 8)/8, biisin etenemä 0..1]
+# Kaksi viimeistä kertovat mallille "missä kohtaa lausetta ollaan":
+# biisi on lause isosta alkukirjaimesta (BOS) pisteeseen (EOS).
+COND_DIM = len(GENRES) + 6
 
 # Krumhansl-Kessler-profiilit sävellajin ja moodin tunnistukseen.
 KK_MAJOR = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
@@ -61,14 +65,17 @@ def bar_conds(notes: list[NoteEv], beats_per_bar: int,
         by_bar[n.bar].append(n)
 
     conds = []
-    for bar_notes in by_bar:
+    for bar, bar_notes in enumerate(by_bar):
         mel = [n for n in bar_notes if n.channel == 0] or bar_notes
         density = min(len(mel) / (beats_per_bar * 2.5), 1.0)
         register = 0.0
         if mel:
             register = min(max((sum(n.pitch for n in mel) / len(mel) - 48) / 36, 0.0), 1.0)
         energy = min(max((bpm - 50) / 130, 0.0), 1.0) * 0.6 + density * 0.4
-        conds.append(list(genre_probs) + [valence, energy, density, register])
+        phrase = (bar % 8) / 8.0
+        progress = bar / max(n_bars - 1, 1)
+        conds.append(list(genre_probs)
+                     + [valence, energy, density, register, phrase, progress])
     return conds
 
 
