@@ -53,11 +53,21 @@ class Data:
         self.seq_len = seq_len
         n_val = max(int(len(self.tokens) * val_frac), seq_len + 1)
         self.val_start = len(self.tokens) - n_val
+        # Biisien alkukohdat: puolet ikkunoista aloitetaan BOS:sta, jotta
+        # malli näkee lauseen alusta asti eikä vain keskeltä.
+        starts = np.concatenate(([0], z["doc_ends"][:-1]))
+        self.doc_starts = torch.from_numpy(
+            starts[starts < self.val_start - seq_len - 1].astype(np.int64)
+        )
 
     def batch(self, bs: int, split: str, device: str):
         lo, hi = (0, self.val_start) if split == "train" else (
             self.val_start, len(self.tokens))
         ix = torch.randint(lo, hi - self.seq_len - 1, (bs,))
+        if split == "train" and len(self.doc_starts):
+            n_doc = bs // 2
+            picks = self.doc_starts[torch.randint(len(self.doc_starts), (n_doc,))]
+            ix = torch.cat([picks, ix[n_doc:]])
         x = torch.stack([self.tokens[i : i + self.seq_len] for i in ix])
         y = torch.stack([self.tokens[i + 1 : i + self.seq_len + 1] for i in ix])
         c = torch.stack([self.conds[i : i + self.seq_len] for i in ix])

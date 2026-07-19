@@ -73,36 +73,76 @@ def _extract(score) -> tuple[list[NoteEv], int, float] | None:
 def auto_accompany(notes: list[NoteEv], beats: int) -> list[NoteEv]:
     """Lisää basso + soinnut melodiadataan (esim. The Session on yksiäänistä).
 
-    Tahdin sointu = parhaiten tahdin sävelhistogrammiin sopiva duuri/molli-
-    kolmisointu. Ilman tätä malli ei koskaan näe CH_ACC-kanavaa eikä opi
-    säestämään.
+    Soinnutus Viterbillä diatonisten asteiden yli funktionaalisin
+    siirtymäpainoin (V->I, IV/ii->V, pysymisbonus hidastaa harmonista
+    rytmiä) ja kadenssipainoin fraasirajoilla — sama HMM-idea kuin
+    Magentan note_seq-soinnutuksessa. Näin malli oppii säestyksen, jossa
+    on suunta ja purkaus, ei tahtikohtaisia irtosointuja.
     """
+    from features import key_mode
+
     if any(n.channel == 1 for n in notes):
         return notes  # säestys on jo
     n_bars = max(n.bar for n in notes) + 1
     hist = [[0.0] * 12 for _ in range(n_bars)]
     for n in notes:
         hist[n.bar][n.pitch % 12] += n.dur
-    prev_root = None
-    out = list(notes)
-    for bar in range(n_bars):
+
+    key, minor, _ = key_mode(notes)
+    scale = [0, 2, 3, 5, 7, 8, 10] if minor else [0, 2, 4, 5, 7, 9, 11]
+    # Kolmisoinnut asteittain (sävelluokkina) ja perussävelet
+    triads = []
+    for d in range(7):
+        triads.append(tuple((key + scale[(d + i) % 7]) % 12 for i in (0, 2, 4)))
+    STAY = 1.2
+    TRANS = {(4, 0): 2.0, (3, 4): 1.2, (1, 4): 1.5, (6, 0): 1.5,
+             (5, 1): 1.0, (5, 3): 1.0, (0, 3): 0.6, (0, 4): 0.6, (0, 5): 0.6,
+             (4, 3): -1.5}
+    NEG = -0.4  # muut vaihdot lievästi miinukselle
+
+    def emit(bar: int, d: int) -> float:
         h = hist[bar]
-        if not any(h):
+        tot = sum(h) or 1.0
+        return 2.5 * sum(h[pc] for pc in triads[d]) / tot
+
+    def cadence(bar: int, d: int) -> float:
+        pos = bar % 8
+        if pos == 6 and d == 4:
+            return 1.0  # dominantti fraasin lopulle
+        if pos == 7 and d == 0:
+            return 1.0  # purkaus toonikaan
+        if bar == n_bars - 1:
+            return 2.0 if d == 0 else -1.0  # biisi päättyy toonikaan
+        return 0.0
+
+    score = [emit(0, d) + (0.8 if d == 0 else 0.0) for d in range(7)]
+    back: list[list[int]] = []
+    for bar in range(1, n_bars):
+        new, bp = [], []
+        for d in range(7):
+            best, arg = -1e9, 0
+            for p in range(7):
+                t = STAY if p == d else TRANS.get((p, d), NEG)
+                if score[p] + t > best:
+                    best, arg = score[p] + t, p
+            new.append(best + emit(bar, d) + cadence(bar, d))
+            bp.append(arg)
+        score, back = new, back + [bp]
+    path = [max(range(7), key=lambda d: score[d])]
+    for bp in reversed(back):
+        path.append(bp[path[-1]])
+    path.reverse()
+
+    out = list(notes)
+    for bar, d in enumerate(path):
+        if not any(hist[bar]):
             continue
-        best, best_score = (0, False), -1.0
-        for root in range(12):
-            for minor in (False, True):
-                triad = (root, (root + (3 if minor else 4)) % 12, (root + 7) % 12)
-                score = sum(h[pc] for pc in triad) + (0.5 if root == prev_root else 0)
-                if score > best_score:
-                    best, best_score = (root, minor), score
-        root, minor = best
-        prev_root = root
+        root = triads[d][0]
         bass = 36 + root if root >= 5 else 48 + root  # A2-tienoo
-        triad = [48 + root + iv for iv in (0, 3 if minor else 4, 7)]
+        chord = [48 + pc if pc >= root else 60 + pc for pc in triads[d]]
         out.append(NoteEv(bar, 0, 1, bass, GRID - 1, 88))
         for beat in range(1, beats):
-            for p in triad:
+            for p in chord:
                 out.append(NoteEv(bar, beat * GRID, 1, p, GRID - 1, 64))
     return out
 
