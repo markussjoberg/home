@@ -77,6 +77,24 @@ Käynnistys bootissa: `systemd/posetiivi.service` (muokkaa polut,
 `sudo cp` → `/etc/systemd/system/` → `systemctl enable`). MIDI-koneisto ei
 tarvitse API-avainta, joten Environment-rivin voi silloin poistaa.
 
+## Selainsimulaattori (--ui)
+
+```bash
+python -m posetiivi --ui
+# -> http://localhost:8737
+```
+
+Selainsivu on koko soittimen simulaattori: **hiiren scrollaus veivi-
+ympyrän päällä pyörittää posetiivia**, ja liukusäätimet ovat samat vivut
+jotka Raspissa kytketään GPIO:hon (sama rajapinta, `LiveParams`):
+
+- **Tyylilajivivut** — genrepainot sekoitetaan (60/40 valssi-polkka käy)
+- **Luonne** — surullinen ↔ iloinen (valence), kesy ↔ villi (temperature),
+  rekisteri
+- **Rekisterivivut** — melodian ja säestyksen soundit + tasot
+
+Ei riippuvuuksia: pelkkä Pythonin stdlib + selain.
+
 ## Mac-simulaattori
 
 Macilla soitin toimii sellaisenaan ja **hiiren rulla / trackpadin scrollaus

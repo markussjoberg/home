@@ -70,8 +70,10 @@ class MidiEngine:
         self.synth.set_programs(self.params.program, midi.accomp_program)
         print(f"MIDI-koneisto: {self.params.describe()}")
 
+        from .midigen import PROGRAMS
+
         clock = 0.0  # iskuina
-        prev_program = self.params.program
+        prev_programs = (self.params.program, midi.accomp_program)
         last_wall = time.monotonic()
         stopped_since: float | None = None
 
@@ -81,9 +83,11 @@ class MidiEngine:
             dt, last_wall = now - last_wall, now
             s = self.speed.normalized
 
-            if self.params.program != prev_program:
-                prev_program = self.params.program
-                self.synth.set_programs(prev_program, midi.accomp_program)
+            accomp = (PROGRAMS[self.params.accomp_ix % len(PROGRAMS)]
+                      if self.params.accomp_ix is not None else midi.accomp_program)
+            if (self.params.program, accomp) != prev_programs:
+                prev_programs = (self.params.program, accomp)
+                self.synth.set_programs(*prev_programs)
 
             if s <= 0.0:
                 # Kampi seis: kello jäätyy, nuotit vaiennetaan pienen

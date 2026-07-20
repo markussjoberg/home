@@ -9,7 +9,7 @@ uusi arvo vaikuttaa seuraavasta tahdista alkaen.
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 MAJOR = [0, 2, 4, 5, 7, 9, 11]
 MINOR = [0, 2, 3, 5, 7, 8, 10]
@@ -35,14 +35,24 @@ PROGRAM_NAMES = {21: "harmonikka", 19: "kirkkourut", 20: "harmoni",
 
 @dataclass
 class LiveParams:
-    """Soiton aikana säädettävät parametrit (näppäimistö/GPIO)."""
+    """Soiton aikana säädettävät parametrit (näppäimistö/webUI/GPIO).
+
+    Web-simulaattorin liu'ut ja tulevat GPIO-vivut kirjoittavat suoraan
+    näihin kenttiin — rajapinta on sama raudalla ja ruudulla.
+    """
 
     key: int = 0  # 0 = C
     minor: bool = False
     temperature: float = 0.4  # 0..1: kuinka kauas sointusävelistä uskalletaan
     register: int = 0  # melodian oktaavisiirto -1..+2
-    program_ix: int = 0  # indeksi PROGRAMS-listaan
-    genre_ix: int = 0  # LLM-lähteen genre (llm_source asettaa genre_names)
+    program_ix: int = 0  # indeksi PROGRAMS-listaan (melodian soundi)
+    accomp_ix: int | None = None  # säestyksen soundi; None = configin oletus
+    genre_ix: int = 0  # LLM-lähteen genre näppäinohjauksella
+    # Vivut: genrepainot (nimi -> 0..1); kun jokin > 0, ohittaa genre_ix:n
+    # ja LLM saa sekoitetun genrevektorin.
+    genre_weights: dict[str, float] = field(default_factory=dict)
+    # Surullinen (0) <-> iloinen (1); None = pääteltävä minor-lipusta.
+    valence: float | None = None
 
     genre_names = ()  # luokkataso; LLMComposer täyttää
 

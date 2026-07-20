@@ -65,10 +65,15 @@ class LLMComposer:
 
     def _cond(self) -> list[float]:
         p, d = self.params, self._density
-        g = [0.0] * len(self.genres)
-        g[p.genre_ix % len(self.genres)] = 1.0
+        # Vivut voittavat: genrepainoista sekoitettu vektori, muuten one-hot.
+        weights = [max(p.genre_weights.get(name, 0.0), 0.0) for name in self.genres]
+        if sum(weights) > 0:
+            g = [w / sum(weights) for w in weights]
+        else:
+            g = [0.0] * len(self.genres)
+            g[p.genre_ix % len(self.genres)] = 1.0
         register = min(max(0.5 + 0.25 * p.register, 0.0), 1.0)
-        valence = 0.3 if p.minor else 0.75
+        valence = p.valence if p.valence is not None else (0.3 if p.minor else 0.75)
         # Fraasipositio ja biisin etenemä: biisi on "lause" BOS:sta EOS:iin.
         phrase = (self._bar_in_tune % 8) / 8.0
         progress = min(self._bar_in_tune / max(self._tune_len - 1, 1), 1.0)

@@ -55,7 +55,8 @@ async def run_lyria(cfg: config_mod.Config, speed: CrankSpeed, crank_task) -> No
         player.stop()
 
 
-async def run_midi(cfg: config_mod.Config, speed: CrankSpeed, crank_task, null_synth: bool) -> None:
+async def run_midi(cfg: config_mod.Config, speed: CrankSpeed, crank_task,
+                   null_synth: bool, ui: bool = False) -> None:
     from .midi_engine import MidiEngine, run_keyboard
     from .synth import NullSynth, Synth
 
@@ -66,16 +67,29 @@ async def run_midi(cfg: config_mod.Config, speed: CrankSpeed, crank_task, null_s
 
         engine.composer = LLMComposer(cfg.midi.llm_checkpoint, engine.params)
         print(f"Melodialähde: LLM ({cfg.midi.llm_checkpoint})")
+    if ui:
+        from .webui import WebUI
+
+        WebUI(speed, engine.params, synth).start()
     async with asyncio.TaskGroup() as tg:
         tg.create_task(engine.run())
         tg.create_task(crank_task)
         tg.create_task(run_keyboard(engine.params))
 
 
-async def run(cfg: config_mod.Config, engine: str, mock: bool, null_synth: bool) -> None:
+async def _idle_crank() -> None:
+    """Veivi tulee webUI:sta HTTP:n yli — pidetään vain taski hengissä."""
+    while True:
+        await asyncio.sleep(3600)
+
+
+async def run(cfg: config_mod.Config, engine: str, mock: bool, null_synth: bool,
+              ui: bool = False) -> None:
     speed = CrankSpeed(cfg.crank)
     if mock:
         crank_task = run_mock_crank(speed)
+    elif ui:
+        crank_task = _idle_crank()
     elif sys.platform == "darwin":
         from .crank import run_pynput_crank
 
@@ -85,7 +99,7 @@ async def run(cfg: config_mod.Config, engine: str, mock: bool, null_synth: bool)
     if engine == "lyria":
         await run_lyria(cfg, speed, crank_task)
     else:
-        await run_midi(cfg, speed, crank_task, null_synth)
+        await run_midi(cfg, speed, crank_task, null_synth, ui=ui)
 
 
 def cli() -> None:
@@ -94,6 +108,8 @@ def cli() -> None:
     parser.add_argument(
         "--engine", choices=("midi", "lyria"), help="ohita configin engine-valinta"
     )
+    parser.add_argument("--ui", action="store_true",
+                        help="selainsimulaattori: scrollaus veivinä, liu'ut vipuina")
     parser.add_argument("--mock", action="store_true", help="simuloitu kampi (ei rautaa)")
     parser.add_argument(
         "--null-synth", action="store_true", help="MIDI-koneisto ilman ääntä (testaus)"
@@ -112,7 +128,8 @@ def cli() -> None:
     cfg = config_mod.load(args.config)
     engine = args.engine or cfg.engine
     try:
-        asyncio.run(run(cfg, engine, mock=args.mock, null_synth=args.null_synth))
+        asyncio.run(run(cfg, engine, mock=args.mock, null_synth=args.null_synth,
+                        ui=args.ui))
     except KeyboardInterrupt:
         print("\nPosetiivi sammutettu.")
         sys.exit(0)

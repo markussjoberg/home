@@ -27,6 +27,10 @@ class Synth:
         self.fs.program_select(0, self.sfid, 0, melody)
         self.fs.program_select(1, self.sfid, 0, accomp)
 
+    def set_volume(self, channel: int, value: int) -> None:
+        """MIDI CC7 -äänenvoimakkuus 0-127 (melodia/säestys-tasapaino)."""
+        self.fs.cc(channel, 7, min(max(value, 0), 127))
+
     def note_on(self, channel: int, pitch: int, velocity: int) -> None:
         self.fs.noteon(channel, pitch, velocity)
 
@@ -43,6 +47,9 @@ class NullSynth:
 
     def set_programs(self, melody: int, accomp: int) -> None:
         print(f"[synth] programs melody={melody} accomp={accomp}")
+
+    def set_volume(self, channel: int, value: int) -> None:
+        print(f"[synth] vol ch{channel} = {value}")
 
     def note_on(self, channel: int, pitch: int, velocity: int) -> None:
         print(f"[synth] on  ch{channel} p{pitch} v{velocity}")
