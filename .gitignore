@@ -2,3 +2,7 @@ __pycache__/
 *.egg-info/
 .venv/
 config.toml
+FluidR3_GM.sf2
+*.sf2
+training/data/
+training/ckpt/*.pt.tmp
