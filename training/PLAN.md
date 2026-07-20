@@ -98,6 +98,28 @@ Nuotti = `POS CH NOTE DUR VEL` (5 tokenia). Ehdollistus ei ole tokeneita
 vaan rinnakkainen float-matriisi (tahti → cond), joka kohdistetaan
 tokeneihin BAR-rajojen mukaan.
 
+## Pitkä muoto (posetiiviorkesteriohjelmisto)
+
+5–10 minuutin kappaleet (marssit, alkusoitot, karusellipotpurit) ovat
+~10–25 k tokenia — mikään järkevä konteksti ei kata niitä kokonaan.
+Strategia kolmessa portaassa:
+
+1. **Ehdollistus kantaa ikkunan yli**: biisin etenemä (0..1) ja
+   fraasipositio kulkevat cond-vektorissa, joten malli tietää sijaintinsa
+   muodossa vaikka ikkuna näkee vain osan. Tämä on jo koodissa.
+2. **Konteksti 4096–8192 M4 Maxilla** (tämän tiedoston oletukset):
+   kattaa 2–4 lyhyttä biisiä tai pitkän kappaleen jakson; malli oppii
+   settisiirtymät ja jaksorakenteen.
+3. **Hierarkkinen kapellimestari** (MusicVAE-idea, v4): erillinen kevyt
+   verkko suunnittelee jaksotason kaaren (A-B-A-coda, sävellajit,
+   dynamiikka) ja token-malli täyttää tahdit — ainoa tapa saada aito
+   7 min muoto, jossa alku, huippukohta ja loppu.
+
+Pitkän muodon datalähteitä: Lakh MIDI (orkesteri/pop), Mutopia ja
+kunstderfuge (klassinen), posetiivi/fairground organ -MIDI-kokoelmat
+(Wurlitzer band organ -rullia löytyy MIDI-muodossa harrastajasivuilta).
+MAX_BARS on nostettu 1024:ään näitä varten.
+
 ## Ajo M4 Maxilla
 
 ```bash

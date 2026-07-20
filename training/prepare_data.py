@@ -22,7 +22,9 @@ from symusic import Score
 from features import GENRES, bar_conds, smooth_genre
 from tokenizer import GRID, METERS, NoteEv, bar_ids, encode
 
-MIN_BARS, MAX_BARS = 8, 256
+# Yläraja sallii pitkän muodon: 1024 tahtia 3/4:ssa ~ 15 min. Posetiivi-
+# orkesteriohjelmisto (marssit, alkusoitot, potpurit) elää 5-10 min mitassa.
+MIN_BARS, MAX_BARS = 8, 1024
 
 
 def load_notes(path: Path) -> tuple[list[NoteEv], int, float] | None:
@@ -171,6 +173,12 @@ def main() -> None:
     all_tokens, all_bars, all_conds, skipped = [], [], [], 0
     cond_offset = 0
     files = sorted(args.midi_dir.rglob("*.mid")) + sorted(args.midi_dir.rglob("*.midi"))
+    # Sekoita järjestys (siemenellä): pitkät ikkunat ylittävät biisirajat,
+    # joten peräkkäisyys määrää millaisia settisiirtymiä malli näkee —
+    # aakkosjärjestys opettaisi vain saman kokoelman naapuruuksia.
+    import random as _random
+
+    _random.Random(7).shuffle(files)
     for path in files:
         genre = genre_for(path, mapping)
         loaded = load_notes(path) if genre else None

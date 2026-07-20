@@ -82,7 +82,8 @@ def main() -> None:
     ap.add_argument("--layers", type=int, default=4)
     ap.add_argument("--dim", type=int, default=256)
     ap.add_argument("--heads", type=int, default=4)
-    ap.add_argument("--seq-len", type=int, default=1024)
+    ap.add_argument("--seq-len", type=int, default=4096,
+                    help="4096 ~ 2 biisiä: malli oppii myös biisien siirtymät")
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--steps", type=int, default=20000)
     ap.add_argument("--lr", type=float, default=6e-4)
