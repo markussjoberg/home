@@ -111,7 +111,9 @@ def sample(model, cond_base, beats, max_bars, temperature, top_k, guidance, devi
         logits = logits / (temperature * 1.25**attempts)
         logits[:, t["PAD"]] = -float("inf")
         if banned_notes is not None:
-            logits[:, banned_notes] = -float("inf")
+            # Pehmeä maski: vahva painotus asteikkoon, mutta ei muuri —
+            # kova -inf ajaa mallin ulos jakaumastaan (tyhjiä tahteja).
+            logits[:, banned_notes] -= 6.0
         if top_k:
             kth = torch.topk(logits, top_k).values[:, -1, None]
             logits[logits < kth] = -float("inf")
