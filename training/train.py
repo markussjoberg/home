@@ -29,7 +29,7 @@ def transpose_aug(x: torch.Tensor, y: torch.Tensor) -> None:
 
     Ilmaista dataa (x12) pienelle korpukselle; sävellajit tasoittuvat.
     """
-    delta = torch.randint(-5, 7, (x.shape[0], 1))
+    delta = torch.randint(-5, 7, (x.shape[0], 1), device=x.device)
     for t in (x, y):
         mask = (t >= NOTE_ID_LO) & (t <= NOTE_ID_HI)
         t[mask] = (t + delta.expand_as(t))[mask].clamp(NOTE_ID_LO, NOTE_ID_HI)
