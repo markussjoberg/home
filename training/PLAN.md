@@ -60,7 +60,14 @@ harmonian väri (Krumhansl-korrelaatio), energia = tempo × density.
 | Klezmer-MIDI-arkistot | freilach, bulgar, hora | klezmer | käsin polusta |
 | Choro-kokoelmat (esim. Casa do Choro -piirin nuotit) | choro 2/4 | choro | käsin polusta |
 | Lakh MIDI (LMD-matched) | 45 k MIDIä MSD-linkillä | tango, ragtime, humppa-sukulaiset | Last.fm-tagit |
+| SymbTr (Sabancı, GitHub) | ~2200 turkkilaista makam-kappaletta koneluettavana | longa, sirto | usul/makam metadatassa |
 | Omat v1-nauhat | posetiivirullat | — | hienosäätövaihe |
+
+**Mikrosävelvelka:** aidot makamit (bayati, rast, saba ym.) käyttävät
+neljäsosasäveliä, joita 12-TET NOTE-gridi ei esitä — SymbTr:stä
+otetaan aluksi vain 12-TET:iin istuvat makamit (nihavend, hicaz,
+kürdi). Täysi makam-tuki vaatisi pitch bend -tokenit tai 24-TET-gridin;
+kirjattu jatkoon samaan sarjaan tahtilajivelan kanssa.
 
 **Tahtilajivelka:** tarantella (6/8), balkan (7/8, 9/8) ja muut
 yhdistelmä-/epäsymmetriset tahtilajit vaativat tokenisointilaajennuksen:

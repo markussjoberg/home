@@ -26,7 +26,9 @@ GENRES = ["valssi", "masurkka", "polska", "menuetti",
           "klezmer",     # freilach/bulgar, freygish-asteikot
           "choro",       # brasilialainen, melodisesti rikas 2/4
           "tarantella",  # 6/8 — vaatii yhdistelmätahtilajituen (ks. PLAN)
-          "balkan"]      # kolo/cocek — 7/8 ja 9/8 samoin
+          "balkan",      # kolo/cocek — 7/8 ja 9/8 samoin
+          "longa"]       # turkkilais-levanttilainen 2/4-tanssi (+ sirto);
+                         # hicaz/nihavend istuvat 12-TET:iin
 # cond = genre-jakauma + [valence, energia, density, rekisteri,
 #         fraasipositio (tahti % 8)/8, biisin etenemä 0..1]
 # Kaksi viimeistä kertovat mallille "missä kohtaa lausetta ollaan":
