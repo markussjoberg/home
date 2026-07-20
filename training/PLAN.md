@@ -50,12 +50,23 @@ harmonian väri (Krumhansl-korrelaatio), energia = tempo × density.
 
 ## Data
 
-| Lähde | Sisältö | Labelit |
-|---|---|---|
-| FolkWiki (folkwiki.se) | pohjoismainen pelimanni, ABC | sävelmätyyppi otsikossa |
-| The Session (thesession.org, datadumpit GitHubissa) | kansanmusiikki, ABC | tune type -kenttä |
-| Lakh MIDI (LMD-matched) | 45 k MIDIä MSD-linkillä | Last.fm-genretagit |
-| Omat v1-nauhat | posetiivirullat | käsin / hienosäätövaihe |
+| Lähde | Sisältö | Genret | Labelit |
+|---|---|---|---|
+| The Session (dumpit GitHubissa) | irlantilainen kansanmusiikki, ABC | valssi, polkka (irlantilainen), masurkka, marssi | tune type -kenttä |
+| FolkWiki (folkwiki.se) | pohjoismainen pelimanni, ABC | polska, **suomalais-/pohjoismainen polkka**, jenkka, valssi | sävelmätyyppi |
+| abcnotation.com -kokoelmat | valtava ABC-aggregaattori, monta perinnettä | musette, klezmer, tarantella ym. | kokoelmakohtainen |
+| Mutopia / kunstderfuge | klassinen, vapaat nuotit/MIDI | sirkus (Fučík, galopit, can-can), menuetti, pitkä muoto | käsin polusta |
+| Band organ / fairground -MIDI-kokoelmat | Wurlitzer-rullia digitoituna | sirkus, karusellipotpurit, marssit | käsin polusta |
+| Klezmer-MIDI-arkistot | freilach, bulgar, hora | klezmer | käsin polusta |
+| Choro-kokoelmat (esim. Casa do Choro -piirin nuotit) | choro 2/4 | choro | käsin polusta |
+| Lakh MIDI (LMD-matched) | 45 k MIDIä MSD-linkillä | tango, ragtime, humppa-sukulaiset | Last.fm-tagit |
+| Omat v1-nauhat | posetiivirullat | — | hienosäätövaihe |
+
+**Tahtilajivelka:** tarantella (6/8), balkan (7/8, 9/8) ja muut
+yhdistelmä-/epäsymmetriset tahtilajit vaativat tokenisointilaajennuksen:
+METER_6/7/9-tokenit ja trioligridi (GRID 4 -> 12 alijakoa/isku tai
+erillinen kolmimuunteinen POS-rivi). Tee tämä ennen kuin näiden genrejen
+dataa ajetaan sisään — nykyinen 1/16-gridi litistäisi kolmimuunteisuuden.
 
 ABC → MIDI: `abc2midi` (apt/brew: `abcmidi`). Suodatus: tahtilajit 3/4, 2/4
 ja 4/4; kesto 8–256 tahtia; kvantisointi 1/16-gridiin.

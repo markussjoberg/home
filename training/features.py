@@ -15,8 +15,18 @@ try:
 except ImportError:  # paketti-importti ajon aikana (posetiivi/llm_source.py)
     from .tokenizer import NoteEv
 
+# HUOM: vain lisäyksiä listan loppuun — järjestys on osa treenattujen
+# mallien sopimusta (fit_cond typistää vanhalle ckpt:lle lopusta).
 GENRES = ["valssi", "masurkka", "polska", "menuetti",
-          "polkka", "jenkka", "humppa", "marssi", "ragtime", "tango"]
+          "polkka", "jenkka", "humppa", "marssi", "ragtime", "tango",
+          # posetiivin ydintä:
+          "sirkus",      # screamer-marssit, galopit, can-can
+          "musette",     # pariisilainen haitarivalssi
+          # maailmanmusiikkia joka istuu kampiurkuihin:
+          "klezmer",     # freilach/bulgar, freygish-asteikot
+          "choro",       # brasilialainen, melodisesti rikas 2/4
+          "tarantella",  # 6/8 — vaatii yhdistelmätahtilajituen (ks. PLAN)
+          "balkan"]      # kolo/cocek — 7/8 ja 9/8 samoin
 # cond = genre-jakauma + [valence, energia, density, rekisteri,
 #         fraasipositio (tahti % 8)/8, biisin etenemä 0..1]
 # Kaksi viimeistä kertovat mallille "missä kohtaa lausetta ollaan":
