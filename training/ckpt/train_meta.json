@@ -1,16 +1,16 @@
 {
-  "best_val": 0.11437510699033737,
-  "steps": 40000,
+  "best_val": 0.09737695008516312,
+  "steps": 20000,
   "args": {
-    "data": "/tmp/claude-0/-home-user/b9572c7d-c41b-599f-91e8-3301607c0d6c/scratchpad/full/prepared",
-    "out": "/tmp/claude-0/-home-user/b9572c7d-c41b-599f-91e8-3301607c0d6c/scratchpad/run1",
+    "data": "/tmp/claude-0/-home-user/b9572c7d-c41b-599f-91e8-3301607c0d6c/scratchpad/full/prepared-v3",
+    "out": "/tmp/claude-0/-home-user/b9572c7d-c41b-599f-91e8-3301607c0d6c/scratchpad/run3",
     "init": null,
     "layers": 3,
     "dim": 192,
     "heads": 4,
-    "seq_len": 512,
-    "batch": 16,
-    "steps": 40000,
+    "seq_len": 1024,
+    "batch": 8,
+    "steps": 20000,
     "lr": 0.0006,
     "no_amp": true
   }
