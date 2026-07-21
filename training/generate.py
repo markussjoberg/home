@@ -49,6 +49,17 @@ def scale_mask(scale: str, key: int, device) -> torch.Tensor | None:
     return mask
 
 
+# Sävelmäpituusjakauma aitojen The Session -sävelmien mukaan (8:n monikerrat
+# = kokonaisia fraaseja; 32 = AABB hallitsee, 64 = pitkä muoto toiseksi
+# yleisin). Sama taulukko posetiivi/llm_source.py:ssä (pidä synkassa).
+TUNE_LENS = (16, 24, 32, 40, 48, 56, 64, 80, 96)
+TUNE_LEN_W = (10, 5, 54, 3, 8, 2, 13, 2, 2)
+
+
+def sample_tune_len(rng) -> int:
+    return rng.choices(TUNE_LENS, weights=TUNE_LEN_W, k=1)[0]
+
+
 def parse_genre(spec: str) -> list[float]:
     probs = [0.0] * len(GENRES)
     for part in spec.split(","):
@@ -89,7 +100,7 @@ def sample(model, cond_base, beats, max_bars, temperature, top_k, guidance, devi
     prefix = [t["BOS"], meter_tok, t["BAR"]]
     seq: list[int] = list(prefix)
     bars_total, bar_in_tune = 0, 0
-    tune_len = rng.randint(16, 32)
+    tune_len = sample_tune_len(rng)
     prev_bars: list[tuple] = []
     cur: list[int] = []
     attempts = 0
@@ -152,7 +163,7 @@ def sample(model, cond_base, beats, max_bars, temperature, top_k, guidance, devi
             ctx = seq[-TAIL:] + prefix
             seq += prefix
             bar_in_tune, prev_bars, cur, attempts = 0, [], [], 0
-            tune_len = rng.randint(16, 32)
+            tune_len = sample_tune_len(rng)
             last = prime(ctx, cond_vec)
             continue
         if nxt == t["BAR"]:

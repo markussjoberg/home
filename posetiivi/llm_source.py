@@ -27,6 +27,16 @@ TAIL = 512  # edellisen biisin häntä uuden kontekstiin (settisiirtymät)
 # tahtien aikana jotta loppu pysyy jäsentyneenä.
 WARMUP_BARS = 4
 START_BOOST = 0.4
+# Sävelmäpituus (tahtia) arvotaan aitojen The Session -jakaumasta, ei enää
+# kiinteästä 16-32:sta joka jätti 37 % todellisuudesta (mm. 64 tahdin pitkän
+# muodon) pois. 8:n monikerrat = kokonaisia fraaseja. Sama taulukko
+# training/generate.py:ssä (pidä synkassa).
+TUNE_LENS = (16, 24, 32, 40, 48, 56, 64, 80, 96)
+TUNE_LEN_W = (10, 5, 54, 3, 8, 2, 13, 2, 2)
+
+
+def sample_tune_len(rng) -> int:
+    return rng.choices(TUNE_LENS, weights=TUNE_LEN_W, k=1)[0]
 
 
 class LLMComposer:
@@ -53,7 +63,7 @@ class LLMComposer:
         self._density = 0.5
         self._seq = self._prefix()
         self._bar_in_tune = 0
-        self._tune_len = 24
+        self._tune_len = sample_tune_len(random)
         self._prev_bars: list[tuple] = []
         self._ending = False  # "uusi kappale" -nappi: lopetellaan kadenssiin
         self._end_deadline = 0
@@ -103,7 +113,7 @@ class LLMComposer:
         """Sävelmä vaihtuu: kontekstiin jää edellisen häntä, laskurit nollille."""
         self._seq = (self._seq + [self.tk.TOK["EOS"]])[-TAIL:] + self._prefix()
         self._bar_in_tune = 0
-        self._tune_len = random.randint(16, 32)
+        self._tune_len = sample_tune_len(random)
         self._prev_bars = []
         self._ending = False
         self._last = self._run(self._seq, prime=True)
