@@ -92,12 +92,19 @@ def main() -> None:
 
     device = pick_device()
     data = Data(args.data, args.seq_len)
-    cfg = ModelCfg(vocab_size=VOCAB_SIZE, cond_dim=COND_DIM,
-                   n_layer=args.layers, n_head=args.heads, dim=args.dim,
-                   max_seq=args.seq_len)
+    if args.init:
+        # Hienosäätö: arkkitehtuuri tulee checkpointista, ei lipuista —
+        # --layers/--dim jätetään huomiotta ettei kokoristiriita kaada.
+        init_ckpt = torch.load(args.init, map_location=device)
+        cfg = ModelCfg(**init_ckpt["cfg"])
+        print(f"init: {args.init} ({cfg.n_layer}x{cfg.dim} checkpointista)")
+    else:
+        cfg = ModelCfg(vocab_size=VOCAB_SIZE, cond_dim=COND_DIM,
+                       n_layer=args.layers, n_head=args.heads, dim=args.dim,
+                       max_seq=args.seq_len)
     model = PosetiiviLM(cfg).to(device)
     if args.init:
-        model.load_state_dict(torch.load(args.init, map_location=device)["model"])
+        model.load_state_dict(init_ckpt["model"])
     print(f"device={device} params={model.num_params()/1e6:.1f}M "
           f"tokens={len(data.tokens)/1e6:.1f}M")
 
