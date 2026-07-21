@@ -100,6 +100,9 @@ def sample(model, cond_base, beats, max_bars, temperature, top_k, guidance, devi
     nrow = 2 if guidance != 1.0 else 1
     cache = KVCache(model.cfg, nrow, device=device)
     TAIL = 512  # edellisen biisin häntä uuden kontekstiin (settisiirtymät)
+    # Kappaleen alku kuumempi -> peräkkäiset sävelmät haarautuvat eri
+    # suuntiin; jäähtyy normaaliin ensimmäisten tahtien aikana.
+    WARMUP_BARS, START_BOOST = 4, 0.4
 
     def cond_t(vec: list[float], length: int) -> torch.Tensor:
         c = torch.tensor(vec, device=device).view(1, 1, -1)
@@ -132,7 +135,8 @@ def sample(model, cond_base, beats, max_bars, temperature, top_k, guidance, devi
         logits = last[:1]
         if nrow == 2:
             logits = last[1:2] + guidance * (last[:1] - last[1:2])
-        logits = logits / (temperature * 1.25**attempts)
+        warmth = 1.0 + START_BOOST * max(0.0, 1.0 - bar_in_tune / WARMUP_BARS)
+        logits = logits / (temperature * warmth * 1.25**attempts)
         logits[:, t["PAD"]] = -float("inf")
         if banned_notes is not None:
             # Pehmeä maski: vahva painotus asteikkoon, mutta ei muuri —

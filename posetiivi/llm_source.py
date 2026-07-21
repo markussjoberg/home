@@ -22,6 +22,11 @@ from .midigen import LiveParams, Note
 
 TOP_K = 24
 TAIL = 512  # edellisen biisin häntä uuden kontekstiin (settisiirtymät)
+# Kappaleen alku kuumempi -> peräkkäiset kappaleet haarautuvat eri suuntiin
+# ennen kuin mallin moodi vetää takaisin; jäähtyy normaaliin ensimmäisten
+# tahtien aikana jotta loppu pysyy jäsentyneenä.
+WARMUP_BARS = 4
+START_BOOST = 0.4
 
 
 class LLMComposer:
@@ -131,7 +136,8 @@ class LLMComposer:
 
     def _generate_bar(self) -> list[Note]:
         torch, t = self.torch, self.tk.TOK
-        base_temp = 0.7 + 0.5 * self.params.temperature
+        warmth = 1.0 + START_BOOST * max(0.0, 1.0 - self._bar_in_tune / WARMUP_BARS)
+        base_temp = (0.7 + 0.5 * self.params.temperature) * warmth
         bar: list[int] = []
         with torch.no_grad():
             if self._last is None:
