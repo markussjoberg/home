@@ -1,17 +1,17 @@
 {
-  "best_val": 0.09737695008516312,
-  "steps": 20000,
+  "best_val": 0.06016388535499573,
+  "steps": 12000,
   "args": {
-    "data": "/tmp/claude-0/-home-user/b9572c7d-c41b-599f-91e8-3301607c0d6c/scratchpad/full/prepared-v3",
-    "out": "/tmp/claude-0/-home-user/b9572c7d-c41b-599f-91e8-3301607c0d6c/scratchpad/run3",
+    "data": "training/data/prepared",
+    "out": "training/ckpt",
     "init": null,
-    "layers": 3,
-    "dim": 192,
+    "layers": 6,
+    "dim": 384,
     "heads": 4,
-    "seq_len": 1024,
+    "seq_len": 4096,
     "batch": 8,
-    "steps": 20000,
+    "steps": 12000,
     "lr": 0.0006,
-    "no_amp": true
+    "no_amp": false
   }
 }

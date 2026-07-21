@@ -22,3 +22,26 @@ Seuraavaksi (sovittu):
 4. Velat kirjattu PLAN.md:hen: tahtilajit 6/8+7/8+9/8 (tarantella, balkan) vaativat tokenisointilaajennuksen; makam-mikrosävelet pitch bendin; pitkä muoto (7 min posetiiviorkesteri) vaatii lopulta hierarkkisen kapellimestariverkon (MusicVAE-idea); KV-cache Pi-inferenssiin.
 
 Käynnistys: `source .venv/bin/activate && python3 -m posetiivi --ui` (config.toml: `source = "llm"`, `soundfont = "FluidR3_GM.sf2"`). Deps: pyfluidsynth, symusic, torch, numpy; brew: fluid-synth, abcmidi.
+
+## Päivitys 2026-07-21: M4 Max -treeni ajettu (lokaali sessio)
+
+v4-malli treenattu M4 Maxilla: 6 kerrosta, d=384, 11,0 M param, seq 4096,
+batch 8, 12 000 steppiä, MPS 21 k tok/s (~5,5 h). **Paras val 0.060**
+(v3: 0.097) → `training/ckpt/best.pt`. Data: sama The Session -dumppi
+uudella putkella (22,2 M tokenia, 17 genren sanasto — vain neljällä on dataa).
+
+Treenikäytännöt M4 Maxille (opittu kantapään kautta):
+
+- Batch 32 × seq 4096 OOM:aa 36 Gt koneella (MPS-attention materialisoi
+  4096²-matriisin); batch 16 OOM:aa myös, **batch 8 mahtuu** kun muut
+  muistisyöpöt (Lightroom) on suljettu. Swap-tukos hidastaa treenin
+  ryömintävauhtiin — tarkista `memory_pressure -Q` ennen starttia.
+- `python -u` tai loki ei virtaa; `caffeinate -is -w <pid>` yöajoihin.
+- train/val-erot välissä 6000–8000 olivat val-batchien kohinaa, eivät
+  ylisovitusta — loppujäähdytys painoi val 0.103 → 0.060.
+
+**KV-CACHE ON NYT KRIITTINEN**: uusi generate.py ajaa täyttä kontekstia
+ilman cachea → 32 tahdin demo kestää >10 min Macilla (Pi:llä mahdoton).
+Laskettu budjetti: cachella ~12 ms/token Pi 5:llä (CFG:n kanssa ~24 ms),
+tarve ~28 ms/token → mahtuu. Ajokontekstin voi katkaista ~1024 tokeniin
+(attention-kustannus neljännekseen), iso ikkuna oli treeniominaisuus.
