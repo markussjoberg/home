@@ -53,11 +53,11 @@ class MidiEngine:
         ei edetä: jo aikataulutettu musiikki jatkuu ja yritetään uudelleen
         seuraavalla tikillä.
         """
-        beats = self.composer.BEATS_PER_BAR
-        while self._composed_until < clock + 2 * beats:
-            bar = self.composer.next_bar(density)
-            if bar is None:
+        while self._composed_until < clock + 2 * self.composer.BEATS_PER_BAR:
+            result = self.composer.next_bar(density)
+            if result is None:
                 break
+            bar, beats = result  # tahtilaji tulee tahdin mukana (voi vaihtua)
             bar_start = self._composed_until
             for n in bar:
                 self._push(bar_start + n.beat, "on", n.channel, n.pitch, n.velocity)

@@ -58,7 +58,8 @@ class LiveParams:
     # päättää sävelmän itse ja aloittaa uuden.
     end_song_request: bool = False
 
-    genre_names = ()  # luokkataso; LLMComposer täyttää
+    genre_names = ()  # luokkataso; LLMComposer täyttää (koko sanasto)
+    data_genres = ()  # luokkataso; genret joilla on dataa (UI näyttää nämä)
 
     @property
     def program(self) -> int:
@@ -179,11 +180,15 @@ class WaltzComposer:
         self.prev_pitch = pitch
         return max(36, min(103, pitch))
 
-    def next_bar(self, density: float) -> list[Note]:
-        """Sävellä seuraava tahti. density 0..1 tulee kammen nopeudesta."""
+    def next_bar(self, density: float) -> tuple[list[Note], int]:
+        """Sävellä seuraava tahti. density 0..1 tulee kammen nopeudesta.
+
+        Palauttaa (nuotit, iskua/tahti) — tahtilaji kulkee tahdin mukana,
+        jotta moottori ajoittaa oikein vaikka se vaihtuisi (LLM-lähteellä).
+        """
         self._advance_chord()
         notes = self._bass_and_chords()
         for start, dur in self._melody_rhythm(density):
             vel = 88 if start == 0.0 else 76 + self.rng.randint(-6, 6)
             notes.append(Note(start, self._melody_pitch(), vel, dur * 0.92, channel=0))
-        return notes
+        return notes, self.BEATS_PER_BAR

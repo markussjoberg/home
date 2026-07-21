@@ -127,7 +127,8 @@ class WebUI:
     # --- sivu -------------------------------------------------------------
 
     def page(self) -> str:
-        genres = list(self.params.genre_names) or DEFAULT_GENRES
+        # Vain genret joilla on treenidataa — muut vivut olisivat kohinaa.
+        genres = list(self.params.data_genres) or DEFAULT_GENRES
         genre_sliders = "\n".join(
             f'<label class="stop"><span>{g}</span>'
             f'<input type="range" min="0" max="100" value="{100 if i == 0 else 0}"'

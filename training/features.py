@@ -35,6 +35,22 @@ GENRES = ["valssi", "masurkka", "polska", "menuetti",
 # biisi on lause isosta alkukirjaimesta (BOS) pisteeseen (EOS).
 COND_DIM = len(GENRES) + 6
 
+# Genret joilla on oikeaa treenidataa (The Session). Muut ovat vain
+# sanaston paikkoja + label smoothing -kohinaa: vipuina ne eivät tee
+# mitään, joten UI näyttää vain nämä. Laajenee kun uutta dataa treenataan.
+DATA_GENRES = ["valssi", "polkka", "masurkka", "marssi"]
+
+# Kunkin genren tahtilaji (iskua/tahti). Datalla varustetuille mitattu
+# datasta (valssi/masurkka 3, polkka 2, marssi 4); muille musiikillisesti
+# oikea arvaus tulevaa treeniä varten. 6/8 (tarantella) ja 7-9/8 (balkan)
+# eivät ole vielä esitettävissä -> lähin tuettu.
+GENRE_METER = {
+    "valssi": 3, "masurkka": 3, "polska": 3, "menuetti": 3, "musette": 3,
+    "polkka": 2, "jenkka": 2, "humppa": 2, "choro": 2, "tango": 2,
+    "longa": 2, "sirkus": 2, "tarantella": 3,
+    "marssi": 4, "ragtime": 4, "klezmer": 4, "balkan": 4,
+}
+
 # Krumhansl-Kessler-profiilit sävellajin ja moodin tunnistukseen.
 KK_MAJOR = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
 KK_MINOR = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]

@@ -40,17 +40,19 @@ def sample_tune_len(rng) -> int:
 
 
 class LLMComposer:
-    BEATS_PER_BAR = 3
-
+    # BEATS_PER_BAR ei ole enää vakio: tahtilaji valitaan vallitsevan genren
+    # mukaan sävelmän alussa (valssi/masurkka 3, polkka 2, marssi 4).
     def __init__(self, ckpt_path: str, params: LiveParams):
         import torch
 
-        from training.features import GENRES
+        from training.features import DATA_GENRES, GENRE_METER, GENRES
         from training.model import KVCache, ModelCfg, PosetiiviLM
         from training import tokenizer as tk
 
         self.torch, self.tk, self.genres = torch, tk, GENRES
+        self._genre_meter = GENRE_METER
         LiveParams.genre_names = GENRES
+        LiveParams.data_genres = DATA_GENRES
         ckpt = torch.load(ckpt_path, map_location="cpu")
         self.model = PosetiiviLM(ModelCfg(**ckpt["cfg"]))
         self.model.load_state_dict(ckpt["model"])
@@ -61,17 +63,32 @@ class LLMComposer:
         self._last = None  # viimeisimmät logitit; None = prime tarvitaan
         self.params = params
         self._density = 0.5
+        self.BEATS_PER_BAR = self._tune_meter()
         self._seq = self._prefix()
         self._bar_in_tune = 0
         self._tune_len = sample_tune_len(random)
         self._prev_bars: list[tuple] = []
         self._ending = False  # "uusi kappale" -nappi: lopetellaan kadenssiin
         self._end_deadline = 0
-        self._queue: queue.Queue[list[Note]] = queue.Queue(maxsize=2)
+        self._queue: queue.Queue[tuple[list[Note], int]] = queue.Queue(maxsize=2)
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._worker, daemon=True)
         self._thread.start()
         atexit.register(self._shutdown)
+
+    def _dominant_genre(self) -> str:
+        """Vallitseva genre: suurin vipupaino, muuten näppäinohjauksen genre."""
+        p = self.params
+        best_w, best = 0.0, None
+        for name in self.genres:
+            w = max(p.genre_weights.get(name, 0.0), 0.0)
+            if w > best_w:
+                best_w, best = w, name
+        return best or self.genres[p.genre_ix % len(self.genres)]
+
+    def _tune_meter(self) -> int:
+        """Tahtilaji vallitsevan genren mukaan (oletus 3/4 jos tuntematon)."""
+        return self._genre_meter.get(self._dominant_genre(), 3)
 
     def _shutdown(self) -> None:
         # Siisti pysäytys, ettei torch kaadu tulkin sulkeutuessa kesken opin.
@@ -82,7 +99,7 @@ class LLMComposer:
 
     def _prefix(self) -> list[int]:
         t = self.tk.TOK
-        return [t["BOS"], t["METER_3"], t["BAR"]]
+        return [t["BOS"], t[f"METER_{self.BEATS_PER_BAR}"], t["BAR"]]
 
     def _cond(self) -> list[float]:
         p, d = self.params, self._density
@@ -110,7 +127,9 @@ class LLMComposer:
         return len(p) >= 3 and sig == p[-2] and p[-1] == p[-3]
 
     def _new_tune(self) -> None:
-        """Sävelmä vaihtuu: kontekstiin jää edellisen häntä, laskurit nollille."""
+        """Sävelmä vaihtuu: uusi tahtilaji genren mukaan, kontekstiin edellisen
+        häntä, laskurit nollille."""
+        self.BEATS_PER_BAR = self._tune_meter()  # ennen _prefix():iä
         self._seq = (self._seq + [self.tk.TOK["EOS"]])[-TAIL:] + self._prefix()
         self._bar_in_tune = 0
         self._tune_len = sample_tune_len(random)
@@ -144,7 +163,7 @@ class LLMComposer:
         logits, _ = self.model(x, c, cache=self._cache)
         return logits[0, -1]
 
-    def _generate_bar(self) -> list[Note]:
+    def _generate_bar(self) -> tuple[list[Note], int]:
         torch, t = self.torch, self.tk.TOK
         warmth = 1.0 + START_BOOST * max(0.0, 1.0 - self._bar_in_tune / WARMUP_BARS)
         base_temp = (0.7 + 0.5 * self.params.temperature) * warmth
@@ -155,7 +174,7 @@ class LLMComposer:
             if self._ending and self._bar_in_tune >= self._end_deadline:
                 # Malli ei päättänyt itse ajoissa — pakotettu piste.
                 self._new_tune()
-                return []
+                return [], self.BEATS_PER_BAR
             for attempt in range(4):
                 bar = []
                 temp = base_temp * 1.25**attempt
@@ -169,7 +188,7 @@ class LLMComposer:
                         # Piste: biisi päättyi. Uusi lause alkaa, kontekstiin
                         # jää edellisen häntä; väliin hengähdystahti.
                         self._new_tune()
-                        return []
+                        return [], self.BEATS_PER_BAR
                     self._seq.append(nxt)
                     if self._cache.len + 1 >= self._cache.max_len:
                         self._last = self._run(self._seq[-TAIL:], prime=True)
@@ -193,27 +212,28 @@ class LLMComposer:
         # transpoosiaugmentoinnin ansiosta siirto kuulostaa luontevalta).
         shift = self.params.key % 12
         shift = shift - 12 if shift > 6 else shift
-        return [
+        out = [
             Note(beat=n.pos / grid, pitch=min(max(n.pitch + shift, 21), 108),
                  velocity=n.velocity, duration=n.dur / grid, channel=n.channel)
             for n in notes
         ]
+        return out, self.BEATS_PER_BAR
 
     def _worker(self) -> None:
         while not self._stop.is_set():
             self._check_end_request()
-            bar = self._generate_bar()
+            item = self._generate_bar()  # (nuotit, iskua/tahti)
             while not self._stop.is_set():
                 if self._check_end_request():
                     break  # nappi painettu: hylkää kädessä oleva tahti
                 try:
-                    self._queue.put(bar, timeout=0.5)
+                    self._queue.put(item, timeout=0.5)
                     break
                 except queue.Full:
                     continue
 
-    def next_bar(self, density: float) -> list[Note] | None:
-        """Valmis tahti, tai None jos malli ei vielä ehtinyt (moottori odottaa)."""
+    def next_bar(self, density: float) -> tuple[list[Note], int] | None:
+        """(tahti, iskua/tahti), tai None jos malli ei vielä ehtinyt."""
         self._density = density
         try:
             return self._queue.get_nowait()
