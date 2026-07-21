@@ -21,11 +21,16 @@ DEFAULT_GENRES = ["valssi", "polkka", "masurkka", "marssi"]
 
 
 class WebUI:
+    AUTOPLAY_FRACTION = 0.55  # osuus täydestä vauhdista automaattiajossa
+
     def __init__(self, speed, params, synth, port: int = 8737):
         self.speed = speed
         self.params = params
         self.synth = synth
         self.port = port
+        self._autoplay_thread: threading.Thread | None = None
+        self._autoplay_stop = threading.Event()
+        self._autoplay_lock = threading.Lock()
 
     def start(self) -> None:
         ui = self
@@ -71,6 +76,8 @@ class WebUI:
             self.speed.tick(min(abs(int(msg["wheel"])), 12))
         if "new_tune" in msg:
             p.end_song_request = True
+        if "autoplay" in msg:
+            self._set_autoplay(bool(msg["autoplay"]))
         if "genre" in msg:
             p.genre_weights = {str(k): max(min(float(v), 1.0), 0.0)
                                for k, v in dict(msg["genre"]).items()}
@@ -92,7 +99,30 @@ class WebUI:
 
     def state(self) -> dict:
         return {"speed": round(self.speed.normalized, 3),
-                "params": self.params.describe()}
+                "params": self.params.describe(),
+                "autoplay": self._autoplay_running()}
+
+    # --- autoplay: syöttää tick()-pykäliä samaa reittiä kuin oikea rulla --
+
+    def _autoplay_running(self) -> bool:
+        t = self._autoplay_thread
+        return t is not None and t.is_alive()
+
+    def _set_autoplay(self, on: bool) -> None:
+        with self._autoplay_lock:
+            if on and not self._autoplay_running():
+                self._autoplay_stop.clear()
+                self._autoplay_thread = threading.Thread(
+                    target=self._autoplay_loop, daemon=True)
+                self._autoplay_thread.start()
+            elif not on and self._autoplay_running():
+                self._autoplay_stop.set()
+
+    def _autoplay_loop(self) -> None:
+        rate = self.AUTOPLAY_FRACTION * self.speed.cfg.full_speed_ticks_per_sec
+        interval = 1.0 / max(rate, 1.0)
+        while not self._autoplay_stop.wait(interval):
+            self.speed.tick(1)
 
     # --- sivu -------------------------------------------------------------
 
@@ -134,11 +164,16 @@ PAGE = """<!doctype html><html lang="fi"><head><meta charset="utf-8">
   input[type=range] { flex: 1; accent-color: #d9b877; }
   select { background: #32210f; color: #f0e2c8; border: 1px solid #8a6a3f;
            border-radius: 6px; padding: 3px 6px; }
-  #newtune { display: block; margin: 10px auto 0; background: #32210f;
-             color: #d9b877; border: 1px solid #8a6a3f; border-radius: 8px;
+  .crank-buttons { display: flex; gap: 8px; justify-content: center;
+                   margin-top: 10px; }
+  .crank-buttons button { background: #32210f; color: #d9b877;
+             border: 1px solid #8a6a3f; border-radius: 8px;
              padding: 6px 14px; font: inherit; font-size: 14px;
              cursor: pointer; }
-  #newtune:active { background: #4a3520; }
+  .crank-buttons button:active { background: #4a3520; }
+  #autoplay.active { background: #d9b877; color: #32210f; }
+  #crank.autoplay #handle { animation: spin 2.1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .hint { font-size: 12px; color: #9b8360; margin-top: 8px; }
 </style></head><body>
 <h1>Posetiivi</h1>
@@ -147,7 +182,10 @@ PAGE = """<!doctype html><html lang="fi"><head><meta charset="utf-8">
   <h2>Veivi</h2>
   <div id="crank"><div id="handle"></div></div>
   <div id="speed">scrollaa missä vain — se veivaa</div>
-  <button id="newtune">■ Uusi kappale</button>
+  <div class="crank-buttons">
+    <button id="autoplay">▶ Autoplay</button>
+    <button id="newtune">■ Uusi kappale</button>
+  </div>
 </div>
 
 <div class="panel">
@@ -198,6 +236,14 @@ setInterval(() => { if (ticks) { post({wheel: ticks}); ticks = 0; } }, 80);
 document.getElementById('newtune').addEventListener('click',
   () => post({new_tune: 1}));
 
+// Autoplay: palvelin syöttää tick()-pykäliä samaa reittiä kuin oikea
+// rulla, joten muu koneisto ei tiedä eroa. Nappi vain pyytää päälle/pois;
+// todellinen tila luetaan aina palvelimelta (toimii usean välilehden yli).
+const autoplayBtn = document.getElementById('autoplay');
+const crankEl = document.getElementById('crank');
+autoplayBtn.addEventListener('click',
+  () => post({autoplay: autoplayBtn.dataset.on !== '1'}));
+
 // Tyylilajivivut: koko painovektori kerralla.
 const genreInputs = [...document.querySelectorAll('[data-genre]')];
 const sendGenres = () => {
@@ -217,10 +263,14 @@ document.querySelectorAll('[data-param]').forEach(el =>
 document.querySelectorAll('[data-sel]').forEach(el =>
   el.addEventListener('change', () => post({[el.dataset.sel]: +el.value})));
 
-// Nopeusnaytto.
+// Nopeusnaytto + autoplay-tilan synkronointi.
 setInterval(async () => {
   const s = await (await fetch('/api/state')).json();
   document.getElementById('speed').textContent =
     s.speed > 0 ? `vauhti ${(s.speed * 100) | 0} %` : 'scrollaa missä vain — se veivaa';
+  autoplayBtn.dataset.on = s.autoplay ? '1' : '0';
+  autoplayBtn.classList.toggle('active', s.autoplay);
+  autoplayBtn.textContent = s.autoplay ? '❚❚ Autoplay käy' : '▶ Autoplay';
+  crankEl.classList.toggle('autoplay', s.autoplay);
 }, 500);
 </script></body></html>"""
