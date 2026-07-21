@@ -34,10 +34,21 @@ class CrankSpeed:
 
     @property
     def normalized(self) -> float:
-        # Pysähtynyt jos pykäliä ei ole tullut stop_timeoutiin.
-        if time.monotonic() - self._last_tick > self.cfg.stop_timeout_sec:
+        if not self._last_tick:
             return 0.0
-        return min(self._ema / self.cfg.full_speed_ticks_per_sec, 1.0)
+        idle = time.monotonic() - self._last_tick
+        # Ehdoton varakatko kaukana tulevaisuudessa; normaalisti jälkihidastus
+        # vie vauhdin kuulumattomiin ennen tätä.
+        if idle > self.cfg.stop_timeout_sec:
+            return 0.0
+        # Vauhtipyörän jälkihidastus: kun veivaus loppuu, vauhti vaimenee
+        # eksponentiaalisesti ajasta viime pykälästä sen sijaan että jäätyisi
+        # ja hyppäisi nollaan. Kovempi vauhti = pidempi jälkiliuku (enemmän
+        # liike-energiaa), kuten oikeassa kammessa. Veivatessa idle ~ 0, joten
+        # kerroin ~ 1 eikä vaikuta.
+        coasted = self._ema * math.exp(-idle / self.cfg.coast_tau_sec)
+        norm = coasted / self.cfg.full_speed_ticks_per_sec
+        return norm if norm > 0.02 else 0.0  # kuulumaton -> siisti nollaus
 
     @property
     def turning(self) -> bool:

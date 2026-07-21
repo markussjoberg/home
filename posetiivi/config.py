@@ -40,7 +40,8 @@ class MidiCfg:
 class CrankCfg:
     device: str = ""
     full_speed_ticks_per_sec: float = 30.0
-    stop_timeout_sec: float = 0.35
+    stop_timeout_sec: float = 2.0  # ehdoton varakatko (jälkihidastus vie ~0)
+    coast_tau_sec: float = 0.45  # vauhtipyörän jälkihidastuksen aikavakio
 
 
 @dataclass
