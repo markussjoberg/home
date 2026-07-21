@@ -40,6 +40,12 @@ Treenikäytännöt M4 Maxille (opittu kantapään kautta):
 - train/val-erot välissä 6000–8000 olivat val-batchien kohinaa, eivät
   ylisovitusta — loppujäähdytys painoi val 0.103 → 0.060.
 
+**2/4-CFG-BUGI KORJAANTUI v4:ssä**: polkka (2/4) ja marssi (4/4) generoituvat
+tyhjenemättä guidance 2.0:lla ja 4.0:lla (demot `training/demo/`, tahtitiheys
+5,8–7,5 n/s kaikissa). Todennäköinen syy: isompi malli + koko biisin näkevä
+treeni-ikkuna vakautti ehdollisen jakauman. Naapuritahtitoistoa ei vielä
+mitattu uudelleen — korvatesti ja mittarit tekemättä.
+
 **KV-CACHE ON NYT KRIITTINEN**: uusi generate.py ajaa täyttä kontekstia
 ilman cachea → 32 tahdin demo kestää >10 min Macilla (Pi:llä mahdoton).
 Laskettu budjetti: cachella ~12 ms/token Pi 5:llä (CFG:n kanssa ~24 ms),
