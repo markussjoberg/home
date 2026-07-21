@@ -53,6 +53,10 @@ class LiveParams:
     genre_weights: dict[str, float] = field(default_factory=dict)
     # Surullinen (0) <-> iloinen (1); None = pääteltävä minor-lipusta.
     valence: float | None = None
+    # Nappi (webUI/tuleva GPIO): pyydä kappaleen lopetusta kadenssilla.
+    # LLM-lähde kuittaa lipun ja ajaa biisin etenemän loppuun -> malli
+    # päättää sävelmän itse ja aloittaa uuden.
+    end_song_request: bool = False
 
     genre_names = ()  # luokkataso; LLMComposer täyttää
 

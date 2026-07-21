@@ -50,6 +50,8 @@ class LLMComposer:
         self._bar_in_tune = 0
         self._tune_len = 24
         self._prev_bars: list[tuple] = []
+        self._ending = False  # "uusi kappale" -nappi: lopetellaan kadenssiin
+        self._end_deadline = 0
         self._queue: queue.Queue[list[Note]] = queue.Queue(maxsize=2)
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._worker, daemon=True)
@@ -92,6 +94,31 @@ class LLMComposer:
             return True
         return len(p) >= 3 and sig == p[-2] and p[-1] == p[-3]
 
+    def _new_tune(self) -> None:
+        """Sävelmä vaihtuu: kontekstiin jää edellisen häntä, laskurit nollille."""
+        self._seq = (self._seq + [self.tk.TOK["EOS"]])[-TAIL:] + self._prefix()
+        self._bar_in_tune = 0
+        self._tune_len = random.randint(16, 32)
+        self._prev_bars = []
+        self._ending = False
+        self._last = self._run(self._seq, prime=True)
+
+    def _check_end_request(self) -> bool:
+        """Kuittaa napin lippu: tyhjennä jono ja aja etenemä loppuun."""
+        if not self.params.end_song_request:
+            return False
+        self.params.end_song_request = False
+        while True:
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                break
+        self._ending = True
+        self._end_deadline = self._bar_in_tune + 4
+        # Etenemä ~1 -> malli on oppinut että lause päättyy kadenssiin.
+        self._tune_len = min(self._tune_len, self._bar_in_tune + 2)
+        return True
+
     def _run(self, tokens: list[int], prime: bool = False):
         """Aja tokenit mallista cachen läpi; palauta viimeiset logitit."""
         torch = self.torch
@@ -109,6 +136,10 @@ class LLMComposer:
         with torch.no_grad():
             if self._last is None:
                 self._last = self._run(self._seq, prime=True)
+            if self._ending and self._bar_in_tune >= self._end_deadline:
+                # Malli ei päättänyt itse ajoissa — pakotettu piste.
+                self._new_tune()
+                return []
             for attempt in range(4):
                 bar = []
                 temp = base_temp * 1.25**attempt
@@ -121,11 +152,7 @@ class LLMComposer:
                     if nxt == t["EOS"]:
                         # Piste: biisi päättyi. Uusi lause alkaa, kontekstiin
                         # jää edellisen häntä; väliin hengähdystahti.
-                        self._seq = (self._seq + [t["EOS"]])[-TAIL:] + self._prefix()
-                        self._bar_in_tune = 0
-                        self._tune_len = random.randint(16, 32)
-                        self._prev_bars = []
-                        self._last = self._run(self._seq, prime=True)
+                        self._new_tune()
                         return []
                     self._seq.append(nxt)
                     if self._cache.len + 1 >= self._cache.max_len:
@@ -158,8 +185,11 @@ class LLMComposer:
 
     def _worker(self) -> None:
         while not self._stop.is_set():
+            self._check_end_request()
             bar = self._generate_bar()
             while not self._stop.is_set():
+                if self._check_end_request():
+                    break  # nappi painettu: hylkää kädessä oleva tahti
                 try:
                     self._queue.put(bar, timeout=0.5)
                     break

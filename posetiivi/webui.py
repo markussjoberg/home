@@ -69,6 +69,8 @@ class WebUI:
         p = self.params
         if "wheel" in msg:
             self.speed.tick(min(abs(int(msg["wheel"])), 12))
+        if "new_tune" in msg:
+            p.end_song_request = True
         if "genre" in msg:
             p.genre_weights = {str(k): max(min(float(v), 1.0), 0.0)
                                for k, v in dict(msg["genre"]).items()}
@@ -132,6 +134,11 @@ PAGE = """<!doctype html><html lang="fi"><head><meta charset="utf-8">
   input[type=range] { flex: 1; accent-color: #d9b877; }
   select { background: #32210f; color: #f0e2c8; border: 1px solid #8a6a3f;
            border-radius: 6px; padding: 3px 6px; }
+  #newtune { display: block; margin: 10px auto 0; background: #32210f;
+             color: #d9b877; border: 1px solid #8a6a3f; border-radius: 8px;
+             padding: 6px 14px; font: inherit; font-size: 14px;
+             cursor: pointer; }
+  #newtune:active { background: #4a3520; }
   .hint { font-size: 12px; color: #9b8360; margin-top: 8px; }
 </style></head><body>
 <h1>Posetiivi</h1>
@@ -139,7 +146,8 @@ PAGE = """<!doctype html><html lang="fi"><head><meta charset="utf-8">
 <div class="panel">
   <h2>Veivi</h2>
   <div id="crank"><div id="handle"></div></div>
-  <div id="speed">scrollaa ympyrän päällä</div>
+  <div id="speed">scrollaa missä vain — se veivaa</div>
+  <button id="newtune">■ Uusi kappale</button>
 </div>
 
 <div class="panel">
@@ -174,17 +182,21 @@ PAGE = """<!doctype html><html lang="fi"><head><meta charset="utf-8">
 <script>
 const post = (o) => fetch('/api', {method: 'POST', body: JSON.stringify(o)});
 
-// Veivi: scrollaus keraantyy ja lahetetaan ~80 ms valein.
+// Veivi: scrollaus missä tahansa sivulla veivaa eteenpäin (suunnasta
+// riippumatta); keraantyy ja lahetetaan ~80 ms valein.
 let ticks = 0, angle = 0;
-const crank = document.getElementById('crank');
 const handle = document.getElementById('handle');
-crank.addEventListener('wheel', (e) => {
+window.addEventListener('wheel', (e) => {
   e.preventDefault();
   const n = Math.max(1, Math.round(Math.abs(e.deltaY) / 40));
   ticks += n; angle += n * 24;
   handle.style.transform = `rotate(${angle}deg)`;
 }, {passive: false});
 setInterval(() => { if (ticks) { post({wheel: ticks}); ticks = 0; } }, 80);
+
+// Uusi kappale: malli ajaa nykyisen sävelmän kadenssiin ja aloittaa uuden.
+document.getElementById('newtune').addEventListener('click',
+  () => post({new_tune: 1}));
 
 // Tyylilajivivut: koko painovektori kerralla.
 const genreInputs = [...document.querySelectorAll('[data-genre]')];
@@ -209,6 +221,6 @@ document.querySelectorAll('[data-sel]').forEach(el =>
 setInterval(async () => {
   const s = await (await fetch('/api/state')).json();
   document.getElementById('speed').textContent =
-    s.speed > 0 ? `vauhti ${(s.speed * 100) | 0} %` : 'scrollaa ympyrän päällä';
+    s.speed > 0 ? `vauhti ${(s.speed * 100) | 0} %` : 'scrollaa missä vain — se veivaa';
 }, 500);
 </script></body></html>"""
