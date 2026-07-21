@@ -7,3 +7,6 @@ FluidR3_GM.sf2
 training/data/
 training/ckpt/*.pt.tmp
 training/demo/
+
+# Provenienssimanifesti kuuluu versionhallintaan (ei bulkkidataa)
+!training/data/SOURCES.md

@@ -73,6 +73,14 @@ def main() -> None:
             w.writerow([f"/{genre}/", genre])
     print("ABC-tiedostot:", dict(sorted(counts.items())))
 
+    # Provenienssi (datahygienia, ks. docs/V5.md). The Session on ODbL,
+    # julkinen dumppi — opt-out on muodollisuus mutta kirjataan.
+    from sources import record
+    record(args.out / "SOURCES.md", source="The Session",
+           url="github.com/adactio/TheSession-data", license="ODbL",
+           opt_out_checked=True, count=sum(counts.values()),
+           notes="tune type -> " + "/".join(sorted(set(TYPE_TO_GENRE.values()))))
+
     if args.to_midi:
         if not shutil.which("abc2midi"):
             sys.exit("abc2midi puuttuu: brew install abcmidi / sudo apt install abcmidi")
