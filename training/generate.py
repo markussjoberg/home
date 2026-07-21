@@ -99,7 +99,7 @@ def sample(model, cond_base, beats, max_bars, temperature, top_k, guidance, devi
     # itsensä (ilman cachea koko konteksti laskettiin uudelleen per token).
     nrow = 2 if guidance != 1.0 else 1
     cache = KVCache(model.cfg, nrow, device=device)
-    TAIL = 256  # edellisen biisin häntä uuden kontekstiin (settisiirtymät)
+    TAIL = 512  # edellisen biisin häntä uuden kontekstiin (settisiirtymät)
 
     def cond_t(vec: list[float], length: int) -> torch.Tensor:
         c = torch.tensor(vec, device=device).view(1, 1, -1)

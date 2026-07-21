@@ -21,7 +21,7 @@ import threading
 from .midigen import LiveParams, Note
 
 TOP_K = 24
-TAIL = 256  # edellisen biisin häntä uuden kontekstiin (settisiirtymät)
+TAIL = 512  # edellisen biisin häntä uuden kontekstiin (settisiirtymät)
 
 
 class LLMComposer:
