@@ -1,5 +1,9 @@
 # Posetiivi-LLM: treenisuunnitelma
 
+> **v5 alkaen:** ajantasainen suunnitelma on [docs/V5.md](../docs/V5.md)
+> (genrespesialistit kytkimellä, tunnelmavivut, rakenneteline, Pi 5).
+> Tämä dokumentti kuvaa v1–v4-treeniputken perusteet, jotka pätevät yhä.
+
 Pieni MIDI-kielimalli (~5–10 M parametria), joka säveltää posetiivimusiikkia
 ja jota ohjataan **jatkuvilla genre-vivuilla** (esim. 60 % tango + 40 % valssi)
 sekä mood-akseleilla. Treenataan M4 Maxilla, ajetaan Raspberry Pi 4/5:llä.
