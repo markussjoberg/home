@@ -15,7 +15,7 @@ from pathlib import Path
 import torch
 
 from features import COND_DIM, GENRES
-from model import ModelCfg, PosetiiviLM
+from model import KVCache, ModelCfg, PosetiiviLM
 from tokenizer import GRID, NOTE_HI, NOTE_LO, TOK, VOCAB_SIZE, decode
 
 # Skaalamaski: pakota generointi mihin tahansa asteikkoon (vrt. Ian Ringin
@@ -93,21 +93,45 @@ def sample(model, cond_base, beats, max_bars, temperature, top_k, guidance, devi
     prev_bars: list[tuple] = []
     cur: list[int] = []
     attempts = 0
-    while bars_total < max_bars and len(seq) < 16384:
+
+    # KV-cache: rivit [ehdollinen, ehdoton] samassa batchissa -> CFG:n
+    # molemmat haarat yhdellä forwardilla, ja jokainen token maksaa vain
+    # itsensä (ilman cachea koko konteksti laskettiin uudelleen per token).
+    nrow = 2 if guidance != 1.0 else 1
+    cache = KVCache(model.cfg, nrow, device=device)
+    TAIL = 256  # edellisen biisin häntä uuden kontekstiin (settisiirtymät)
+
+    def cond_t(vec: list[float], length: int) -> torch.Tensor:
+        c = torch.tensor(vec, device=device).view(1, 1, -1)
+        c = c.expand(nrow, length, -1).clone()
+        if nrow == 2:
+            c[1] = 0.0  # ehdoton rivi
+        return c
+
+    def run(tokens: list[int], vec: list[float]) -> torch.Tensor:
+        x = torch.tensor([tokens], device=device).expand(nrow, -1)
+        logits, _ = model(x, cond_t(vec, len(tokens)), cache=cache)
+        return logits[:, -1]
+
+    def prime(ctx: list[int], vec: list[float]) -> torch.Tensor:
+        cache.rewind(0)
+        return run(ctx, vec)
+
+    cond_vec = fit_cond(
+        list(cond_base)
+        + [(bar_in_tune % 8) / 8.0, min(bar_in_tune / max(tune_len - 1, 1), 1.0)],
+        model,
+    )
+    last = prime(seq, cond_vec)  # invariantti: cache kattaa seq:n,
+    while bars_total < max_bars and len(seq) < 16384:  # `last` ennustaa seuraavan
         cond_vec = fit_cond(
             list(cond_base)
             + [(bar_in_tune % 8) / 8.0, min(bar_in_tune / max(tune_len - 1, 1), 1.0)],
             model,
         )
-        window = torch.tensor([seq[-1024:]], device=device)
-        c = torch.tensor(cond_vec, device=device).view(1, 1, -1).expand(
-            1, window.shape[1], -1
-        )
-        logits, _ = model(window, c)
-        logits = logits[:, -1]
-        if guidance != 1.0:
-            uncond, _ = model(window, torch.zeros_like(c))
-            logits = uncond[:, -1] + guidance * (logits - uncond[:, -1])
+        logits = last[:1]
+        if nrow == 2:
+            logits = last[1:2] + guidance * (last[:1] - last[1:2])
         logits = logits / (temperature * 1.25**attempts)
         logits[:, t["PAD"]] = -float("inf")
         if banned_notes is not None:
@@ -119,10 +143,13 @@ def sample(model, cond_base, beats, max_bars, temperature, top_k, guidance, devi
             logits[logits < kth] = -float("inf")
         nxt = int(torch.multinomial(torch.softmax(logits, -1), 1))
         if nxt == t["EOS"]:
-            # Biisi päättyi: pieni tauko ja uusi sävelmä puhtaalta pöydältä.
-            seq += [t["EOS"], *prefix]
+            # Biisi päättyi: uusi sävelmä, kontekstiin edellisen häntä.
+            seq.append(t["EOS"])
+            ctx = seq[-TAIL:] + prefix
+            seq += prefix
             bar_in_tune, prev_bars, cur, attempts = 0, [], [], 0
             tune_len = rng.randint(16, 32)
+            last = prime(ctx, cond_vec)
             continue
         if nxt == t["BAR"]:
             sig = tuple(cur)
@@ -130,6 +157,8 @@ def sample(model, cond_base, beats, max_bars, temperature, top_k, guidance, devi
                 del seq[len(seq) - len(cur):]  # hylkää tahti, yritä kuumemmin
                 cur = []
                 attempts += 1
+                cache.rewind(len(seq) - 1)
+                last = run([seq[-1]], cond_vec)
                 continue
             prev_bars.append(sig)
             cur, attempts = [], 0
@@ -138,6 +167,10 @@ def sample(model, cond_base, beats, max_bars, temperature, top_k, guidance, devi
         else:
             cur.append(nxt)
         seq.append(nxt)
+        if cache.len + 1 >= cache.max_len:  # hätävara: ikkuna täynnä
+            last = prime(seq[-TAIL:], cond_vec)
+        else:
+            last = run([nxt], cond_vec)
     return seq
 
 

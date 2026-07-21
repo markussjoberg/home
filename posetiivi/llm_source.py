@@ -20,8 +20,8 @@ import threading
 
 from .midigen import LiveParams, Note
 
-WINDOW = 128  # kontekstin pituus generoinnissa (KV-cache olisi seuraava optimointi)
 TOP_K = 24
+TAIL = 256  # edellisen biisin häntä uuden kontekstiin (settisiirtymät)
 
 
 class LLMComposer:
@@ -31,7 +31,7 @@ class LLMComposer:
         import torch
 
         from training.features import GENRES
-        from training.model import ModelCfg, PosetiiviLM
+        from training.model import KVCache, ModelCfg, PosetiiviLM
         from training import tokenizer as tk
 
         self.torch, self.tk, self.genres = torch, tk, GENRES
@@ -40,6 +40,10 @@ class LLMComposer:
         self.model = PosetiiviLM(ModelCfg(**ckpt["cfg"]))
         self.model.load_state_dict(ckpt["model"])
         self.model.eval()
+        # KV-cache: token maksaa vain itsensä, joten konteksti voi olla koko
+        # biisi (ennen: 128 tokenin ikkuna ja silti liian hidasta Pi:lle).
+        self._cache = KVCache(self.model.cfg, 1)
+        self._last = None  # viimeisimmät logitit; None = prime tarvitaan
         self.params = params
         self._density = 0.5
         self._seq = self._prefix()
@@ -88,43 +92,56 @@ class LLMComposer:
             return True
         return len(p) >= 3 and sig == p[-2] and p[-1] == p[-3]
 
+    def _run(self, tokens: list[int], prime: bool = False):
+        """Aja tokenit mallista cachen läpi; palauta viimeiset logitit."""
+        torch = self.torch
+        if prime:
+            self._cache.rewind(0)
+        x = torch.tensor([tokens])
+        c = torch.tensor(self._cond()).view(1, 1, -1).expand(1, len(tokens), -1)
+        logits, _ = self.model(x, c, cache=self._cache)
+        return logits[0, -1]
+
     def _generate_bar(self) -> list[Note]:
         torch, t = self.torch, self.tk.TOK
         base_temp = 0.7 + 0.5 * self.params.temperature
         bar: list[int] = []
-        for attempt in range(4):
-            bar = []
-            temp = base_temp * 1.25**attempt
-            with torch.no_grad():
+        with torch.no_grad():
+            if self._last is None:
+                self._last = self._run(self._seq, prime=True)
+            for attempt in range(4):
+                bar = []
+                temp = base_temp * 1.25**attempt
                 for _ in range(160):
-                    window = self._seq[-WINDOW:]
-                    x = torch.tensor([window])
-                    c = torch.tensor(self._cond()).view(1, 1, -1).expand(
-                        1, len(window), -1
-                    )
-                    logits, _ = self.model(x, c)
-                    logits = logits[0, -1] / temp
+                    logits = self._last / temp
                     logits[t["PAD"]] = -float("inf")
                     kth = torch.topk(logits, TOP_K).values[-1]
                     logits[logits < kth] = -float("inf")
                     nxt = int(torch.multinomial(torch.softmax(logits, -1), 1))
                     if nxt == t["EOS"]:
-                        # Piste: biisi päättyi. Uusi lause alkaa puhtaalta
-                        # pöydältä ja väliin jää hengähdystahti.
-                        self._seq = self._prefix()
+                        # Piste: biisi päättyi. Uusi lause alkaa, kontekstiin
+                        # jää edellisen häntä; väliin hengähdystahti.
+                        self._seq = (self._seq + [t["EOS"]])[-TAIL:] + self._prefix()
                         self._bar_in_tune = 0
                         self._tune_len = random.randint(16, 32)
                         self._prev_bars = []
+                        self._last = self._run(self._seq, prime=True)
                         return []
                     self._seq.append(nxt)
+                    if self._cache.len + 1 >= self._cache.max_len:
+                        self._last = self._run(self._seq[-TAIL:], prime=True)
+                    else:
+                        self._last = self._run([nxt])
                     if nxt == t["BAR"]:
                         break
                     bar.append(nxt)
-            sig = tuple(bar)
-            if bar and self._is_loop(sig):
-                del self._seq[len(self._seq) - len(bar) - 1:]  # hylkää, kuumemmin
-                continue
-            break
+                sig = tuple(bar)
+                if bar and self._is_loop(sig):
+                    del self._seq[len(self._seq) - len(bar) - 1:]  # hylkää, kuumemmin
+                    self._cache.rewind(len(self._seq) - 1)
+                    self._last = self._run([self._seq[-1]])
+                    continue
+                break
         self._prev_bars.append(tuple(bar))
         self._bar_in_tune += 1
         notes, _ = self.tk.decode(self._prefix() + bar)
