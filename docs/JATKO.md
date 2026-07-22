@@ -1,4 +1,42 @@
-# Jatkosuunnitelma (kirjoitettu 2026-07-22 illalla, session lopuksi)
+# Jatkosuunnitelma (päivitetty 2026-07-22 myöhään illalla)
+
+## TÄRKEIN VIESTI SEURAAVALLE SESSIOLLE
+
+Käyttäjä menetti uskonsa illan lopulla: teline (edes eristettynä puhtaana
+kokeena rail+seed-pohjan päällä) kuulosti yhä "randomilta, epäharmoniselta,
+epäintuitiiviselta". Krediitit loppuivat kesken, ei ehditty juurisyyhyn.
+
+**Ei ole todistettu mahdottomaksi.** Folk-RNN (Sturm ym.) on tutkimuksessa
+tunnettu esimerkki: pieni RNN, SAMA datalähde (The Session ABC), tuottaa
+vakuuttavia kansansävelmiä muutamalla miljoonalla parametrilla. Raaka
+mallikoko (11M) ei siis ole looginen este.
+
+**Mitattu, ei pelkkä tuntuma:** generoidun melodian intervallitilasto on
+lähellä aitoa (keskihyppy 2.9 vs aidon 2.6 puolisävelaskelta, ei yhtään
+>7 puolisävelaskeleen hyppyä 59 näytteessä) — raaka nuottitaso ei ole
+tilastollisesti hullu. "Väärältä kuulostaminen" on siis todennäköisemmin
+YHTEISVAIKUTUKSESSA (kisko+seedit+teline+kalibrointi samaan aikaan) kuin
+raa'assa kyvyttömyydessä. Sama kuvio toistui KAHDESTI tänään: joka kerta
+kun kerroksia pinottiin, tulos huononi; kun palattiin yksinkertaisempaan,
+parani.
+
+**Seuraavan session pitäisi tehdä VÄHEMMÄN, ei enempää:**
+1. Älä lisää mitään ennen kuin on kuunneltu nykyinen tila (rail+seedit,
+   ei telinettä, git 74aab17) rauhassa, useampi kappale.
+2. Jos sekin kuulostaa väärältä: kokeile PELKKÄ v4 ILMAN kiskoa/seedejä
+   (git 6cf7aa7) — sitä ei ole koskaan A/B-verrattu suoraan tähän
+   iltapäivän versioon kunnolla, ja on mahdollista että kisko/seedit
+   itsessään (ei vain teline) ovat osa ongelmaa.
+3. Harkitse radikaalia yksinkertaistusta: poista kisko kokonaan, luota
+   VAIN malliin + seediin. Kisko saattaa taistella mallin omaa (Folk-RNN-
+   tasoisesti toimivaksi osoitettua arkkitehtuuria olevaa) oppimaa
+   harmoniaa vastaan sen sijaan että auttaisi sitä.
+4. Jos mikään yhdistelmä nykyisellä mallilla ei tyydytä: harkitse
+   uudelleentreeniä pidemmällä/puhtaammalla datalla ENNEN lisää
+   inferenssiaikaisia patcheja — patchit eivät korjaa opittua jakaumaa.
+
+---
+
 
 Lue tämä ennen kuin muutat mitään. Päivä 07-22 opetti kalliisti: osa
 "parannuksista" oli mittarivetoisia näennäisratkaisuja jotka rikkoivat
