@@ -145,13 +145,16 @@ def main() -> None:
                     eval_generated(args.ckpt, args.genre, args.n, beats,
                                    args.guidance))
 
+    # Portit suhteessa aitoon (absoluuttiset kynnykset olivat harhaanjohtavia:
+    # esim. aito masurkka on itse 3.2 % tyhjää -> <1 % oli mahdoton).
     ok_lag8 = abs(gen["lag8"] - real["lag8"]) <= 0.10
-    ok_lag1 = gen["lag1"] < 0.05
-    ok_empty = gen["empty"] < 0.01
+    ok_lag1 = gen["lag1"] <= max(real["lag1"] + 0.03, 0.05)   # ~aito + marginaali
+    ok_empty = gen["empty"] <= real["empty"] + 0.02
     verdict = "LÄPI" if (ok_lag8 and ok_lag1 and ok_empty) else "EI LÄPI"
     print(f"Portti: lag8 {'ok' if ok_lag8 else 'EI'} | "
-          f"lag1<5% {'ok' if ok_lag1 else 'EI'} | "
-          f"tyhjät<1% {'ok' if ok_empty else 'EI'}  -> {verdict}")
+          f"lag1 {'ok' if ok_lag1 else 'EI'}(aito {100*real['lag1']:.0f}%) | "
+          f"tyhjät {'ok' if ok_empty else 'EI'}(aito {100*real['empty']:.0f}%)"
+          f"  -> {verdict}")
 
 
 if __name__ == "__main__":
