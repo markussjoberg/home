@@ -1,5 +1,39 @@
 # Jatkosuunnitelma (päivitetty 2026-07-22 myöhään illalla)
 
+## PÄIVITYS (myöhäisilta): koodikatselmointi löysi 3 oikeaa bugia
+
+Käyttäjä pyysi analyyttistä läpikäyntiä ilman kuuntelua. Löytyi ja
+korjattiin (mitattu, git 6c4f007), rehellisin jäljellä olevin puuttein:
+
+1. **Tyhjät tahdit** (todennäköinen syy "katkeaa random-kohdissa"):
+   spontaani EOS palautti äänettömän tahdin. Mitattu 3.0% -> 1.8% tahtia
+   korjauksen jälkeen. EI täysin nolla — jäljellä olevaa lähdettä ei
+   ehditty isoloida. **Seuraava askel**: lisää laskuri joka erottelee
+   tuleeko jäljellä oleva tyhjä `_pending`-seedistä (ehkä rest-only-
+   tahti aidossa datassa, harmiton) vai `_generate_bar`:n muusta polusta
+   (oikea jäljellä oleva bugi).
+2. **Rekisterisokea sointuveto** korjattu: veto nyt oktaavin sisällä
+   viimeisimmästä saman kanavan sävelestä, ei koko 7 oktaavin alueella.
+3. **Äänenkuljetussakko lisätty** (leap-sakko): mitattu ennen/jälkeen
+   samalla siemenellä (42): askelin 43%->53% (aito 65%), isoja
+   hyppyjä 9%->7% (aito 4%), keskihyppy 3.4->2.8 (aito 2.6). Parannus,
+   ei täydellinen — LEAP_PENALTY=0.35 on ensimmäinen arvaus, ei
+   kalibroitu tarkasti aitoon jakaumaan asti.
+
+**Sivuvaikutus jota EI ehditty jäljittää**: leap-sakon lisäyksen
+jälkeen monsteritahteja ilmestyi 3/400 (0.75%, oli 0 ennen sakkoa).
+Mekanismi epäselvä (sakko ei teoriassa koske BAR-tokenin valintaa,
+mutta empiirisesti korreloi). **Seuraava askel**: debuggaa tarkasti
+mikä monsteritahdeissa tapahtuu (tulosta tahdin token-sekvenssi kun
+`len(bar)>threshold`), tai kokeile pienempää LEAP_PENALTY-arvoa
+ensin nähdäksesi katoaako ilmiö.
+
+**Käyttäjä ei ole vielä kuunnellut tätä versiota** (pyysi analyyttistä
+korjausta ilman kuuntelua, budjetti loppui). Kun jatketaan: kuuntele
+ensin tämä (6c4f007) ennen lisää koodimuutoksia.
+
+---
+
 ## TÄRKEIN VIESTI SEURAAVALLE SESSIOLLE
 
 Käyttäjä menetti uskonsa illan lopulla: teline (edes eristettynä puhtaana
