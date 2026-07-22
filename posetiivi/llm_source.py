@@ -24,17 +24,9 @@ TOP_K = 24
 TAIL = 512  # edellisen biisin häntä uuden kontekstiin (settisiirtymät)
 
 # Harmoniakisko: sointukierto annetaan säännöistä, malli improvisoi sen
-# sisällä. C-maailmassa (k-siirto transponoi jälkikäteen).
-#
-# ERISTETTY TELINEKOE (07-22 ilta): rakenneteline (AABB, deterministinen
-# kertaus puskurista) hylättiin eilen, mutta se koe oli sekoittunut liian
-# korkeaan lämpötilaan ja aggressiiviseen naapurivahtiin — ei koskaan
-# puhdas mittaus. Käyttäjän arkkitehtuurihypoteesi: RoPE-attention kohdis-
-# tuu token-etäisyyteen, ei tahtietäisyyteen (tahdit eripituisia) -> malli
-# ei voi luotettavasti oppia "toista 8 tahtia sitten". Teline kiertää
-# tämän: ei luota attentioniin kertauksessa, toistaa oikeat tokenit
-# suoraan. Testataan nyt YKSIN nykyisen hyvän pohjan (kisko+seedit+
-# kalibroitu kielioppi) päällä, ei muuta samaan aikaan.
+# sisällä. C-maailmassa (k-siirto transponoi jälkikäteen). EI telinettä —
+# muoto jää mallille (korvahypoteesi 07-22: teline oli se vika, kisko+seedit
+# korjasivat).
 SCALE_PCS = frozenset({0, 2, 4, 5, 7, 9, 11})  # C-duuri / A-molli
 CHORDS = {"I": {0, 4, 7}, "ii": {2, 5, 9}, "IV": {5, 9, 0},
           "V": {7, 11, 2}, "vi": {9, 0, 4}}
@@ -108,12 +100,7 @@ class LLMComposer:
         self._end_deadline = 0
         self._chord = "I"
         self._chord_bias_cache: dict[str, object] = {}
-        # AABB-teline: uniikit tahdit puskurissa, emissiojärjestys toistaa
-        # ne deterministisesti (ei luota attentioniin kertauksessa).
-        self._buffer: list[tuple[list[Note], int]] = []
-        self._emit_order: list[int] = []
-        self._emit_pos = 0
-        self._plan_form()
+        self._pending: list[tuple[list[Note], int]] = []  # seed-avaustahdit
         self._apply_seed()
         self._queue: queue.Queue[tuple[list[Note], int]] = queue.Queue(maxsize=2)
         self._stop = threading.Event()
@@ -234,8 +221,7 @@ class LLMComposer:
         return out
 
     def _apply_seed(self) -> None:
-        """Aito avaus kontekstiin + puskurin ensimmäisiksi uniikeiksi
-        tahdeiksi (osa A-fraasia); jatko jää mallille."""
+        """Aito avaus kontekstiin + emittoitavaksi; jatko jää mallille."""
         seed = self._pick_seed()
         if not seed:
             return
@@ -243,42 +229,13 @@ class LLMComposer:
         bar_toks: list[int] = []
         for tok in seed:
             if tok == self.tk.TOK["BAR"]:
-                self._buffer.append((self._bar_notes(bar_toks),
-                                     self.BEATS_PER_BAR))
+                self._pending.append((self._bar_notes(bar_toks),
+                                      self.BEATS_PER_BAR))
                 self._prev_bars.append(tuple(bar_toks))
                 bar_toks = []
             else:
                 bar_toks.append(tok)
-        self._bar_in_tune = len(self._buffer)
-
-    def _plan_form(self) -> None:
-        """AABB-emissiojärjestys: fraasi = 8 tahtia, kirjainten määrä
-        sävelmäpituudesta (32 tahtia -> AABB, 64 -> AABBCCDD, jne, sama
-        matematiikka joka validoitiin offline-mittauksessa 07-22).
-        tune_len asetetaan uniikkien tahtien määräksi (progress-ehto)."""
-        phrase = 8
-        n_letters = max(1, round(self._tune_len / (2 * phrase)))
-        self._tune_len = n_letters * phrase
-        order: list[int] = []
-        for letter in range(n_letters):
-            base = letter * phrase
-            order += list(range(base, base + phrase)) * 2
-        self._emit_order = order
-        self._emit_pos = 0
-        self._buffer = []
-
-    def _next_structured(self) -> tuple[list[Note], int]:
-        """Seuraava emittoitava tahti: uniikki generoidaan (malli+kisko),
-        kertaus toistetaan puskurista sellaisenaan (ei mallikutsua)."""
-        if self._emit_pos >= len(self._emit_order):
-            self._new_tune()
-        idx = self._emit_order[self._emit_pos]
-        self._emit_pos += 1
-        if idx < len(self._buffer):
-            return self._buffer[idx]
-        bar = self._generate_bar()
-        self._buffer.append(bar)
-        return bar
+        self._bar_in_tune = len(self._pending)
 
     def _advance_chord(self) -> None:
         """Tahtikohtainen sointu: kadenssi V->I fraasin loppuun, muuten
@@ -327,7 +284,7 @@ class LLMComposer:
         self._prev_bars = []
         self._ending = False
         self._chord = "I"
-        self._plan_form()
+        self._pending.clear()
         self._apply_seed()  # uusi sävelmä alkaa aidolla genreavauksella
         self._last = self._run(self._seq, prime=True)
 
@@ -422,7 +379,9 @@ class LLMComposer:
     def _worker(self) -> None:
         while not self._stop.is_set():
             self._check_end_request()
-            item = self._next_structured()  # AABB: uniikki tai kertaus
+            # Seed-avaustahdit ensin (aito alku), sitten mallin jatko.
+            item = (self._pending.pop(0) if self._pending
+                    else self._generate_bar())
             while not self._stop.is_set():
                 if self._check_end_request():
                     break  # nappi painettu: hylkää kädessä oleva tahti
