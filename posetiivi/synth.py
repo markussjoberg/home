@@ -24,8 +24,11 @@ class Synth:
             raise RuntimeError(f"SoundFontin lataus epäonnistui: {cfg.soundfont}")
 
     def set_programs(self, melody: int, accomp: int) -> None:
+        # Kanavat: 0 = melodia, 1 = soinnut, 2 = basso (sama soundi kuin
+        # säestys — raitaliu'ut erottelevat tasot, ei sointiväri).
         self.fs.program_select(0, self.sfid, 0, melody)
         self.fs.program_select(1, self.sfid, 0, accomp)
+        self.fs.program_select(2, self.sfid, 0, accomp)
 
     def set_volume(self, channel: int, value: int) -> None:
         """MIDI CC7 -äänenvoimakkuus 0-127 (melodia/säestys-tasapaino)."""
@@ -38,7 +41,7 @@ class Synth:
         self.fs.noteoff(channel, pitch)
 
     def all_notes_off(self) -> None:
-        for ch in (0, 1):
+        for ch in (0, 1, 2):
             self.fs.all_notes_off(ch)
 
 

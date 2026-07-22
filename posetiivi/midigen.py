@@ -72,7 +72,12 @@ class LiveParams:
             f"rekisteri={self.register:+d}  soundi={PROGRAM_NAMES[self.program]}"
         )
         if self.genre_names:
-            s += f"  genre={self.genre_names[self.genre_ix % len(self.genre_names)]}"
+            # Vipuvalinta (one-hot/painot) voittaa näppäinohjauksen genre_ix:n
+            # — sama prioriteetti kuin LLMComposer._dominant_genre.
+            best = max(self.genre_weights, key=self.genre_weights.get,
+                       default=None) if any(self.genre_weights.values()) else None
+            name = best or self.genre_names[self.genre_ix % len(self.genre_names)]
+            s += f"  genre={name}"
         return s
 
 

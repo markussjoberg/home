@@ -96,6 +96,8 @@ class WebUI:
             self.synth.set_volume(0, int(msg["vol_mel"]))
         if "vol_acc" in msg:
             self.synth.set_volume(1, int(msg["vol_acc"]))
+        if "vol_bass" in msg:
+            self.synth.set_volume(2, int(msg["vol_bass"]))
 
     def state(self) -> dict:
         return {"speed": round(self.speed.normalized, 3),
@@ -127,16 +129,17 @@ class WebUI:
     # --- sivu -------------------------------------------------------------
 
     def page(self) -> str:
-        # Vain genret joilla on treenidataa — muut vivut olisivat kohinaa.
+        # Vain genret joilla on treenidataa. V5: genre on VALITSIN (yksi
+        # kerrallaan, on/off) — ei sekoitusliukuja. Jatkuvat vivut ovat
+        # tunnelmaa, ei genreä.
         genres = list(self.params.data_genres) or DEFAULT_GENRES
-        genre_sliders = "\n".join(
-            f'<label class="stop"><span>{g}</span>'
-            f'<input type="range" min="0" max="100" value="{100 if i == 0 else 0}"'
-            f' data-genre="{g}"></label>'
+        genre_buttons = "\n".join(
+            f'<button class="genre{" active" if i == 0 else ""}"'
+            f' data-genre="{g}">{g}</button>'
             for i, g in enumerate(genres))
         instr_opts = "".join(f'<option value="{i}">{PROGRAM_NAMES[p]}</option>'
                              for i, p in enumerate(PROGRAMS))
-        return PAGE.replace("__GENRES__", genre_sliders).replace(
+        return PAGE.replace("__GENRES__", genre_buttons).replace(
             "__INSTR__", instr_opts)
 
 
@@ -176,6 +179,11 @@ PAGE = """<!doctype html><html lang="fi"><head><meta charset="utf-8">
   #crank.autoplay #handle { animation: spin 2.1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .hint { font-size: 12px; color: #9b8360; margin-top: 8px; }
+  #genres { display: flex; flex-wrap: wrap; gap: 8px; }
+  button.genre { background: #32210f; color: #d9b877; border: 1px solid #8a6a3f;
+                 border-radius: 8px; padding: 8px 16px; font: inherit;
+                 font-size: 15px; cursor: pointer; }
+  button.genre.active { background: #d9b877; color: #32210f; font-weight: bold; }
 </style></head><body>
 <h1>Posetiivi</h1>
 
@@ -190,10 +198,10 @@ PAGE = """<!doctype html><html lang="fi"><head><meta charset="utf-8">
 </div>
 
 <div class="panel">
-  <h2>Tyylilajivivut</h2>
-  __GENRES__
-  <div class="hint">Painot sekoitetaan — 60/40 valssi-polkka on sallittu
-  ja toivottava.</div>
+  <h2>Tyylilaji</h2>
+  <div id="genres">__GENRES__</div>
+  <div class="hint">Yksi kerrallaan — vaihto astuu voimaan seuraavan
+  kappaleen alussa (tahtilaji vaihtuu genren mukana).</div>
 </div>
 
 <div class="panel">
@@ -207,15 +215,21 @@ PAGE = """<!doctype html><html lang="fi"><head><meta charset="utf-8">
 </div>
 
 <div class="panel">
-  <h2>Rekisterivivut (soundit)</h2>
+  <h2>Raidat</h2>
+  <label class="stop"><span>melodia</span>
+    <input type="range" min="0" max="127" value="110" data-param="vol_mel"></label>
+  <label class="stop"><span>soinnut</span>
+    <input type="range" min="0" max="127" value="90" data-param="vol_acc"></label>
+  <label class="stop"><span>basso</span>
+    <input type="range" min="0" max="127" value="100" data-param="vol_bass"></label>
+</div>
+
+<div class="panel">
+  <h2>Soundit</h2>
   <label class="stop"><span>melodia</span>
     <select data-sel="program_ix">__INSTR__</select></label>
   <label class="stop"><span>säestys</span>
     <select data-sel="accomp_ix">__INSTR__</select></label>
-  <label class="stop"><span>melodian taso</span>
-    <input type="range" min="0" max="127" value="110" data-param="vol_mel"></label>
-  <label class="stop"><span>säestyksen taso</span>
-    <input type="range" min="0" max="127" value="90" data-param="vol_acc"></label>
 </div>
 
 <script>
@@ -245,14 +259,14 @@ const crankEl = document.getElementById('crank');
 autoplayBtn.addEventListener('click',
   () => post({autoplay: autoplayBtn.dataset.on !== '1'}));
 
-// Tyylilajivivut: koko painovektori kerralla.
-const genreInputs = [...document.querySelectorAll('[data-genre]')];
-const sendGenres = () => {
+// Tyylilaji: on/off-valinta, yksi kerrallaan (V5). One-hot palvelimelle.
+const genreBtns = [...document.querySelectorAll('button.genre')];
+genreBtns.forEach(el => el.addEventListener('click', () => {
+  genreBtns.forEach(b => b.classList.toggle('active', b === el));
   const g = {};
-  genreInputs.forEach(el => g[el.dataset.genre] = el.value / 100);
+  genreBtns.forEach(b => g[b.dataset.genre] = b === el ? 1 : 0);
   post({genre: g});
-};
-genreInputs.forEach(el => el.addEventListener('input', sendGenres));
+}));
 
 // Muut saatimet.
 document.querySelectorAll('[data-param]').forEach(el =>

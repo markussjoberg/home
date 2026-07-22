@@ -60,8 +60,12 @@ class MidiEngine:
             bar, beats = result  # tahtilaji tulee tahdin mukana (voi vaihtua)
             bar_start = self._composed_until
             for n in bar:
-                self._push(bar_start + n.beat, "on", n.channel, n.pitch, n.velocity)
-                self._push(bar_start + n.beat + n.duration, "off", n.channel, n.pitch)
+                # Raitajako: säestyksen matalat sävelet (basso ~45) omalle
+                # kanavalleen 2, soinnut (~57+) jäävät kanavalle 1 —
+                # raitaliu'ut (melodia/soinnut/basso) miksaavat erikseen.
+                ch = 2 if (n.channel == 1 and n.pitch < 52) else n.channel
+                self._push(bar_start + n.beat, "on", ch, n.pitch, n.velocity)
+                self._push(bar_start + n.beat + n.duration, "off", ch, n.pitch)
             self._composed_until = bar_start + beats
 
     async def run(self) -> None:
