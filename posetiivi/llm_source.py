@@ -22,6 +22,24 @@ from .midigen import LiveParams, Note
 
 TOP_K = 24
 TAIL = 512  # edellisen biisin häntä uuden kontekstiin (settisiirtymät)
+
+# Harmoniakisko: musiikin säännöt ovat matemaattisesti hallussa, joten
+# harmoniaa ei arvota mallilta vaan se annetaan — malli improvisoi raamien
+# sisällä. Sointukone C-maailmassa (malli generoi C:ssä, k-siirto
+# transponoi jälkikäteen): funktionaalinen kielioppi + kadenssi V->I
+# fraasin loppuun (sama logiikka jolla treenidata soinnutettiin).
+SCALE_PCS = frozenset({0, 2, 4, 5, 7, 9, 11})  # C-duuri / A-molli
+CHORDS = {"I": {0, 4, 7}, "ii": {2, 5, 9}, "IV": {5, 9, 0},
+          "V": {7, 11, 2}, "vi": {9, 0, 4}}
+CHORD_NEXT = {  # kevyt funktionaalinen kielioppi (painot toistolla)
+    "I": ["I", "IV", "V", "vi", "ii", "IV", "V"],
+    "ii": ["V", "V", "IV"],
+    "IV": ["V", "I", "ii", "V"],
+    "V": ["I", "I", "vi"],
+    "vi": ["IV", "ii", "V"],
+}
+CHORD_PULL = 2.5   # sointusävelten veto (logit-lisä)
+SCALE_WALL = -6.0  # asteikon ulkopuoliset (pehmeä, ei -inf)
 # Kappaleen alku kuumempi -> peräkkäiset kappaleet haarautuvat eri suuntiin
 # ennen kuin mallin moodi vetää takaisin; jäähtyy normaaliin ensimmäisten
 # tahtien aikana jotta loppu pysyy jäsentyneenä.
@@ -79,6 +97,8 @@ class LLMComposer:
         self._emit_order: list[int] = []
         self._emit_pos = 0
         self._gen = 0  # "uusi kappale" -sukupolvi (vanhat tahdit mitätöityvät)
+        self._chord = "I"
+        self._chord_bias_cache: dict[str, object] = {}
         self._plan_form()
         self._queue: queue.Queue[tuple[list[Note], int]] = queue.Queue(maxsize=2)
         self._stop = threading.Event()
@@ -164,6 +184,7 @@ class LLMComposer:
         self._bar_in_tune = 0
         self._tune_len = sample_tune_len(random)
         self._prev_bars = []
+        self._chord = "I"  # harmoniakisko alkaa toonikasta
         self._plan_form()
         self._last = self._run(self._seq, prime=True)
 
@@ -178,6 +199,37 @@ class LLMComposer:
         bar = self._generate_bar()          # uusi uniikki tahti
         self._buffer.append(bar)
         return bar
+
+    def _advance_chord(self) -> None:
+        """Tahtikohtainen sointu: kadenssi V->I fraasin (8) loppuun, muuten
+        funktionaalinen kielioppi. Teline toistaa tahdit sointuineen, joten
+        AABB saa yhtenäisen harmonisen rakenteen."""
+        pos = self._bar_in_tune % 8
+        if pos == 6:
+            self._chord = "V"
+        elif pos in (7, 0):
+            self._chord = "I"
+        else:
+            self._chord = random.choice(CHORD_NEXT[self._chord])
+
+    def _chord_bias(self):
+        """Logit-lisä NOTE-tokeneille: sointusävelet vetävät (+2.5),
+        asteikko vapaa (0), ulkopuoliset painuvat (-6). Pehmeä — malli
+        improvisoi raamien sisällä, ei pakoteta."""
+        cached = self._chord_bias_cache.get(self._chord)
+        if cached is not None:
+            return cached
+        torch, tk = self.torch, self.tk
+        bias = torch.zeros(tk.VOCAB_SIZE)
+        pcs = CHORDS[self._chord]
+        for p in range(tk.NOTE_LO, tk.NOTE_HI + 1):
+            pc = p % 12
+            if pc in pcs:
+                bias[tk.TOK[f"NOTE_{p}"]] = CHORD_PULL
+            elif pc not in SCALE_PCS:
+                bias[tk.TOK[f"NOTE_{p}"]] = SCALE_WALL
+        self._chord_bias_cache[self._chord] = bias
+        return bias
 
     def request_new_tune(self) -> None:
         """"Uusi kappale" (moottori kutsuu): mitätöi vanhat tahdit ja
@@ -211,6 +263,8 @@ class LLMComposer:
         warmth = 1.0 + 0.15 * max(0.0, 1.0 - self._bar_in_tune / WARMUP_BARS)
         base_temp = (0.7 + 0.5 * self.params.temperature) * warmth
         bar: list[int] = []
+        self._advance_chord()  # harmoniakisko: tämän tahdin sointu
+        chord_bias = self._chord_bias()
         with torch.no_grad():
             if self._last is None:
                 self._last = self._run(self._seq, prime=True)
@@ -218,7 +272,7 @@ class LLMComposer:
                 bar = []
                 temp = base_temp * 1.25**attempt
                 for _ in range(160):
-                    logits = self._last / temp
+                    logits = self._last / temp + chord_bias
                     logits[t["PAD"]] = -float("inf")
                     logits[t["EOS"]] = -float("inf")   # teline hallitsee pituuden
                     kth = torch.topk(logits, TOP_K).values[-1]
