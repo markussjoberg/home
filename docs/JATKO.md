@@ -7,15 +7,37 @@ spekulaatiota.
 
 ## Nykyinen tunnettu hyvä tila (ÄLÄ riko tätä)
 
-- **Live-soitin = v4-malli + yksinkertainen generointi** (llm_source.py
-  palautettu d57c5fa-tilaan): temp ~0.9, luonnollinen EOS + kadenssi-
-  lopetus, vanha jumivahti (3 identtistä / ABAB). Tämä voitti korvatestissä
-  kaikki päivän kokeilut. Baseline jota vasten KAIKKI uusi mitataan.
+- **Live-soitin = d57c5fa-baseline + harmoniakisko + genreseedit, EI
+  telinettä** (git d031a98). Käyttäjä kuunnellut ja vahvistanut: kisko +
+  seedit korjasivat, teline oli vika. Tämä on nykyinen totuus, ei enää
+  kokeilu — kohdellaan uutena baselinena.
+  - Muoto/EOS/kadenssilopetus jäävät mallille (kuten alkuperäinen d57c5fa)
+  - Sointukisko: funktionaalinen kielioppi (I-IV-V-vi-ii C:ssä), pehmeä
+    logit-bias vain sävelvalintahetkiin, kadenssi V->I fraasin loppuun
+  - Genreseedit: joka sävelmä alkaa aidon saman genren sävelmän 2
+    ensimmäisestä tahdista (sävellajikorjattu C:hen), jatko mallilla
 - Malli: `training/ckpt/best.pt` (v4, 6x384, val 0.060, treenattu 07-21).
 - UI kunnossa: genre on/off-napit (4), raidat melodia/soinnut/basso,
   tunnelmaliu'ut, autoplay, uusi kappale (välitön tyhjennys + kadenssi),
   kammen jälkihidastus, rulla /200.
 - 6 pytestiä (`tests/`), evaluate.py, clean_midi.py, train_queue.sh.
+
+## Tunnettu puute nykyisessä kiskossa (käyttäjän havainto 07-22 ilta)
+
+Sointukielioppi (`CHORD_NEXT`) ja asteikko (`SCALE_PCS`) ovat TÄYSIN
+geneerisiä — samat kaikille neljälle genrelle. Valssi, polkka, marssi ja
+masurkka saavat identtisen harmonisen raamin, vaikka niillä on omat
+maneerinsa (esim. masurkka: korotettu 4./lainasoinnut; valssi: vahva
+I-V-I; marssi: staattisempi toonika-pedaali). `_dominant_genre()` on jo
+olemassa muualla koodissa muttei kiskon käytössä.
+
+**Seuraava koe (ei vielä tehty, tee YKSILLÄ muutoksella + A/B):**
+per-genre `CHORD_NEXT`/`SCALE_PCS`-taulukko `_advance_chord`/`_chord_bias`
+-funktioihin, valittuna `_dominant_genre()`:lla. Riski: käsin viritetyt
+genresäännöt voivat olla yhtä väärässä kuin mallin oma hallusinaatio jos
+musiikkiteoria on arvattu — vaatii oikeaa tietoa per genre, ei arvausta.
+Jos ei ole varmaa musiikkiteoriaa käytettävissä, älä keksi — kysy
+käyttäjältä tai jätä tekemättä.
 
 ## Mitattua faktaa (säilytä nämä opit)
 
@@ -38,13 +60,13 @@ spekulaatiota.
 
 ## Mikä oli näennäisratkaisua (älä toista sellaisenaan)
 
-- AABB-teline livessä (jäykkä, kuulosti koneelta)
-- Harmoniakisko livessä (korjattunakaan ei voittanut baselinea pinossa)
+- **AABB-teline livessä** — tämä oli vika, ei kisko/seedit (käyttäjän
+  korvatuomio 07-22 ilta). Pidä pois livestä.
 - Lämpötila 1.1+ (mittarivetoinen virhe)
 - Naapuritahtivahti livessä (hylkäsi aidonkin toiston)
 
-Nämä elävät offline-työkaluissa (generate.py: sample_structured;
-evaluate.py) kokeiluja varten — eivät ole "valmiita ominaisuuksia".
+Teline elää offline-työkalussa (generate.py: sample_structured;
+evaluate.py) kokeiluja varten — ei ole "valmis ominaisuus".
 
 ## Prosessisääntö jatkoon (tärkein asia tässä dokumentissa)
 
@@ -55,23 +77,17 @@ evaluate.py) kokeiluja varten — eivät ole "valmiita ominaisuuksia".
 
 ## Seuraavat askeleet (halvin ja lupaavin ensin)
 
-1. **A/B: pelkät seedit baselinen päälle.** Lupaavin yksittäinen idea
-   (aito genreavaus + vapaus mallille). Poimi aa3c921:stä _pick_seed +
-   _transpose_to_c + kevyt _apply_seed MUTTA ilman telinettä: syötä seed
-   konteksti-primeen ja emittoi sen tahdit sävelmän alkuna, jatko
-   normaalisti. Kuuntele A/B. Voitto -> jää; tappio -> pois ja kirjaa.
-2. **A/B: harmoniakisko YKSIN** (ilman telinettä/seedejä), heikommalla
-   vedolla (esim. +1.5) ja portitettuna sävelvalintoihin. Vasta jos
-   seedit on ratkaistu.
-3. **Uudet genret — V5:n oikea päämäärä.** FolkWiki-scrape jäi kesken
+1. **A/B: genrekohtainen sointukielioppi/asteikko** nykyisen kiskon
+   päälle (ks. "Tunnettu puute" yllä). Yksi muutos, kuuntele, tuomitse.
+2. **Uudet genret — V5:n oikea päämäärä.** FolkWiki-scrape jäi kesken
    (sivusto epävakaa; pub/cache osin rikki). Vaihtoehdot: Nottingham
    Music Database ja abcnotation.com (siisti ABC, hae-ja-aja) jenkalle/
    polskalle; tango vaatii clean_midi.py-putken + lähteen. Treeni:
    train_queue.sh toimii (arkkitehtuuri luetaan checkpointista).
    Muista datahygienia (V5.md: SOURCES.md, opt-out).
-4. **Pi-valmistelu** kun rauta saapuu: config.tomliin cache_len (~1536)
+3. **Pi-valmistelu** kun rauta saapuu: config.tomliin cache_len (~1536)
    + torch-säierajat + karsittu soundfont; mittaa ms/tahti Pi 4 1GB:llä.
-5. Fyysinen paneeli V5.md:n mukaan (12-pykälävalitsin jne.) — vasta kun
+4. Fyysinen paneeli V5.md:n mukaan (12-pykälävalitsin jne.) — vasta kun
    ääni on kunnossa.
 
 ## Nopeat komennot
@@ -84,6 +100,6 @@ cd ~/posetiivi && .venv/bin/python -u -m posetiivi --ui   # simulaattori
 git log --oneline -20                                      # historia
 ```
 
-Baseline-commit: 6cf7aa7 ("Palauta live-soitin eiliseen tunnettuun
-hyvään tilaan"). Jos jokin hajoaa: `git diff 6cf7aa7 -- posetiivi/`
-kertoo mitä on muutettu sen jälkeen.
+Baseline-commit (kisko+seedit, korvavarmistettu): d031a98. Aiempi
+puhdas baseline ilman kiskoa/seedejä: 6cf7aa7. Jos jokin hajoaa:
+`git diff d031a98 -- posetiivi/` kertoo mitä on muutettu sen jälkeen.
