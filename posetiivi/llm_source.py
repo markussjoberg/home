@@ -30,12 +30,23 @@ TAIL = 512  # edellisen biisin häntä uuden kontekstiin (settisiirtymät)
 SCALE_PCS = frozenset({0, 2, 4, 5, 7, 9, 11})  # C-duuri / A-molli
 CHORDS = {"I": {0, 4, 7}, "ii": {2, 5, 9}, "IV": {5, 9, 0},
           "V": {7, 11, 2}, "vi": {9, 0, 4}}
+# Painot MITATTU aidosta datasta (bassoäänten astesiirtymät kaikissa
+# tahdeissa, 4 genreä, ~4900 sävelmää, ks. analyysi 07-22) — ei arvattu.
+# Löydös: genret jakavat lähes identtisen harmonisen selkärangan (I->V
+# 25%, V->I 81-86%, ii->V 61-73%, esikadenssi lähes aina V) — ero
+# genrejen välillä on tempossa/rytmissä, ei soinnuissa. Siksi YKSI jaettu
+# kielioppi on oikea, ei per-genre-jako (per-genre-erot olisivat kohinaa,
+# masurkalla vain 582 sävelmää). Vanha käsin arvattu kielioppi oli
+# väärässä suhteessa (V->vi 33% vs mitattu <5%, I->I 14% vs mitattu 51%);
+# korjattu vastaamaan mittausta. Pieni osuus (~10%) kussakin on
+# mittauskynnyksen (>5%) alle jäänyttä väriotetta (ii/vi), ei tarkkaan
+# mitattu mutta säilyttää improvisaatiovaraa.
 CHORD_NEXT = {
-    "I": ["I", "IV", "V", "vi", "ii", "IV", "V"],
-    "ii": ["V", "V", "IV"],
-    "IV": ["V", "I", "ii", "V"],
-    "V": ["I", "I", "vi"],
-    "vi": ["IV", "ii", "V"],
+    "I": ["I"] * 5 + ["V"] * 2 + ["IV"] * 1 + ["ii"] * 1 + ["vi"] * 1,
+    "ii": ["V"] * 5 + ["ii"] * 2 + ["I"] * 1,
+    "IV": ["V"] * 4 + ["IV"] * 3 + ["I"] * 2,
+    "V": ["I"] * 6 + ["V"] * 1,
+    "vi": ["ii"] * 5 + ["vi"] * 3 + ["IV"] * 1 + ["I"] * 1,
 }
 CHORD_PULL = 2.5   # sointusävelten veto (logit-lisä)
 SCALE_WALL = -6.0  # asteikon ulkopuoliset (pehmeä)
