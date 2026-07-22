@@ -75,8 +75,29 @@ def fit_cond(cond: list[float], model) -> list[float]:
     return cond[:cd] + [0.0] * (cd - len(cond))
 
 
-def is_loop(prev: list[tuple], sig: tuple) -> bool:
-    """Kolmas identtinen tahti peräkkäin tai ABAB kolmatta kierrosta."""
+# Melodisesti erottelevat tokenit: sijainti + sävelkorkeus. DUR/VEL/CH
+# jätetään pois, jotta samankaltaisuus vastaa mittarin (pos,pitch)-perustaa.
+_CONTENT_TOKS = frozenset(
+    [TOK[f"POS_{i}"] for i in range(16)]
+    + [TOK[f"NOTE_{p}"] for p in range(NOTE_LO, NOTE_HI + 1)]
+)
+
+
+def _bar_jac(a: tuple, b: tuple) -> float:
+    """Naapuritahtien melodinen samankaltaisuus (POS+NOTE-joukkojen Jaccard)."""
+    sa = {t for t in a if t in _CONTENT_TOKS}
+    sb = {t for t in b if t in _CONTENT_TOKS}
+    if not sa and not sb:
+        return 1.0
+    return len(sa & sb) / max(len(sa | sb), 1)
+
+
+def is_loop(prev: list[tuple], sig: tuple, thr: float = 0.8) -> bool:
+    """Toistovahti. Hylkää: (1) naapuritahti joka on >thr edellisen kopio
+    — juuri mitattu lag1-ongelma (07-22: gen 7-43 % vs aito ~1 %); (2)
+    kolme identtistä peräkkäin; (3) ABAB-jumi."""
+    if prev and _bar_jac(sig, prev[-1]) > thr:
+        return True
     if len(prev) >= 2 and sig == prev[-1] == prev[-2]:
         return True
     return len(prev) >= 3 and sig == prev[-2] and prev[-1] == prev[-3]

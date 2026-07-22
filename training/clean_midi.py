@@ -29,8 +29,13 @@ GRID = 4  # 1/16-osia per neljäsosa
 
 
 def _beats_per_bar(num: int, den: int) -> int | None:
-    beats = num * 4 // den if den in (4, 8) else num
-    return beats if beats in SUPPORTED_METERS else None
+    """Vain aidot yksinkertaiset tahtilajit 2/4, 3/4, 4/4. Yhdistelmä- ja
+    parittomat (6/8, 9/8, 2/2 ...) HYLÄTÄÄN — ei mankeloida 3/4:ksi, koska
+    se saastuttaisi treenidatan väärämetrisillä sävelmillä. clean_midi on
+    tarkoituksella tiukempi kuin prepare_data (se nielee sotkuista dataa)."""
+    if den == 4 and num in SUPPORTED_METERS:
+        return num
+    return None
 
 
 def _monophonicity(notes) -> float:

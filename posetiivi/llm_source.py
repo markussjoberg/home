@@ -51,6 +51,11 @@ class LLMComposer:
 
         self.torch, self.tk, self.genres = torch, tk, GENRES
         self._genre_meter = GENRE_METER
+        # Melodisesti erotteleva token-joukko looppivahdille (POS+NOTE).
+        self._content_toks = frozenset(
+            [tk.TOK[f"POS_{i}"] for i in range(16)]
+            + [tk.TOK[f"NOTE_{p}"] for p in range(tk.NOTE_LO, tk.NOTE_HI + 1)]
+        )
         LiveParams.genre_names = GENRES
         LiveParams.data_genres = DATA_GENRES
         ckpt = torch.load(ckpt_path, map_location="cpu")
@@ -119,9 +124,19 @@ class LLMComposer:
         cd = self.model.cfg.cond_dim  # vanha ckpt: 14 -> pudota rakennepiirteet
         return cond[:cd] + [0.0] * (cd - len(cond))
 
-    def _is_loop(self, sig: tuple) -> bool:
-        """Kolmas identtinen tahti peräkkäin tai ABAB-jumi."""
+    def _is_loop(self, sig: tuple, thr: float = 0.8) -> bool:
+        """Toistovahti. Hylkää: (1) naapuritahti joka on >thr edellisen
+        kopio — mitattu lag1-ongelma (07-22: 7-43 % vs aito ~1 %); (2)
+        kolme identtistä peräkkäin; (3) ABAB-jumi. Vertailu vain melodisesti
+        erottelevaan sisältöön (POS+NOTE), ei DUR/VEL:iin."""
         p = self._prev_bars
+        if p:
+            c = self._content_toks
+            sa = {t for t in sig if t in c}
+            sb = {t for t in p[-1] if t in c}
+            jac = len(sa & sb) / max(len(sa | sb), 1) if (sa or sb) else 1.0
+            if jac > thr:
+                return True
         if len(p) >= 2 and sig == p[-1] == p[-2]:
             return True
         return len(p) >= 3 and sig == p[-2] and p[-1] == p[-3]
