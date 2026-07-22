@@ -50,6 +50,15 @@ CHORD_NEXT = {
 }
 CHORD_PULL = 2.5   # sointusävelten veto (logit-lisä)
 SCALE_WALL = -6.0  # asteikon ulkopuoliset (pehmeä)
+# Äänenkuljetus: mitattu 07-22 (koodikatselmointi + 1555 intervallia) —
+# generoitu melodia hyppii enemmän kuin aito (askelin 43% vs aito 65%,
+# isoja hyppyjä >7 puolisävelaskelta 9% vs aito 4%). Sointu/asteikko-
+# vedot eivät rajoita HYPYN KOKOA, vain pitch classia. Lisätään erillinen,
+# soinnusta riippumaton sakko hypyn koolle (perusmusiikkiteoriaa: askelin
+# liike on normi, hyppy poikkeus joka purkautuu) — sama rekisterimuisti
+# jota jo käytetään sointuvedon ankkurina.
+LEAP_FREE = 2      # puolisävelaskelta ilman sakkoa (sekunti, koherentti)
+LEAP_PENALTY = 0.35  # logit-sakko per puolisävelaskel yli vapaan
 # Kappaleen alku kuumempi -> peräkkäiset kappaleet haarautuvat eri suuntiin
 # ennen kuin mallin moodi vetää takaisin; jäähtyy normaaliin ensimmäisten
 # tahtien aikana jotta loppu pysyy jäsentyneenä.
@@ -99,7 +108,8 @@ class LLMComposer:
         self._ending = False  # "uusi kappale" -nappi: lopetellaan kadenssiin
         self._end_deadline = 0
         self._chord = "I"
-        self._chord_bias_cache: dict[str, object] = {}
+        self._last_mel_pitch: int | None = None  # rekisterimuisti (bugikorjaus 07-22)
+        self._last_acc_pitch: int | None = None
         self._pending: list[tuple[list[Note], int]] = []  # seed-avaustahdit
         self._apply_seed()
         self._queue: queue.Queue[tuple[list[Note], int]] = queue.Queue(maxsize=2)
@@ -222,20 +232,33 @@ class LLMComposer:
 
     def _apply_seed(self) -> None:
         """Aito avaus kontekstiin + emittoitavaksi; jatko jää mallille."""
+        self._last_mel_pitch = None
+        self._last_acc_pitch = None
         seed = self._pick_seed()
         if not seed:
+            # Ei seediä (esim. genrellä ei dataa) -> oletusrekisteri.
+            self._last_mel_pitch, self._last_acc_pitch = 72, 48
             return
         self._seq += seed
         bar_toks: list[int] = []
+        all_bars: list[list[int]] = []
         for tok in seed:
             if tok == self.tk.TOK["BAR"]:
                 self._pending.append((self._bar_notes(bar_toks),
                                       self.BEATS_PER_BAR))
                 self._prev_bars.append(tuple(bar_toks))
+                all_bars.append(bar_toks)
                 bar_toks = []
             else:
                 bar_toks.append(tok)
         self._bar_in_tune = len(self._pending)
+        self._seed_anchor(all_bars)
+        # Jos seedissä ei ollut jotain kanavaa (esim. pelkkä melodia),
+        # täytä oletuksella ettei rekisteriveto jää olemattomaksi.
+        if self._last_mel_pitch is None:
+            self._last_mel_pitch = 72
+        if self._last_acc_pitch is None:
+            self._last_acc_pitch = 48
 
     def _advance_chord(self) -> None:
         """Tahtikohtainen sointu: kadenssi V->I fraasin loppuun, muuten
@@ -248,24 +271,51 @@ class LLMComposer:
         else:
             self._chord = random.choice(CHORD_NEXT[self._chord])
 
-    def _chord_bias(self):
-        """Logit-lisä NOTE-tokeneille: sointusävelet +2.5, asteikko 0,
-        ulkopuoliset -6. Käytetään VAIN sävelvalintahetkiin (muuten
-        NOTE-massa syrjäyttää BAR-tokenin -> monsteritahdit)."""
-        cached = self._chord_bias_cache.get(self._chord)
-        if cached is not None:
-            return cached
+    def _chord_bias(self, anchor: int):
+        """Logit-lisä NOTE-tokeneille, kolme kerrosta:
+        1. Sointuveto (+2.5, rekisterisidonnainen: täysi voima oktaavin
+           sisällä viimeisimmästä saman kanavan sävelestä, muuten 0.3x —
+           BUGI löydettiin koodikatselmoinnissa 07-22: vanha versio veti
+           yhtä voimakkaasti kaikissa 7 oktaavissa, malli saattoi hypätä
+           kauas vain koska pitch class oli "oikea").
+        2. Asteikon seinä (-6, rekisteristä riippumaton — väärä pitch
+           class on väärä joka oktaavissa).
+        3. Äänenkuljetussakko (-0.35/puolisävelaskel yli 2 vapaan) —
+           mitattu 07-22: ilman tätä hypyt 43% askelin vs aidon 65%.
+           Perusmusiikkiteoriaa (askel on normi), ei genrekohtainen arvaus."""
         torch, tk = self.torch, self.tk
         bias = torch.zeros(tk.VOCAB_SIZE)
         pcs = CHORDS[self._chord]
         for p in range(tk.NOTE_LO, tk.NOTE_HI + 1):
             pc = p % 12
+            tok = tk.TOK[f"NOTE_{p}"]
+            leap_penalty = -LEAP_PENALTY * max(0, abs(p - anchor) - LEAP_FREE)
             if pc in pcs:
-                bias[tk.TOK[f"NOTE_{p}"]] = CHORD_PULL
+                pull = CHORD_PULL if abs(p - anchor) <= 12 else CHORD_PULL * 0.3
+                bias[tok] = pull + leap_penalty
             elif pc not in SCALE_PCS:
-                bias[tk.TOK[f"NOTE_{p}"]] = SCALE_WALL
-        self._chord_bias_cache[self._chord] = bias
+                bias[tok] = SCALE_WALL + leap_penalty
+            else:
+                bias[tok] = leap_penalty
         return bias
+
+    def _seed_anchor(self, bar_toks_list: list[list[int]]) -> None:
+        """Aseta rekisterimuisti (viimeisin sävel per kanava) seedin
+        viimeisistä nuoteista, jotta ensimmäinen generoitu tahti jatkaa
+        seedin rekisteristä eikä hyppää oletusarvoon."""
+        tk = self.tk
+        for bar_toks in reversed(bar_toks_list):
+            for i in range(len(bar_toks) - 1, -1, -1):
+                name = tk.VOCAB[bar_toks[i]]
+                if name.startswith("NOTE_") and i > 0:
+                    ch = tk.VOCAB[bar_toks[i - 1]]
+                    pitch = int(name.split("_")[1])
+                    if ch == "CH_MEL" and self._last_mel_pitch is None:
+                        self._last_mel_pitch = pitch
+                    elif ch == "CH_ACC" and self._last_acc_pitch is None:
+                        self._last_acc_pitch = pitch
+            if self._last_mel_pitch is not None and self._last_acc_pitch is not None:
+                return
 
     def _is_loop(self, sig: tuple) -> bool:
         """Kolmas identtinen tahti peräkkäin tai ABAB-jumi."""
@@ -320,12 +370,12 @@ class LLMComposer:
         base_temp = (0.7 + 0.5 * self.params.temperature) * warmth
         bar: list[int] = []
         self._advance_chord()  # harmoniakisko: tämän tahdin sointu
-        chord_bias = self._chord_bias()
         with torch.no_grad():
             if self._last is None:
                 self._last = self._run(self._seq, prime=True)
             if self._ending and self._bar_in_tune >= self._end_deadline:
-                # Malli ei päättänyt itse ajoissa — pakotettu piste.
+                # Malli ei päättänyt itse ajoissa — pakotettu piste (nappi
+                # painettu, moottori on jo vaientanut -> hengähdystahti ok).
                 self._new_tune()
                 return [], self.BEATS_PER_BAR
             for attempt in range(4):
@@ -333,17 +383,35 @@ class LLMComposer:
                 temp = base_temp * 1.25**attempt
                 for _ in range(160):
                     logits = self._last / temp
-                    if self._seq[-1] in (t["CH_MEL"], t["CH_ACC"]):
-                        logits = logits + chord_bias  # vain sävelvalintaan
+                    prev = self._seq[-1]
+                    if prev == t["CH_MEL"]:
+                        logits = logits + self._chord_bias(self._last_mel_pitch)
+                    elif prev == t["CH_ACC"]:
+                        logits = logits + self._chord_bias(self._last_acc_pitch)
                     logits[t["PAD"]] = -float("inf")
                     kth = torch.topk(logits, TOP_K).values[-1]
                     logits[logits < kth] = -float("inf")
                     nxt = int(torch.multinomial(torch.softmax(logits, -1), 1))
                     if nxt == t["EOS"]:
-                        # Piste: biisi päättyi. Uusi lause alkaa, kontekstiin
-                        # jää edellisen häntä; väliin hengähdystahti.
+                        # BUGIKORJAUS 07-22: spontaani EOS (malli päätti
+                        # sävelmän kesken, EI napin painallus) ei enää
+                        # palauta tyhjää — mitattu 3 % tahdeista täysin
+                        # hiljaisia, kuului satunnaisena katkeamisena.
+                        # Uuden sävelmän ensimmäinen tahti (seed jos on,
+                        # muuten generoitu) HETI niin ettei kuulija koskaan
+                        # kuule tyhjää tahtia. _next_item, EI suoraan
+                        # _generate_bar — muuten seedin tahdit ohitettaisiin
+                        # ja soisivat väärässä järjestyksessä vasta perässä.
                         self._new_tune()
-                        return [], self.BEATS_PER_BAR
+                        return self._next_item()
+                    if prev in (t["CH_MEL"], t["CH_ACC"]):
+                        name = self.tk.VOCAB[nxt]
+                        if name.startswith("NOTE_"):
+                            pitch = int(name.split("_")[1])
+                            if prev == t["CH_MEL"]:
+                                self._last_mel_pitch = pitch
+                            else:
+                                self._last_acc_pitch = pitch
                     self._seq.append(nxt)
                     if self._cache.len + 1 >= self._cache.max_len:
                         self._last = self._run(self._seq[-TAIL:], prime=True)
@@ -376,12 +444,16 @@ class LLMComposer:
             for n in notes
         ]
 
+    def _next_item(self) -> tuple[list[Note], int]:
+        """Seuraava emittoitava tahti: seed-avaus jonossa ensin (aito
+        alku), muuten mallin generoima. Käytetään sekä workerissa että
+        spontaanin EOS-palautumisen yhteydessä (sama järjestyssääntö)."""
+        return self._pending.pop(0) if self._pending else self._generate_bar()
+
     def _worker(self) -> None:
         while not self._stop.is_set():
             self._check_end_request()
-            # Seed-avaustahdit ensin (aito alku), sitten mallin jatko.
-            item = (self._pending.pop(0) if self._pending
-                    else self._generate_bar())
+            item = self._next_item()
             while not self._stop.is_set():
                 if self._check_end_request():
                     break  # nappi painettu: hylkää kädessä oleva tahti
