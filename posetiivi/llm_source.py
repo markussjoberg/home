@@ -22,6 +22,23 @@ from .midigen import LiveParams, Note
 
 TOP_K = 24
 TAIL = 512  # edellisen biisin häntä uuden kontekstiin (settisiirtymät)
+
+# Harmoniakisko: sointukierto annetaan säännöistä, malli improvisoi sen
+# sisällä. C-maailmassa (k-siirto transponoi jälkikäteen). EI telinettä —
+# muoto jää mallille (korvahypoteesi 07-22: teline oli se vika, kisko+seedit
+# korjasivat).
+SCALE_PCS = frozenset({0, 2, 4, 5, 7, 9, 11})  # C-duuri / A-molli
+CHORDS = {"I": {0, 4, 7}, "ii": {2, 5, 9}, "IV": {5, 9, 0},
+          "V": {7, 11, 2}, "vi": {9, 0, 4}}
+CHORD_NEXT = {
+    "I": ["I", "IV", "V", "vi", "ii", "IV", "V"],
+    "ii": ["V", "V", "IV"],
+    "IV": ["V", "I", "ii", "V"],
+    "V": ["I", "I", "vi"],
+    "vi": ["IV", "ii", "V"],
+}
+CHORD_PULL = 2.5   # sointusävelten veto (logit-lisä)
+SCALE_WALL = -6.0  # asteikon ulkopuoliset (pehmeä)
 # Kappaleen alku kuumempi -> peräkkäiset kappaleet haarautuvat eri suuntiin
 # ennen kuin mallin moodi vetää takaisin; jäähtyy normaaliin ensimmäisten
 # tahtien aikana jotta loppu pysyy jäsentyneenä.
@@ -70,6 +87,10 @@ class LLMComposer:
         self._prev_bars: list[tuple] = []
         self._ending = False  # "uusi kappale" -nappi: lopetellaan kadenssiin
         self._end_deadline = 0
+        self._chord = "I"
+        self._chord_bias_cache: dict[str, object] = {}
+        self._pending: list[tuple[list[Note], int]] = []  # seed-avaustahdit
+        self._apply_seed()
         self._queue: queue.Queue[tuple[list[Note], int]] = queue.Queue(maxsize=2)
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._worker, daemon=True)
@@ -119,6 +140,122 @@ class LLMComposer:
         cd = self.model.cfg.cond_dim  # vanha ckpt: 14 -> pudota rakennepiirteet
         return cond[:cd] + [0.0] * (cd - len(cond))
 
+    _seed_pools: dict[str, object] = {}  # genre -> (tokens, doc-rajat) | None
+
+    def _seed_pool(self, genre: str):
+        """Aidot sävelmät seedipankkina: prepared_<genre>/dataset.npz."""
+        if genre not in self._seed_pools:
+            import numpy as np
+            from pathlib import Path
+            pool = None
+            path = Path("training/data") / f"prepared_{genre}" / "dataset.npz"
+            if path.exists():
+                z = np.load(path)
+                ends = z["doc_ends"]
+                starts = np.concatenate(([0], ends[:-1]))
+                pool = (z["tokens"], list(zip(starts.tolist(), ends.tolist())))
+            self._seed_pools[genre] = pool
+        return self._seed_pools[genre]
+
+    def _pick_seed(self, n_bars: int = 2, tries: int = 8) -> list[int] | None:
+        """Genreseed: satunnaisen aidon sävelmän ensimmäiset tahdit."""
+        pool = self._seed_pool(self._dominant_genre())
+        if pool is None:
+            return None
+        toks, bounds = pool
+        t = self.tk.TOK
+        for _ in range(tries):
+            s, e = random.choice(bounds)
+            doc = toks[s:e].tolist()
+            if len(doc) < 8 or doc[0] != t["BOS"]:
+                continue
+            if doc[1] != t[f"METER_{self.BEATS_PER_BAR}"]:
+                continue
+            out, bars = [], 0
+            for tok in doc[3:]:
+                if tok == t["EOS"]:
+                    break
+                out.append(tok)
+                if tok == t["BAR"]:
+                    bars += 1
+                    if bars == n_bars:
+                        break
+            if bars == n_bars and 8 <= len(out) <= 120:
+                return self._transpose_to_c(out)
+        return None
+
+    def _transpose_to_c(self, seed: list[int]) -> list[int]:
+        """Korpus on alkuperäisissä sävellajeissa; malli + kisko elävät
+        C:ssä. Ilman siirtoa avaus ja jatko olisivat eri sävellajeissa
+        (bitonaalinen sotku, lokidiagnoosi 07-22)."""
+        tk = self.tk
+        pitches = [int(tk.VOCAB[tok].split("_")[1]) for tok in seed
+                   if tk.VOCAB[tok].startswith("NOTE_")]
+        if not pitches:
+            return seed
+        def score(d):
+            return sum((p + d) % 12 in SCALE_PCS for p in pitches)
+        best = max(range(-6, 7), key=lambda d: (score(d), -abs(d)))
+        if best == 0:
+            return seed
+        out = []
+        for tok in seed:
+            name = tk.VOCAB[tok]
+            if name.startswith("NOTE_"):
+                p = min(max(int(name.split("_")[1]) + best,
+                            tk.NOTE_LO), tk.NOTE_HI)
+                out.append(tk.TOK[f"NOTE_{p}"])
+            else:
+                out.append(tok)
+        return out
+
+    def _apply_seed(self) -> None:
+        """Aito avaus kontekstiin + emittoitavaksi; jatko jää mallille."""
+        seed = self._pick_seed()
+        if not seed:
+            return
+        self._seq += seed
+        bar_toks: list[int] = []
+        for tok in seed:
+            if tok == self.tk.TOK["BAR"]:
+                self._pending.append((self._bar_notes(bar_toks),
+                                      self.BEATS_PER_BAR))
+                self._prev_bars.append(tuple(bar_toks))
+                bar_toks = []
+            else:
+                bar_toks.append(tok)
+        self._bar_in_tune = len(self._pending)
+
+    def _advance_chord(self) -> None:
+        """Tahtikohtainen sointu: kadenssi V->I fraasin loppuun, muuten
+        funktionaalinen kielioppi."""
+        pos = self._bar_in_tune % 8
+        if pos == 6:
+            self._chord = "V"
+        elif pos in (7, 0):
+            self._chord = "I"
+        else:
+            self._chord = random.choice(CHORD_NEXT[self._chord])
+
+    def _chord_bias(self):
+        """Logit-lisä NOTE-tokeneille: sointusävelet +2.5, asteikko 0,
+        ulkopuoliset -6. Käytetään VAIN sävelvalintahetkiin (muuten
+        NOTE-massa syrjäyttää BAR-tokenin -> monsteritahdit)."""
+        cached = self._chord_bias_cache.get(self._chord)
+        if cached is not None:
+            return cached
+        torch, tk = self.torch, self.tk
+        bias = torch.zeros(tk.VOCAB_SIZE)
+        pcs = CHORDS[self._chord]
+        for p in range(tk.NOTE_LO, tk.NOTE_HI + 1):
+            pc = p % 12
+            if pc in pcs:
+                bias[tk.TOK[f"NOTE_{p}"]] = CHORD_PULL
+            elif pc not in SCALE_PCS:
+                bias[tk.TOK[f"NOTE_{p}"]] = SCALE_WALL
+        self._chord_bias_cache[self._chord] = bias
+        return bias
+
     def _is_loop(self, sig: tuple) -> bool:
         """Kolmas identtinen tahti peräkkäin tai ABAB-jumi."""
         p = self._prev_bars
@@ -135,6 +272,9 @@ class LLMComposer:
         self._tune_len = sample_tune_len(random)
         self._prev_bars = []
         self._ending = False
+        self._chord = "I"
+        self._pending.clear()
+        self._apply_seed()  # uusi sävelmä alkaa aidolla genreavauksella
         self._last = self._run(self._seq, prime=True)
 
     def _check_end_request(self) -> bool:
@@ -168,6 +308,8 @@ class LLMComposer:
         warmth = 1.0 + START_BOOST * max(0.0, 1.0 - self._bar_in_tune / WARMUP_BARS)
         base_temp = (0.7 + 0.5 * self.params.temperature) * warmth
         bar: list[int] = []
+        self._advance_chord()  # harmoniakisko: tämän tahdin sointu
+        chord_bias = self._chord_bias()
         with torch.no_grad():
             if self._last is None:
                 self._last = self._run(self._seq, prime=True)
@@ -180,6 +322,8 @@ class LLMComposer:
                 temp = base_temp * 1.25**attempt
                 for _ in range(160):
                     logits = self._last / temp
+                    if self._seq[-1] in (t["CH_MEL"], t["CH_ACC"]):
+                        logits = logits + chord_bias  # vain sävelvalintaan
                     logits[t["PAD"]] = -float("inf")
                     kth = torch.topk(logits, TOP_K).values[-1]
                     logits[logits < kth] = -float("inf")
@@ -206,23 +350,27 @@ class LLMComposer:
                 break
         self._prev_bars.append(tuple(bar))
         self._bar_in_tune += 1
+        return self._bar_notes(bar), self.BEATS_PER_BAR
+
+    def _bar_notes(self, bar: list[int]) -> list[Note]:
+        """Tahdin tokenit -> Note-lista. k-näppäimen sävellaji =
+        transponointi (malli generoi C-maailmassa)."""
         notes, _ = self.tk.decode(self._prefix() + bar)
         grid = self.tk.GRID
-        # k-näppäimen sävellaji = transponointi (malli generoi C-maailmassa,
-        # transpoosiaugmentoinnin ansiosta siirto kuulostaa luontevalta).
         shift = self.params.key % 12
         shift = shift - 12 if shift > 6 else shift
-        out = [
+        return [
             Note(beat=n.pos / grid, pitch=min(max(n.pitch + shift, 21), 108),
                  velocity=n.velocity, duration=n.dur / grid, channel=n.channel)
             for n in notes
         ]
-        return out, self.BEATS_PER_BAR
 
     def _worker(self) -> None:
         while not self._stop.is_set():
             self._check_end_request()
-            item = self._generate_bar()  # (nuotit, iskua/tahti)
+            # Seed-avaustahdit ensin (aito alku), sitten mallin jatko.
+            item = (self._pending.pop(0) if self._pending
+                    else self._generate_bar())
             while not self._stop.is_set():
                 if self._check_end_request():
                     break  # nappi painettu: hylkää kädessä oleva tahti
