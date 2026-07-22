@@ -87,6 +87,19 @@ class MidiEngine:
             dt, last_wall = now - last_wall, now
             s = self.speed.normalized
 
+            if self.params.end_song_request:
+                # "Uusi kappale" -nappi: välitön vaikutus. Tyhjennä jo
+                # ajastetut tapahtumat, vaienna soivat äänet ja komenna
+                # säveltäjä uuteen sävelmään — muuten keko (2 tahtia) +
+                # jono (2 tahtia) soisivat vanhaa vielä ~4 tahtia.
+                self.params.end_song_request = False
+                self._events.clear()
+                self._composed_until = clock
+                self.synth.all_notes_off()
+                restart = getattr(self.composer, "request_new_tune", None)
+                if restart:
+                    restart()
+
             accomp = (PROGRAMS[self.params.accomp_ix % len(PROGRAMS)]
                       if self.params.accomp_ix is not None else midi.accomp_program)
             if (self.params.program, accomp) != prev_programs:

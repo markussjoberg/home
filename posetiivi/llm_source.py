@@ -78,6 +78,7 @@ class LLMComposer:
         self._buffer: list[tuple[list, int]] = []  # uniikit tahdit
         self._emit_order: list[int] = []
         self._emit_pos = 0
+        self._gen = 0  # "uusi kappale" -sukupolvi (vanhat tahdit mitätöityvät)
         self._plan_form()
         self._queue: queue.Queue[tuple[list[Note], int]] = queue.Queue(maxsize=2)
         self._stop = threading.Event()
@@ -128,19 +129,12 @@ class LLMComposer:
         cd = self.model.cfg.cond_dim  # vanha ckpt: 14 -> pudota rakennepiirteet
         return cond[:cd] + [0.0] * (cd - len(cond))
 
-    def _is_loop(self, sig: tuple, thr: float = 0.8) -> bool:
-        """Toistovahti. Hylkää: (1) naapuritahti joka on >thr edellisen
-        kopio — mitattu lag1-ongelma (07-22: 7-43 % vs aito ~1 %); (2)
-        kolme identtistä peräkkäin; (3) ABAB-jumi. Vertailu vain melodisesti
-        erottelevaan sisältöön (POS+NOTE), ei DUR/VEL:iin."""
+    def _is_loop(self, sig: tuple) -> bool:
+        """Jumivahti: kolme identtistä peräkkäin tai ABAB. Naapuritahti-
+        Jaccard kokeiltu (07-22) -> hylkäsi myös musiikillisesti aidon
+        toiston ja resamplasi kuumemmin = kaaos. Live pitää vain jumit;
+        naapurikoe jää offline-generaattoriin kokeiluun."""
         p = self._prev_bars
-        if p:
-            c = self._content_toks
-            sa = {t for t in sig if t in c}
-            sb = {t for t in p[-1] if t in c}
-            jac = len(sa & sb) / max(len(sa | sb), 1) if (sa or sb) else 1.0
-            if jac > thr:
-                return True
         if len(p) >= 2 and sig == p[-1] == p[-2]:
             return True
         return len(p) >= 3 and sig == p[-2] and p[-1] == p[-3]
@@ -185,18 +179,16 @@ class LLMComposer:
         self._buffer.append(bar)
         return bar
 
-    def _check_end_request(self) -> bool:
-        """"Uusi kappale" -nappi: tyhjennä jono ja aloita uusi sävelmä heti."""
-        if not self.params.end_song_request:
-            return False
-        self.params.end_song_request = False
+    def request_new_tune(self) -> None:
+        """"Uusi kappale" (moottori kutsuu): mitätöi vanhat tahdit ja
+        käske työsäie uuteen sävelmään. Sukupolvilaskuri estää vanhan
+        sävelmän tahtien vuotamisen jonon läpi."""
+        self._gen += 1
         while True:
             try:
                 self._queue.get_nowait()
             except queue.Empty:
                 break
-        self._new_tune()
-        return True
 
     def _run(self, tokens: list[int], prime: bool = False):
         """Aja tokenit mallista cachen läpi; palauta viimeiset logitit."""
@@ -212,10 +204,12 @@ class LLMComposer:
         """Generoi YKSI uniikki tahti (korkealla lämmöllä). Ei tunerajoja:
         EOS vaimennetaan ja teline (_next_structured) hallitsee pituuden."""
         torch, t = self.torch, self.tk.TOK
-        warmth = 1.0 + START_BOOST * max(0.0, 1.0 - self._bar_in_tune / WARMUP_BARS)
-        # ~1.1 oletuksella (temp 0.4): korkeampi kuin ennen (0.9), koska
-        # teline hoitaa kertauksen -> lämpö saa hoitaa paikallisen vaihtelun.
-        base_temp = (0.95 + 0.4 * self.params.temperature) * warmth
+        # Korvakalibroitu: temp ~0.9 oletuksella (0.4-liuku). Kokeiltu 1.1
+        # mittarien perusteella (07-22) -> kuulosti kaaokselta; mittari ei
+        # ole portti, korva on. Kuumennus loivana — teline TOISTAA alun,
+        # joten alun kaaos kertautuisi.
+        warmth = 1.0 + 0.15 * max(0.0, 1.0 - self._bar_in_tune / WARMUP_BARS)
+        base_temp = (0.7 + 0.5 * self.params.temperature) * warmth
         bar: list[int] = []
         with torch.no_grad():
             if self._last is None:
@@ -261,14 +255,17 @@ class LLMComposer:
         return out, self.BEATS_PER_BAR
 
     def _worker(self) -> None:
+        gen = self._gen
         while not self._stop.is_set():
-            self._check_end_request()
+            if gen != self._gen:  # nappi painettu -> uusi sävelmä heti
+                gen = self._gen
+                self._new_tune()
             item = self._next_structured()  # AABB-teline: uniikki tai kertaus
             while not self._stop.is_set():
-                if self._check_end_request():
-                    break  # nappi painettu: hylkää kädessä oleva tahti
+                if gen != self._gen:
+                    break  # vanhentunut tahti pois
                 try:
-                    self._queue.put(item, timeout=0.5)
+                    self._queue.put((gen, item), timeout=0.5)
                     break
                 except queue.Full:
                     continue
@@ -277,6 +274,7 @@ class LLMComposer:
         """(tahti, iskua/tahti), tai None jos malli ei vielä ehtinyt."""
         self._density = density
         try:
-            return self._queue.get_nowait()
+            gen, item = self._queue.get_nowait()
         except queue.Empty:
             return None
+        return item if gen == self._gen else None  # vanha sävelmä pois
