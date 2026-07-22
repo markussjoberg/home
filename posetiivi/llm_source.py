@@ -244,8 +244,38 @@ class LLMComposer:
                     if bars == n_bars:
                         break
             if bars == n_bars and 8 <= len(out) <= 120:
-                return out
+                return self._transpose_to_c(out)
         return None
+
+    def _transpose_to_c(self, seed: list[int]) -> list[int]:
+        """Korpussävelmät ovat alkuperäisissä sävellajeissaan (esim. D-duuri
+        -> F#/C#) mutta malli + harmoniakisko elävät C-maailmassa. Ilman
+        siirtoa avaus ja jatko ovat ERI sävellajeissa = bitonaalinen sotku
+        (löytyi lokidiagnoosilla 07-22). Valitse transpoosi joka maksimoi
+        asteikko-osuvuuden; token-tason siirto."""
+        tk = self.tk
+        pitches = []
+        for tok in seed:
+            name = tk.VOCAB[tok]
+            if name.startswith("NOTE_"):
+                pitches.append(int(name.split("_")[1]))
+        if not pitches:
+            return seed
+        def score(delta):
+            return sum((p + delta) % 12 in SCALE_PCS for p in pitches)
+        best = max(range(-6, 7), key=lambda d: (score(d), -abs(d)))
+        if best == 0:
+            return seed
+        out = []
+        for tok in seed:
+            name = tk.VOCAB[tok]
+            if name.startswith("NOTE_"):
+                p = min(max(int(name.split("_")[1]) + best,
+                            tk.NOTE_LO), tk.NOTE_HI)
+                out.append(tk.TOK[f"NOTE_{p}"])
+            else:
+                out.append(tok)
+        return out
 
     def _apply_seed(self) -> None:
         """Syötä seed kontekstiin ja esitäytä puskuri sen tahdeilla —
@@ -337,7 +367,12 @@ class LLMComposer:
                 bar = []
                 temp = base_temp * 1.25**attempt
                 for _ in range(160):
-                    logits = self._last / temp + chord_bias
+                    logits = self._last / temp
+                    # Sointubias VAIN sävelvalintaan (edellinen token CH_*).
+                    # Muuten NOTE-massa syrjäyttää BAR-tokenin ja tahti
+                    # pursuaa (monsteritahti-bugi, lokidiagnoosi 07-22).
+                    if self._seq[-1] in (t["CH_MEL"], t["CH_ACC"]):
+                        logits = logits + chord_bias
                     logits[t["PAD"]] = -float("inf")
                     logits[t["EOS"]] = -float("inf")   # teline hallitsee pituuden
                     kth = torch.topk(logits, TOP_K).values[-1]
