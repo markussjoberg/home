@@ -100,6 +100,7 @@ class LLMComposer:
         self._last = None  # viimeisimmät logitit; None = prime tarvitaan
         self.params = params
         self._density = 0.5
+        self._active_genre = self._dominant_genre()  # jäädytetty per kappale
         self.BEATS_PER_BAR = self._tune_meter()
         self._seq = self._prefix()
         self._bar_in_tune = 0
@@ -129,8 +130,9 @@ class LLMComposer:
         return best or self.genres[p.genre_ix % len(self.genres)]
 
     def _tune_meter(self) -> int:
-        """Tahtilaji vallitsevan genren mukaan (oletus 3/4 jos tuntematon)."""
-        return self._genre_meter.get(self._dominant_genre(), 3)
+        """Tahtilaji AKTIIVISEN (jäädytetyn) genren mukaan, ei livenä
+        napeista luetun — muuten tahtilaji vaihtuisi kesken kappaleen."""
+        return self._genre_meter.get(self._active_genre, 3)
 
     def _shutdown(self) -> None:
         # Siisti pysäytys, ettei torch kaadu tulkin sulkeutuessa kesken opin.
@@ -145,13 +147,15 @@ class LLMComposer:
 
     def _cond(self) -> list[float]:
         p, d = self.params, self._density
-        # Vivut voittavat: genrepainoista sekoitettu vektori, muuten one-hot.
-        weights = [max(p.genre_weights.get(name, 0.0), 0.0) for name in self.genres]
-        if sum(weights) > 0:
-            g = [w / sum(weights) for w in weights]
-        else:
-            g = [0.0] * len(self.genres)
-            g[p.genre_ix % len(self.genres)] = 1.0
+        # AKTIIVINEN (jäädytetty) genre, ei livenä napeista — muuten
+        # kesken kappaleen painettu genrenappi syöttäisi mallille uutta
+        # genreä samalla kun tahtilaji/rekisteri/seed ovat vielä vanhan
+        # kappaleen, mikä kuulostaisi ristiriitaiselta. Nappi vaihtaa
+        # genren vasta seuraavan kappaleen alussa (ks. webui: genrenappi
+        # laukaisee myös 'uusi kappale' -lopetuksen).
+        g = [0.0] * len(self.genres)
+        if self._active_genre in self.genres:
+            g[self.genres.index(self._active_genre)] = 1.0
         register = min(max(0.5 + 0.25 * p.register, 0.0), 1.0)
         valence = p.valence if p.valence is not None else (0.3 if p.minor else 0.75)
         # Fraasipositio ja biisin etenemä: biisi on "lause" BOS:sta EOS:iin.
@@ -180,7 +184,7 @@ class LLMComposer:
 
     def _pick_seed(self, n_bars: int = 2, tries: int = 8) -> list[int] | None:
         """Genreseed: satunnaisen aidon sävelmän ensimmäiset tahdit."""
-        pool = self._seed_pool(self._dominant_genre())
+        pool = self._seed_pool(self._active_genre)
         if pool is None:
             return None
         toks, bounds = pool
@@ -325,8 +329,10 @@ class LLMComposer:
         return len(p) >= 3 and sig == p[-2] and p[-1] == p[-3]
 
     def _new_tune(self) -> None:
-        """Sävelmä vaihtuu: uusi tahtilaji genren mukaan, kontekstiin edellisen
-        häntä, laskurit nollille."""
+        """Sävelmä vaihtuu: genre jäädytetään livenä valitusta (napit),
+        tahtilaji sen mukaan, kontekstiin edellisen häntä, laskurit
+        nollille."""
+        self._active_genre = self._dominant_genre()  # ennen meteriä/seediä
         self.BEATS_PER_BAR = self._tune_meter()  # ennen _prefix():iä
         self._seq = (self._seq + [self.tk.TOK["EOS"]])[-TAIL:] + self._prefix()
         self._bar_in_tune = 0

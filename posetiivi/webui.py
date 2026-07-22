@@ -260,12 +260,16 @@ autoplayBtn.addEventListener('click',
   () => post({autoplay: autoplayBtn.dataset.on !== '1'}));
 
 // Tyylilaji: on/off-valinta, yksi kerrallaan (V5). One-hot palvelimelle.
+// Genre vaihtuu vasta seuraavan kappaleen alussa (tahtilaji/rekisteri/seed
+// riippuvat siitä), joten sama painallus laukaisee myös "uusi kappale"
+// -lopetuksen — myös jo aktiivisen genren uudelleenpainallus antaa uuden
+// kappaleen samalla genrellä.
 const genreBtns = [...document.querySelectorAll('button.genre')];
 genreBtns.forEach(el => el.addEventListener('click', () => {
   genreBtns.forEach(b => b.classList.toggle('active', b === el));
   const g = {};
   genreBtns.forEach(b => g[b.dataset.genre] = b === el ? 1 : 0);
-  post({genre: g});
+  post({genre: g, new_tune: 1});
 }));
 
 // Muut saatimet.
