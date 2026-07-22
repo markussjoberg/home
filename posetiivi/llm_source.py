@@ -339,7 +339,12 @@ class LLMComposer:
         self._last = self._run(self._seq, prime=True)
 
     def _check_end_request(self) -> bool:
-        """Kuittaa napin lippu: tyhjennä jono ja aja etenemä loppuun."""
+        """Kuittaa napin lippu: lopettele kadenssiin muutaman tahdin
+        aikana (ei enää välitön katko — moottori ei vaimenna, tämä on
+        ainoa paikka joka päättää lopetuksen tahdin). Karkeasti ~10 s
+        tyypillisellä tempolla (6 tahtia x ~1,5-2 s/tahti); tarkkaa
+        sekuntimäärää ei lasketa koska tempo tulee kammesta reaaliajassa,
+        ei säveltäjän tiedossa."""
         if not self.params.end_song_request:
             return False
         self.params.end_song_request = False
@@ -349,9 +354,11 @@ class LLMComposer:
             except queue.Empty:
                 break
         self._ending = True
-        self._end_deadline = self._bar_in_tune + 4
-        # Etenemä ~1 -> malli on oppinut että lause päättyy kadenssiin.
-        self._tune_len = min(self._tune_len, self._bar_in_tune + 2)
+        self._end_deadline = self._bar_in_tune + 6
+        # Etenemä ~1 neljän tahdin kohdalla -> malli alkaa hakea kadenssia,
+        # mutta saa vielä 2 tahtia tilaa löytää se luontevasti ennen
+        # pakotettua katkoa (end_deadline).
+        self._tune_len = min(self._tune_len, self._bar_in_tune + 4)
         return True
 
     def _run(self, tokens: list[int], prime: bool = False):

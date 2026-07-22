@@ -41,7 +41,6 @@ class MidiEngine:
         self._seq = 0
         self._composed_until = 0.0  # iskuina
         self._silenced = True
-        self._flushed = False  # "uusi kappale" -tyhjennys kerran per painallus
 
     def _push(self, beat: float, kind: str, channel: int, pitch: int, vel: int = 0):
         heapq.heappush(self._events, (beat, self._seq, kind, channel, pitch, vel))
@@ -88,18 +87,13 @@ class MidiEngine:
             dt, last_wall = now - last_wall, now
             s = self.speed.normalized
 
-            if self.params.end_song_request and not self._flushed:
-                # "Uusi kappale": tyhjennä ajastetut tapahtumat ja vaienna
-                # KERRAN (reuna), jotta säveltäjän lopetus kuuluu heti —
-                # keko+jono soittaisi muuten vanhaa ~4 tahtia. Lippua EI
-                # kuitata tässä: säveltäjä kuluttaa sen (lopetus kadenssiin).
-                self._events.clear()
-                self._composed_until = clock
-                self.synth.all_notes_off()
-                self._flushed = True
-            elif not self.params.end_song_request:
-                self._flushed = False
-
+            # "Uusi kappale": EI enää välitöntä vaimennusta. Nykyinen
+            # sävelmä soi luontevasti loppuun — säveltäjä lukee lipun
+            # itse (_check_end_request) ja lopettelee kadenssiin ~6
+            # tahdin kuluessa (karkeasti ~10 s tyypillisellä tempolla),
+            # sitten hengähdystahti ennen uutta sävelmää. Jo ajastetut
+            # tapahtumat (keko) eivät katkea; vain uusien vanhan-sävelmän
+            # tahtien jonottaminen loppuu.
             accomp = (PROGRAMS[self.params.accomp_ix % len(PROGRAMS)]
                       if self.params.accomp_ix is not None else midi.accomp_program)
             if (self.params.program, accomp) != prev_programs:
