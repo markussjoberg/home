@@ -90,7 +90,8 @@ def eval_real(prepared: Path, limit: int = 400):
 
 
 def eval_generated(ckpt: Path, genre: str, n: int, beats: int,
-                   guidance: float = 2.0):
+                   guidance: float = 2.0, temperature: float = 1.1,
+                   structured: bool = False):
     d = torch.load(ckpt, map_location="cpu")
     model = PosetiiviLM(ModelCfg(**d["cfg"]))
     model.load_state_dict(d["model"])
@@ -100,8 +101,12 @@ def eval_generated(ckpt: Path, genre: str, n: int, beats: int,
     for seed in range(n):
         rng = random.Random(seed)
         torch.manual_seed(seed)
-        toks = g.sample(model, cond, beats, 120, 0.95, 24, guidance, "cpu",
-                        rng=rng)
+        if structured:
+            toks = g.sample_structured(model, cond, beats, temperature, 24,
+                                       guidance, "cpu", rng=rng)
+        else:
+            toks = g.sample(model, cond, beats, 120, temperature, 24, guidance,
+                            "cpu", rng=rng)
         first = toks[:toks.index(EOS)] if EOS in toks else toks
         m = metrics(bars_from_tokens(first))
         if m:
@@ -133,6 +138,9 @@ def main() -> None:
     ap.add_argument("--n", type=int, default=16)
     ap.add_argument("--beats", type=int, default=None)
     ap.add_argument("--guidance", type=float, default=2.0)
+    ap.add_argument("--temperature", type=float, default=1.1)
+    ap.add_argument("--structured", action="store_true",
+                    help="AABB-teline (sample_structured)")
     args = ap.parse_args()
 
     beats = args.beats
@@ -141,9 +149,11 @@ def main() -> None:
         beats = GENRE_METER.get(args.genre, 3)
 
     real = summarize("aito", eval_real(args.data))
-    gen = summarize(f"gen ({args.ckpt})",
+    tag = "teline" if args.structured else f"temp {args.temperature}"
+    gen = summarize(f"gen ({tag})",
                     eval_generated(args.ckpt, args.genre, args.n, beats,
-                                   args.guidance))
+                                   args.guidance, args.temperature,
+                                   args.structured))
 
     # Portit suhteessa aitoon (absoluuttiset kynnykset olivat harhaanjohtavia:
     # esim. aito masurkka on itse 3.2 % tyhjää -> <1 % oli mahdoton).

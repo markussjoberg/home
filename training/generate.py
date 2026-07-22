@@ -210,6 +210,89 @@ def sample(model, cond_base, beats, max_bars, temperature, top_k, guidance, devi
     return seq
 
 
+@torch.no_grad()
+def sample_structured(model, cond_base, beats, temperature, top_k, guidance,
+                      device, rng=None, banned_notes=None, phrase_bars=8):
+    """AABB-teline: generoi 2 uniikkia fraasia (A, B) korkealla lämmöllä
+    (matala lag1) ja kokoa A A B B — deterministinen kertaus antaa korkean
+    lag8:n. Ratkaisee lag1/lag8-jännitteen jonka lämpötila yksin ei (mitattu
+    07-22: korkea lämpö korjaa toiston mutta romahduttaa kertauksen).
+
+    Matalariskinen: token-tason kokoonpano, ei cache-kirurgiaa kertauksessa.
+    """
+    rng = rng or _random
+    t = TOK
+    nrow = 2 if guidance != 1.0 else 1
+    cache = KVCache(model.cfg, nrow, device=device)
+    prefix = [t["BOS"], t[f"METER_{beats}"], t["BAR"]]
+    seq = list(prefix)
+    n_unique = 2 * phrase_bars
+
+    def cond_vec(bar_idx):
+        return fit_cond(
+            list(cond_base)
+            + [(bar_idx % 8) / 8.0, min(bar_idx / max(n_unique - 1, 1), 1.0)],
+            model,
+        )
+
+    def cond_t(vec, length):
+        c = torch.tensor(vec, device=device).view(1, 1, -1)
+        c = c.expand(nrow, length, -1).clone()
+        if nrow == 2:
+            c[1] = 0.0
+        return c
+
+    def run(tokens, vec):
+        x = torch.tensor([tokens], device=device).expand(nrow, -1)
+        return model(x, cond_t(vec, len(tokens)), cache=cache)[0][:, -1]
+
+    cache.rewind(0)
+    last = run(seq, cond_vec(0))
+    bars: list[list[int]] = []   # per-tahti nuotti-tokenit (ilman BAR-erotinta)
+    cur: list[int] = []
+    prev_bars: list[tuple] = []
+    attempts = 0
+    while len(bars) < n_unique and len(seq) < 8192:
+        logits = last[:1]
+        if nrow == 2:
+            logits = last[1:2] + guidance * (last[:1] - last[1:2])
+        logits = logits / (temperature * 1.25**attempts)
+        logits[:, t["PAD"]] = -float("inf")
+        logits[:, t["EOS"]] = -float("inf")   # teline hallitsee pituuden
+        if banned_notes is not None:
+            logits[:, banned_notes] -= 6.0
+        if top_k:
+            kth = torch.topk(logits, top_k).values[:, -1, None]
+            logits[logits < kth] = -float("inf")
+        nxt = int(torch.multinomial(torch.softmax(logits, -1), 1))
+        if nxt == t["BAR"]:
+            sig = tuple(cur)
+            if attempts < 3 and cur and is_loop(prev_bars, sig):
+                del seq[len(seq) - len(cur):]
+                cache.rewind(len(seq) - 1)
+                last = run([seq[-1]], cond_vec(len(bars)))
+                cur, attempts = [], attempts + 1
+                continue
+            prev_bars.append(sig)
+            bars.append(cur)
+            cur, attempts = [], 0
+        else:
+            cur.append(nxt)
+        seq.append(nxt)
+        last = run([nxt], cond_vec(len(bars)))
+
+    A = bars[:phrase_bars]
+    B = bars[phrase_bars:2 * phrase_bars]
+    form = [A, A, B, B] if B else [A, A]   # AABB, tai AA jos B jäi vajaaksi
+    out = [t["BOS"], t[f"METER_{beats}"]]
+    for phrase in form:
+        for bar in phrase:
+            out.append(t["BAR"])
+            out.extend(bar)
+    out.append(t["EOS"])
+    return out
+
+
 def write_midi(tokens: list[int], out: Path, bpm: float) -> None:
     from symusic import Note, Score, Tempo, TimeSignature, Track
 
