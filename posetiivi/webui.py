@@ -227,7 +227,7 @@ let ticks = 0, angle = 0;
 const handle = document.getElementById('handle');
 window.addEventListener('wheel', (e) => {
   e.preventDefault();
-  const n = Math.max(1, Math.round(Math.abs(e.deltaY) / 40));
+  const n = Math.max(1, Math.round(Math.abs(e.deltaY) / 200));  // 5x vähemmän herkkä
   ticks += n; angle += n * 24;
   handle.style.transform = `rotate(${angle}deg)`;
 }, {passive: false});
