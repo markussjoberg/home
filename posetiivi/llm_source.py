@@ -73,8 +73,12 @@ class LLMComposer:
         self._bar_in_tune = 0
         self._tune_len = sample_tune_len(random)
         self._prev_bars: list[tuple] = []
-        self._ending = False  # "uusi kappale" -nappi: lopetellaan kadenssiin
-        self._end_deadline = 0
+        # AABB-teline: malli generoi uniikit fraasit korkealla lämmöllä,
+        # emissio toistaa ne puskurista (deterministinen kertaus -> rakenne).
+        self._buffer: list[tuple[list, int]] = []  # uniikit tahdit
+        self._emit_order: list[int] = []
+        self._emit_pos = 0
+        self._plan_form()
         self._queue: queue.Queue[tuple[list[Note], int]] = queue.Queue(maxsize=2)
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._worker, daemon=True)
@@ -141,19 +145,48 @@ class LLMComposer:
             return True
         return len(p) >= 3 and sig == p[-2] and p[-1] == p[-3]
 
+    def _plan_form(self) -> None:
+        """Aseta AABB-emissiojärjestys sävelmäpituudesta; nollaa puskuri.
+        Malli generoi vain uniikit fraasit (8 tahtia/kirjain), emissio
+        kahdentaa ne. tune_len asetetaan uniikkien mitaksi, jotta etenemä
+        (progress) nousee 0->1 niiden yli -> B:n loppuun kadenssi."""
+        phrase = 8
+        n_letters = max(1, round(self._tune_len / (2 * phrase)))
+        unique = n_letters * phrase
+        self._tune_len = unique
+        order: list[int] = []
+        for letter in range(n_letters):
+            base = letter * phrase
+            order += list(range(base, base + phrase)) * 2  # esittely + kertaus
+        self._emit_order = order
+        self._emit_pos = 0
+        self._buffer = []
+
     def _new_tune(self) -> None:
         """Sävelmä vaihtuu: uusi tahtilaji genren mukaan, kontekstiin edellisen
-        häntä, laskurit nollille."""
+        häntä, laskurit nollille, uusi AABB-suunnitelma."""
         self.BEATS_PER_BAR = self._tune_meter()  # ennen _prefix():iä
         self._seq = (self._seq + [self.tk.TOK["EOS"]])[-TAIL:] + self._prefix()
         self._bar_in_tune = 0
         self._tune_len = sample_tune_len(random)
         self._prev_bars = []
-        self._ending = False
+        self._plan_form()
         self._last = self._run(self._seq, prime=True)
 
+    def _next_structured(self) -> tuple[list, int]:
+        """Seuraava emittoitava tahti: uniikki generoidaan, kertaus puskurista."""
+        if self._emit_pos >= len(self._emit_order):
+            self._new_tune()
+        idx = self._emit_order[self._emit_pos]
+        self._emit_pos += 1
+        if idx < len(self._buffer):
+            return self._buffer[idx]        # kertaus: valmis tahti puskurista
+        bar = self._generate_bar()          # uusi uniikki tahti
+        self._buffer.append(bar)
+        return bar
+
     def _check_end_request(self) -> bool:
-        """Kuittaa napin lippu: tyhjennä jono ja aja etenemä loppuun."""
+        """"Uusi kappale" -nappi: tyhjennä jono ja aloita uusi sävelmä heti."""
         if not self.params.end_song_request:
             return False
         self.params.end_song_request = False
@@ -162,10 +195,7 @@ class LLMComposer:
                 self._queue.get_nowait()
             except queue.Empty:
                 break
-        self._ending = True
-        self._end_deadline = self._bar_in_tune + 4
-        # Etenemä ~1 -> malli on oppinut että lause päättyy kadenssiin.
-        self._tune_len = min(self._tune_len, self._bar_in_tune + 2)
+        self._new_tune()
         return True
 
     def _run(self, tokens: list[int], prime: bool = False):
@@ -179,31 +209,27 @@ class LLMComposer:
         return logits[0, -1]
 
     def _generate_bar(self) -> tuple[list[Note], int]:
+        """Generoi YKSI uniikki tahti (korkealla lämmöllä). Ei tunerajoja:
+        EOS vaimennetaan ja teline (_next_structured) hallitsee pituuden."""
         torch, t = self.torch, self.tk.TOK
         warmth = 1.0 + START_BOOST * max(0.0, 1.0 - self._bar_in_tune / WARMUP_BARS)
-        base_temp = (0.7 + 0.5 * self.params.temperature) * warmth
+        # ~1.1 oletuksella (temp 0.4): korkeampi kuin ennen (0.9), koska
+        # teline hoitaa kertauksen -> lämpö saa hoitaa paikallisen vaihtelun.
+        base_temp = (0.95 + 0.4 * self.params.temperature) * warmth
         bar: list[int] = []
         with torch.no_grad():
             if self._last is None:
                 self._last = self._run(self._seq, prime=True)
-            if self._ending and self._bar_in_tune >= self._end_deadline:
-                # Malli ei päättänyt itse ajoissa — pakotettu piste.
-                self._new_tune()
-                return [], self.BEATS_PER_BAR
             for attempt in range(4):
                 bar = []
                 temp = base_temp * 1.25**attempt
                 for _ in range(160):
                     logits = self._last / temp
                     logits[t["PAD"]] = -float("inf")
+                    logits[t["EOS"]] = -float("inf")   # teline hallitsee pituuden
                     kth = torch.topk(logits, TOP_K).values[-1]
                     logits[logits < kth] = -float("inf")
                     nxt = int(torch.multinomial(torch.softmax(logits, -1), 1))
-                    if nxt == t["EOS"]:
-                        # Piste: biisi päättyi. Uusi lause alkaa, kontekstiin
-                        # jää edellisen häntä; väliin hengähdystahti.
-                        self._new_tune()
-                        return [], self.BEATS_PER_BAR
                     self._seq.append(nxt)
                     if self._cache.len + 1 >= self._cache.max_len:
                         self._last = self._run(self._seq[-TAIL:], prime=True)
@@ -237,7 +263,7 @@ class LLMComposer:
     def _worker(self) -> None:
         while not self._stop.is_set():
             self._check_end_request()
-            item = self._generate_bar()  # (nuotit, iskua/tahti)
+            item = self._next_structured()  # AABB-teline: uniikki tai kertaus
             while not self._stop.is_set():
                 if self._check_end_request():
                     break  # nappi painettu: hylkää kädessä oleva tahti
