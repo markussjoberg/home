@@ -1,0 +1,91 @@
+# XcodeGen-määritys: aja `xcodegen` tämän kansion juuressa → Noste.xcodeproj
+name: Noste
+options:
+  bundleIdPrefix: fi.markussjoberg
+  deploymentTarget:
+    iOS: "17.0"
+    watchOS: "10.0"
+  createIntermediateGroups: true
+
+packages:
+  NostePackage:
+    path: NostePackage
+
+targets:
+  Noste:
+    type: application
+    platform: iOS
+    sources:
+      - Noste
+    dependencies:
+      - package: NostePackage
+        product: NosteCore
+      - target: NosteWatch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: fi.markussjoberg.noste
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.9"
+        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "0.1"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+    info:
+      path: Noste/Info.plist
+      properties:
+        CFBundleDisplayName: Noste
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSLocationWhenInUseUsageDescription: >-
+          Sijaintia käytetään näyttämään oma paikka kartalla ja lisäämään spotti
+          nykyiseen sijaintiin.
+
+  NosteWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - NosteWatch
+    dependencies:
+      - package: NostePackage
+        product: NosteCore
+    entitlements:
+      path: NosteWatch/NosteWatch.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: fi.markussjoberg.noste.watchkitapp
+        SWIFT_VERSION: "5.9"
+        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "0.1"
+    info:
+      path: NosteWatch/Info.plist
+      properties:
+        CFBundleDisplayName: Noste
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: fi.markussjoberg.noste
+        WKRunsIndependentlyOfCompanionApp: true
+        WKBackgroundModes:
+          - workout-processing
+        NSLocationWhenInUseUsageDescription: >-
+          Sijaintia käytetään session GPS-jäljen, nopeuden ja foiliajan mittaamiseen.
+        NSHealthShareUsageDescription: >-
+          Syke ja energiankulutus luetaan treenisession mittareihin.
+        NSHealthUpdateUsageDescription: >-
+          Sessio tallennetaan treeninä Terveys-sovellukseen.
+        NSMotionUsageDescription: >-
+          Liikeanturia käytetään pumppausten ja foiliajan tunnistamiseen.
+
+schemes:
+  Noste:
+    build:
+      targets:
+        Noste: all
+    run:
+      config: Debug
+  NosteWatch:
+    build:
+      targets:
+        NosteWatch: all
+    run:
+      config: Debug
