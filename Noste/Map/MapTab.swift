@@ -11,10 +11,27 @@ struct MapTab: View {
     @AppStorage("mmlApiKey") private var mmlApiKey = ""
     @AppStorage("marineTemplate") private var marineTemplate = TileOverlays.defaultMarineTemplate
     @AppStorage("mapLayer") private var layerRaw = MapLayer.standard.rawValue
+    @AppStorage(ServerSettings.baseURLKey) private var serverBase = ""
+    @AppStorage(ServerSettings.tokenKey) private var serverToken = ""
 
     @State private var editingSpot: SpotData?
 
     private var layer: MapLayer { MapLayer(rawValue: layerRaw) ?? .standard }
+
+    /// Maastotiilien lähde: oma palvelin > suora MML > ei saatavilla.
+    private var terrainTemplate: String? {
+        if let server = ServerSettings.config(base: serverBase, token: serverToken) {
+            return ServerSettings.tileTemplate(layer: "terrain", server: server)
+        }
+        return mmlApiKey.isEmpty ? nil : TileOverlays.terrainTemplate(apiKey: mmlApiKey)
+    }
+
+    private var marineTemplateResolved: String {
+        if let server = ServerSettings.config(base: serverBase, token: serverToken) {
+            return ServerSettings.tileTemplate(layer: "marine", server: server)
+        }
+        return marineTemplate
+    }
 
     var body: some View {
         NavigationStack {
@@ -22,8 +39,8 @@ struct MapTab: View {
                 SpotMapView(
                     spots: spots.map(\.data),
                     layer: layer,
-                    mmlApiKey: mmlApiKey,
-                    marineTemplate: marineTemplate,
+                    terrainTemplate: terrainTemplate,
+                    marineTemplate: marineTemplateResolved,
                     onLongPress: { coordinate in
                         editingSpot = SpotData(
                             name: "",
@@ -38,8 +55,8 @@ struct MapTab: View {
                 .ignoresSafeArea(edges: .top)
 
                 VStack(spacing: 8) {
-                    if layer == .terrain && mmlApiKey.isEmpty {
-                        Text("Maastokartta vaatii MML:n API-avaimen — lisää se asetuksista.")
+                    if layer == .terrain && terrainTemplate == nil {
+                        Text("Maastokartta vaatii oman palvelimen tai MML:n API-avaimen — lisää asetuksista.")
                             .font(.footnote)
                             .padding(8)
                             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
@@ -93,7 +110,8 @@ struct MapTab: View {
 struct SpotMapView: UIViewRepresentable {
     var spots: [SpotData]
     var layer: MapLayer
-    var mmlApiKey: String
+    /// nil = maastotiilille ei ole lähdettä (ei palvelinta eikä MML-avainta).
+    var terrainTemplate: String?
     var marineTemplate: String
     var onLongPress: (CLLocationCoordinate2D) -> Void
     var onSelectSpot: (SpotData) -> Void
@@ -123,7 +141,7 @@ struct SpotMapView: UIViewRepresentable {
         let signature: String
         switch layer {
         case .standard: signature = "standard"
-        case .terrain: signature = "terrain:\(mmlApiKey)"
+        case .terrain: signature = "terrain:\(terrainTemplate ?? "")"
         case .marine: signature = "marine:\(marineTemplate)"
         }
         guard signature != context.coordinator.overlaySignature else { return }
@@ -134,11 +152,11 @@ struct SpotMapView: UIViewRepresentable {
         case .standard:
             break
         case .terrain:
-            if !mmlApiKey.isEmpty {
-                map.addOverlay(TileOverlays.terrainOverlay(apiKey: mmlApiKey), level: .aboveLabels)
+            if let template = terrainTemplate {
+                map.addOverlay(TileOverlays.overlay(template: template, replacesContent: true), level: .aboveLabels)
             }
         case .marine:
-            map.addOverlay(TileOverlays.marineOverlay(urlTemplate: marineTemplate), level: .aboveLabels)
+            map.addOverlay(TileOverlays.overlay(template: marineTemplate, replacesContent: false), level: .aboveLabels)
         }
     }
 

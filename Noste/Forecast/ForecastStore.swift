@@ -9,7 +9,10 @@ final class ForecastStore: ObservableObject {
     @Published private(set) var loading: Set<UUID> = []
     @Published var lastError: String?
 
-    private let client = OpenMeteoClient()
+    /// Palvelinasetus voi muuttua kesken käytön, joten asiakas luodaan hakukohtaisesti.
+    private var client: OpenMeteoClient {
+        OpenMeteoClient(server: ServerSettings.current)
+    }
     private static let cacheKey = "noste.forecastCache"
 
     init() {

@@ -3,8 +3,31 @@ import Foundation
 import FoundationNetworking
 #endif
 
+/// Oma palvelin (noste-server): välimuistittaa ennusteet ja proxyttää karttatiilet.
+public struct ServerConfig: Sendable, Equatable {
+    public var baseURL: URL
+    public var token: String
+
+    public init(baseURL: URL, token: String) {
+        self.baseURL = baseURL
+        self.token = token
+    }
+
+    /// Rakentaa osoitteen palvelimen polkuun token-parametrilla.
+    public func components(path: String) -> URLComponents {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent(path),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [URLQueryItem(name: "token", value: token)]
+        return components
+    }
+}
+
 /// Open-Meteo-asiakas: tuuli (myös sisävesille) ja aallokko (Itämeri).
 /// Ei API-avainta. https://open-meteo.com — ilmainen ei-kaupalliseen käyttöön.
+/// Jos oma palvelin on määritetty, haut kulkevat sen läpisyötön kautta
+/// (sama vastausmuoto, palvelin välimuistittaa).
 public struct OpenMeteoClient {
 
     public enum ClientError: Error {
@@ -14,10 +37,12 @@ public struct OpenMeteoClient {
 
     private let session: URLSession
     public var forecastDays: Int
+    public var server: ServerConfig?
 
-    public init(session: URLSession = .shared, forecastDays: Int = 3) {
+    public init(session: URLSession = .shared, forecastDays: Int = 3, server: ServerConfig? = nil) {
         self.session = session
         self.forecastDays = forecastDays
+        self.server = server
     }
 
     /// Hakee spotin ennusteen: tuuli aina, aallokko vain merispoteille.
@@ -32,8 +57,9 @@ public struct OpenMeteoClient {
     }
 
     public func windForecast(latitude: Double, longitude: Double) async throws -> [WindHour] {
-        var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
-        components.queryItems = [
+        var components = server?.components(path: "api/openmeteo/forecast")
+            ?? URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
+        components.queryItems = (components.queryItems ?? []) + [
             URLQueryItem(name: "latitude", value: String(format: "%.4f", latitude)),
             URLQueryItem(name: "longitude", value: String(format: "%.4f", longitude)),
             URLQueryItem(name: "hourly", value: "wind_speed_10m,wind_gusts_10m,wind_direction_10m"),
@@ -46,8 +72,9 @@ public struct OpenMeteoClient {
     }
 
     public func waveForecast(latitude: Double, longitude: Double) async throws -> [WaveHour] {
-        var components = URLComponents(string: "https://marine-api.open-meteo.com/v1/marine")!
-        components.queryItems = [
+        var components = server?.components(path: "api/openmeteo/marine")
+            ?? URLComponents(string: "https://marine-api.open-meteo.com/v1/marine")!
+        components.queryItems = (components.queryItems ?? []) + [
             URLQueryItem(name: "latitude", value: String(format: "%.4f", latitude)),
             URLQueryItem(name: "longitude", value: String(format: "%.4f", longitude)),
             URLQueryItem(name: "hourly", value: "wave_height,wave_period,wave_direction"),

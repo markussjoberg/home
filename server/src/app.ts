@@ -1,0 +1,216 @@
+import { Hono } from "hono";
+import { TtlCache } from "./cache.js";
+import { type Config, DEFAULT_MARINE_TEMPLATE } from "./config.js";
+import { fetchLatestObservation, type WindObservation } from "./fmi.js";
+import { type Alert, type AlertWindow, matchAlert } from "./kelivahti.js";
+import { type CombinedForecast, fetchCombinedForecast } from "./openmeteo.js";
+import { JsonStore } from "./store.js";
+import { TileProxy, marineTileUrl, terrainTileUrl, validTile } from "./tiles.js";
+
+export interface SpotSync {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  waterType: "sea" | "lake";
+  sports: string[];
+  isFavorite: boolean;
+  notes: string;
+}
+
+export interface SessionSync {
+  id: string;
+  startDate: string;
+  sport: string;
+  summary: unknown;
+  track?: unknown;
+}
+
+export interface AppDeps {
+  config: Config;
+  fetchImpl?: typeof fetch;
+  now?: () => Date;
+}
+
+export function createApp({ config, fetchImpl = fetch, now = () => new Date() }: AppDeps) {
+  const app = new Hono();
+  const store = new JsonStore(config.dataDir);
+  const tiles = new TileProxy(config.tileCacheDir, config.tileCacheTtl, fetchImpl);
+  const forecastCache = new TtlCache<CombinedForecast>(config.forecastCacheTtl);
+  const passthroughCache = new TtlCache<unknown>(config.forecastCacheTtl);
+  const observationCache = new TtlCache<WindObservation | null>(300);
+
+  app.get("/healthz", (c) => c.json({ ok: true }));
+
+  // Kaikki /api-reitit vaativat tokenin (headerissa tai ?token=, tiiliosoitteita varten).
+  app.use("/api/*", async (c, next) => {
+    if (!config.apiToken) {
+      return c.json({ error: "NOSTE_TOKEN puuttuu palvelimen ympäristöstä" }, 503);
+    }
+    const header = c.req.header("authorization");
+    const token = header ? header.replace(/^Bearer\s+/i, "") : c.req.query("token");
+    if (token !== config.apiToken) {
+      return c.json({ error: "unauthorized" }, 401);
+    }
+    await next();
+  });
+
+  // --- Ennusteet ---
+
+  // Läpisyöttö välimuistilla: appin OpenMeteoClient osoittaa tänne, muoto on
+  // täsmälleen Open-Meteon oma. Parametrit kopioidaan kiinteään isäntään (ei SSRF-pintaa).
+  const passthrough = (base: string) => async (c: any) => {
+    const url = new URL(base);
+    for (const [key, value] of Object.entries(c.req.query() as Record<string, string>)) {
+      if (key !== "token") url.searchParams.set(key, value);
+    }
+    try {
+      const body = await passthroughCache.getOrSet(url.toString(), async () => {
+        const res = await fetchImpl(url.toString());
+        if (!res.ok) throw new Error(`upstream ${res.status}`);
+        return await res.json();
+      });
+      return c.json(body);
+    } catch (error) {
+      return c.json({ error: String(error) }, 502);
+    }
+  };
+
+  app.get("/api/openmeteo/forecast", passthrough("https://api.open-meteo.com/v1/forecast"));
+  app.get("/api/openmeteo/marine", passthrough("https://marine-api.open-meteo.com/v1/marine"));
+
+  // Koottu ennuste (tuuli + aallokko) — kelivahti ja kellon snapshot käyttävät tätä.
+  app.get("/api/forecast", async (c) => {
+    const lat = Number(c.req.query("lat"));
+    const lon = Number(c.req.query("lon"));
+    const sea = c.req.query("sea") === "1";
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return c.json({ error: "lat ja lon vaaditaan" }, 400);
+    }
+    try {
+      const key = `${lat.toFixed(3)},${lon.toFixed(3)},${sea}`;
+      const forecast = await forecastCache.getOrSet(key, () =>
+        fetchCombinedForecast(lat, lon, sea, 3, fetchImpl, now),
+      );
+      return c.json(forecast);
+    } catch (error) {
+      return c.json({ error: String(error) }, 502);
+    }
+  });
+
+  // Toteutunut tuuli lähimmältä FMI-asemalta.
+  app.get("/api/observation", async (c) => {
+    const lat = Number(c.req.query("lat"));
+    const lon = Number(c.req.query("lon"));
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return c.json({ error: "lat ja lon vaaditaan" }, 400);
+    }
+    try {
+      const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+      const observation = await observationCache.getOrSet(key, () =>
+        fetchLatestObservation(lat, lon, fetchImpl),
+      );
+      return c.json({ observation });
+    } catch (error) {
+      return c.json({ error: String(error) }, 502);
+    }
+  });
+
+  // --- Karttatiilet ---
+
+  app.get("/api/tiles/:layer/:z/:x/:y", async (c) => {
+    const layer = c.req.param("layer");
+    const z = Number(c.req.param("z"));
+    const x = Number(c.req.param("x"));
+    const y = Number(c.req.param("y").replace(/\.png$/, ""));
+    if (!validTile(z, x, y)) return c.json({ error: "virheellinen tiili" }, 400);
+
+    let sourceUrl: string;
+    if (layer === "terrain") {
+      if (!config.mmlApiKey) return c.json({ error: "MML_API_KEY puuttuu" }, 503);
+      sourceUrl = terrainTileUrl(z, x, y, config.mmlApiKey);
+    } else if (layer === "marine") {
+      sourceUrl = marineTileUrl(config.marineTileTemplate || DEFAULT_MARINE_TEMPLATE, z, x, y);
+    } else {
+      return c.json({ error: "tuntematon taso" }, 404);
+    }
+
+    const tile = await tiles.tile(layer, z, x, y, sourceUrl);
+    if (!tile) return c.json({ error: "tiiltä ei saatu lähteestä" }, 502);
+    return c.body(new Uint8Array(tile), 200, {
+      "Content-Type": "image/png",
+      "Cache-Control": "public, max-age=86400",
+    });
+  });
+
+  // --- Synkka (spotit, sessiot) ---
+
+  app.get("/api/spots", async (c) => c.json(await store.read<SpotSync[]>("spots", [])));
+
+  app.put("/api/spots", async (c) => {
+    const body = (await c.req.json()) as SpotSync[];
+    if (!Array.isArray(body)) return c.json({ error: "odotettiin listaa" }, 400);
+    await store.write("spots", body);
+    return c.json({ ok: true, count: body.length });
+  });
+
+  app.get("/api/sessions", async (c) => {
+    const sessions = await store.read<SessionSync[]>("sessions", []);
+    // Kevyt listaus ilman raakajälkiä.
+    return c.json(sessions.map(({ track, ...rest }) => rest));
+  });
+
+  app.post("/api/sessions", async (c) => {
+    const body = (await c.req.json()) as SessionSync;
+    if (!body?.id || !body?.startDate) return c.json({ error: "id ja startDate vaaditaan" }, 400);
+    await store.upsertById("sessions", [body]);
+    return c.json({ ok: true });
+  });
+
+  // --- Kelivahti ---
+
+  app.get("/api/alerts", async (c) => c.json(await store.read<Alert[]>("alerts", [])));
+
+  app.put("/api/alerts", async (c) => {
+    const body = (await c.req.json()) as Alert[];
+    if (!Array.isArray(body)) return c.json({ error: "odotettiin listaa" }, 400);
+    await store.write("alerts", body);
+    return c.json({ ok: true, count: body.length });
+  });
+
+  /** Ajaa kelivahdin nyt: hakee ennusteet ja palauttaa (ja tallettaa) osumat. */
+  app.get("/api/alerts/matches", async (c) => {
+    const result = await checkAlerts();
+    return c.json(result);
+  });
+
+  async function checkAlerts(): Promise<{ alertId: string; spotName: string; windows: AlertWindow[] }[]> {
+    const alerts = (await store.read<Alert[]>("alerts", [])).filter((a) => a.enabled);
+    const spots = await store.read<SpotSync[]>("spots", []);
+    const results: { alertId: string; spotName: string; windows: AlertWindow[] }[] = [];
+
+    for (const alert of alerts) {
+      const spot = spots.find((s) => s.id === alert.spotId);
+      if (!spot) continue;
+      try {
+        const key = `${spot.latitude.toFixed(3)},${spot.longitude.toFixed(3)},${spot.waterType === "sea"}`;
+        const forecast = await forecastCache.getOrSet(key, () =>
+          fetchCombinedForecast(spot.latitude, spot.longitude, spot.waterType === "sea", 3, fetchImpl, now),
+        );
+        const windows = matchAlert(alert, forecast.wind);
+        if (windows.length > 0) {
+          results.push({ alertId: alert.id, spotName: alert.spotName || spot.name, windows });
+        }
+      } catch {
+        // Yhden spotin hakuvirhe ei kaada kierrosta.
+      }
+    }
+
+    if (results.length > 0) {
+      await store.write("kelivahti-matches", { checkedAt: now().toISOString(), results });
+    }
+    return results;
+  }
+
+  return { app, checkAlerts };
+}

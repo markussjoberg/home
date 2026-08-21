@@ -6,5 +6,10 @@ DerivedData/
 xcuserdata/
 *.xcuserstate
 
+# Server
+server/node_modules/
+server/data/
+server/.env
+
 # macOS
 .DS_Store

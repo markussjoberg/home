@@ -11,6 +11,7 @@ aaltoennusteet sekä maasto- ja merikartat puhelimesta. Konsepti ja arkkitehtuur
 | `NostePackage/` | **NosteCore**: analytiikka (pumppu- ja foilitunnistus), ennustehaku, mallit — puhdas Swift + yksikkötestit |
 | `Noste/` | iOS-appi: kartta + spotit, ennusteet, sessiohistoria, kellosynkka |
 | `NosteWatch/` | watchOS-appi: treenisessio (HealthKit + GPS + kiihtyvyys), offline-ennuste |
+| `server/` | **noste-server**: karttatiiliproxy + välimuisti, ennusteiden välimuisti, FMI-havainnot, spotti/sessio-backup, kelivahti (TypeScript + Hono, Docker) |
 | `project.yml` | XcodeGen-projektimääritys |
 
 ## Käyttöönotto (Mac + Xcode 15+)
@@ -32,18 +33,46 @@ Xcodessa:
    Content* -kohdasta — XcodeGen-versiot käsittelevät tämän hieman eri tavoin.
 4. Aja `NosteWatch`-scheme kelloon/simulaattoriin ja `Noste` puhelimeen.
 
+## Palvelin (Hetzner)
+
+```bash
+cd server
+cp .env.example .env      # täytä NOSTE_TOKEN ja MML_API_KEY
+docker compose up -d --build
+```
+
+Caddyyn (palvelimella on jo Caddy ajossa):
+
+```
+noste.esimerkki.fi {
+    reverse_proxy 127.0.0.1:8080
+}
+```
+
+Appin asetuksiin palvelimen osoite + token → kartat ja ennusteet kulkevat
+palvelimen kautta, eikä appiin tarvita mitään avaimia.
+
+API (kaikki vaativat `Authorization: Bearer <token>` tai `?token=`):
+`/api/forecast?lat&lon&sea=1` koottu ennuste · `/api/observation?lat&lon`
+FMI-havainto · `/api/openmeteo/{forecast,marine}` läpisyöttö välimuistilla ·
+`/api/tiles/{terrain,marine}/{z}/{x}/{y}.png` tiilet · `/api/spots`,
+`/api/sessions` synkka · `/api/alerts`, `/api/alerts/matches` kelivahti.
+
+Kehitys: `pnpm install && pnpm test && pnpm dev` (31 testiä, vitest).
+
 ## Kartat
 
-- **Maastokartta**: Maanmittauslaitoksen avoin karttakuvapalvelu. Hae ilmainen
-  API-avain (MML → Rajapinnat → API-avain) ja syötä se appin asetuksiin.
+- **Maastokartta**: Maanmittauslaitoksen avoin karttakuvapalvelu. API-avain
+  palvelimen `.env`-tiedostoon (tai ilman palvelinta appin asetuksiin).
 - **Merikartta**: Traficomin avoin rasterimerikartta (WMTS). Tiiliosoite on
-  asetuksissa muokattavissa — varmista endpoint ensimmäisellä käyttökerralla.
+  muokattavissa — varmista endpoint ensimmäisellä käyttökerralla.
   Ei navigointikäyttöön.
 
 ## Ennusteet
 
 Open-Meteo (tuuli, myös sisävesille; aallokko Itämerelle) — ei API-avainta.
-FMI:n havainnot (toteutunut tuuli, aaltopoijut) tulossa vaiheessa 2.
+FMI:n havainnot (toteutunut tuuli lähimmältä asemalta) palvelimen
+`/api/observation`-reitistä; appin UI:hin vaiheessa 1.
 
 ## Testit
 

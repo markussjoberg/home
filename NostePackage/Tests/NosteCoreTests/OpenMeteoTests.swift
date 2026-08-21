@@ -16,6 +16,12 @@ final class OpenMeteoTests: XCTestCase {
         XCTAssertEqual(parts.minute, 0)
     }
 
+    func testServerProxyComponents() {
+        let server = ServerConfig(baseURL: URL(string: "https://noste.example.fi")!, token: "abc")
+        let url = server.components(path: "api/openmeteo/forecast").url
+        XCTAssertEqual(url?.absoluteString, "https://noste.example.fi/api/openmeteo/forecast?token=abc")
+    }
+
     func testDecodeWindSkipsNulls() throws {
         let json = """
         {"hourly":{"time":["2026-08-21T10:00","2026-08-21T11:00","2026-08-21T12:00"],

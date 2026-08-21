@@ -1,0 +1,141 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../src/app.js";
+import { loadConfig } from "../src/config.js";
+
+const windBody = {
+  hourly: {
+    time: ["2026-08-21T10:00", "2026-08-21T11:00", "2026-08-21T12:00", "2026-08-21T13:00"],
+    wind_speed_10m: [9.0, 10.0, 11.0, 3.0],
+    wind_gusts_10m: [12, 13, 15, 5],
+    wind_direction_10m: [225, 230, 240, 250],
+  },
+};
+
+function testFetch(): typeof fetch {
+  return (async (url: string) => {
+    if (url.includes("api.open-meteo.com")) {
+      return new Response(JSON.stringify(windBody), { status: 200 });
+    }
+    if (url.includes("maanmittauslaitos") || url.includes("traficom")) {
+      return new Response(new Uint8Array([0x89, 0x50]), { status: 200 });
+    }
+    return new Response("not found", { status: 404 });
+  }) as unknown as typeof fetch;
+}
+
+describe("app", () => {
+  let dir: string;
+  let app: ReturnType<typeof createApp>["app"];
+  let checkAlerts: ReturnType<typeof createApp>["checkAlerts"];
+  const auth = { headers: { authorization: "Bearer secret" } };
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "noste-app-"));
+    const config = loadConfig({
+      NOSTE_TOKEN: "secret",
+      MML_API_KEY: "mml-key",
+      DATA_DIR: join(dir, "data"),
+      TILE_CACHE_DIR: join(dir, "tiles"),
+    } as NodeJS.ProcessEnv);
+    ({ app, checkAlerts } = createApp({
+      config,
+      fetchImpl: testFetch(),
+      now: () => new Date("2026-08-21T08:00:00Z"),
+    }));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("healthz on avoin", async () => {
+    const res = await app.request("/healthz");
+    expect(res.status).toBe(200);
+  });
+
+  it("api vaatii tokenin, header tai query kelpaa", async () => {
+    expect((await app.request("/api/spots")).status).toBe(401);
+    expect((await app.request("/api/spots", auth)).status).toBe(200);
+    expect((await app.request("/api/spots?token=secret")).status).toBe(200);
+  });
+
+  it("openmeteo-läpisyöttö palauttaa lähteen rungon", async () => {
+    const res = await app.request("/api/openmeteo/forecast?latitude=60&longitude=24", auth);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.hourly.wind_speed_10m).toHaveLength(4);
+  });
+
+  it("koottu ennuste vaatii koordinaatit", async () => {
+    expect((await app.request("/api/forecast", auth)).status).toBe(400);
+    const res = await app.request("/api/forecast?lat=60.1&lon=24.9", auth);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.wind).toHaveLength(4);
+    expect(body.fetchedAt).toBe("2026-08-21T08:00:00.000Z");
+  });
+
+  it("tiiliproxy palvelee png:n ja hylkää roskan", async () => {
+    const res = await app.request("/api/tiles/terrain/10/300/400.png?token=secret");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/png");
+    expect((await app.request("/api/tiles/terrain/25/1/1.png", auth)).status).toBe(400);
+    expect((await app.request("/api/tiles/muu/10/1/1.png", auth)).status).toBe(404);
+  });
+
+  it("spotit: put + get kiertää", async () => {
+    const spots = [{
+      id: "s1", name: "Kotispotti", latitude: 60.1, longitude: 24.9,
+      waterType: "sea", sports: ["wingFoil"], isFavorite: true, notes: "",
+    }];
+    const put = await app.request("/api/spots", {
+      method: "PUT",
+      headers: { ...auth.headers, "content-type": "application/json" },
+      body: JSON.stringify(spots),
+    });
+    expect(put.status).toBe(200);
+    const get = await app.request("/api/spots", auth);
+    expect(await get.json()).toEqual(spots);
+  });
+
+  it("sessiolistaus pudottaa raakajäljen", async () => {
+    const post = await app.request("/api/sessions", {
+      method: "POST",
+      headers: { ...auth.headers, "content-type": "application/json" },
+      body: JSON.stringify({ id: "x1", startDate: "2026-08-21T07:00:00Z", sport: "pumpFoil", summary: { a: 1 }, track: [1, 2, 3] }),
+    });
+    expect(post.status).toBe(200);
+    const list = await (await app.request("/api/sessions", auth)).json();
+    expect(list).toHaveLength(1);
+    expect(list[0].track).toBeUndefined();
+  });
+
+  it("kelivahti löytää ikkunan spotin ennusteesta", async () => {
+    await app.request("/api/spots", {
+      method: "PUT",
+      headers: { ...auth.headers, "content-type": "application/json" },
+      body: JSON.stringify([{
+        id: "s1", name: "Kotispotti", latitude: 60.1, longitude: 24.9,
+        waterType: "lake", sports: [], isFavorite: true, notes: "",
+      }]),
+    });
+    await app.request("/api/alerts", {
+      method: "PUT",
+      headers: { ...auth.headers, "content-type": "application/json" },
+      body: JSON.stringify([{
+        id: "a1", spotId: "s1", spotName: "Kotispotti",
+        minWind: 8, directionFrom: 180, directionTo: 315, minHours: 2, enabled: true,
+      }]),
+    });
+
+    const results = await checkAlerts();
+    expect(results).toHaveLength(1);
+    expect(results[0]!.windows[0]).toMatchObject({ start: "2026-08-21T10:00", end: "2026-08-21T12:00", hours: 3, maxSpeed: 11 });
+
+    const viaApi = await (await app.request("/api/alerts/matches", auth)).json();
+    expect(viaApi).toHaveLength(1);
+  });
+});
