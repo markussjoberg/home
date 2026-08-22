@@ -100,6 +100,9 @@ struct SessionDetailView: View {
                         if let longest = summary.rides.longestByDuration {
                             row("Pisin lento", "\(Format.duration(longest.duration)) · \(Format.distance(longest.distance))")
                         }
+                        if summary.rides.count > 1 {
+                            row("Keskilento", Format.duration(summary.rides.averageDuration))
+                        }
                         row("Keskinopeus foililla", Format.speedKmh(summary.rides.averageSpeed))
                     }
                 }

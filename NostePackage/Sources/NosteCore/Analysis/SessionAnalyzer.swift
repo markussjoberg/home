@@ -35,19 +35,34 @@ public enum SessionAnalyzer {
             let accuracyOK = point.horizontalAccuracy < 0 || point.horizontalAccuracy <= config.maxAccuracy
             guard accuracyOK else { continue }
             var stepDistance = 0.0
+            var stepSeconds = 0.0
             if let prev = previous {
                 stepDistance = GeoMath.distanceMeters(
                     lat1: prev.latitude, lon1: prev.longitude,
                     lat2: point.latitude, lon2: point.longitude
                 )
-                distance += stepDistance
+                stepSeconds = max(0, point.t - prev.t)
             }
-            if point.speed >= 0 && point.speed <= config.maxPlausibleSpeed {
-                maxSpeed = max(maxSpeed, point.speed)
-                if point.speed >= config.movingSpeed, let last = lastTime {
+
+            // Liiketila: GPS-nopeus jos saatavilla, muuten askeleen keskinopeus.
+            // Paikallaan seisoessa GPS-värinä ei saa kerryttää matkaa.
+            let moving: Bool
+            if point.speed >= 0 {
+                // Häiriöpiikki (epäuskottava nopeus) ei kerrytä matkaa.
+                moving = point.speed >= config.movingSpeed && point.speed <= config.maxPlausibleSpeed
+            } else {
+                moving = stepSeconds > 0 && stepDistance / stepSeconds >= config.movingSpeed
+            }
+
+            if moving {
+                distance += stepDistance
+                if let last = lastTime {
                     movingTime += point.t - last
                     movingDistance += stepDistance
                 }
+            }
+            if point.speed >= 0 && point.speed <= config.maxPlausibleSpeed {
+                maxSpeed = max(maxSpeed, point.speed)
             }
             previous = point
             lastTime = point.t

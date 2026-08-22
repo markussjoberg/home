@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Charts
 import NosteCore
 
 struct ForecastTab: View {
@@ -30,9 +31,17 @@ struct ForecastTab: View {
                             SpotRow(spot: spot, forecast: forecastStore.forecast(for: spot))
                         }
                     }
+                    .refreshable {
+                        for spot in sortedSpots {
+                            await forecastStore.refresh(spot: spot, force: true, allSpots: sortedSpots)
+                        }
+                    }
                 }
             }
             .navigationTitle("Ennuste")
+            .task {
+                await forecastStore.refreshFavorites(spots: sortedSpots)
+            }
         }
     }
 }
@@ -43,14 +52,24 @@ private struct SpotRow: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     if spot.isFavorite {
                         Image(systemName: "star.fill").foregroundStyle(.orange).font(.caption)
                     }
                     Text(spot.name).font(.headline)
                 }
-                Text(spot.waterType.displayName).font(.caption).foregroundStyle(.secondary)
+                if let match = nextMatch {
+                    Label {
+                        Text("Keli osuu \(match, format: .dateTime.weekday(.abbreviated).hour())")
+                    } icon: {
+                        Image(systemName: "checkmark.circle.fill")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.green)
+                } else {
+                    Text(spot.waterType.displayName).font(.caption).foregroundStyle(.secondary)
+                }
             }
             Spacer()
             if let hour = forecast?.upcoming(from: Date(), hours: 1).wind.first {
@@ -66,29 +85,77 @@ private struct SpotRow: View {
             }
         }
     }
+
+    /// Ensimmäinen tuuli-ikkunaan osuva tunti seuraavan 48 h aikana.
+    private var nextMatch: Date? {
+        guard spot.hasWindWindow, let forecast else { return nil }
+        return forecast.upcoming(from: Date(), hours: 48).wind.first { spot.matches($0) }?.time
+    }
 }
 
 struct SpotForecastView: View {
     let spot: SpotData
     let allSpots: [SpotData]
     @EnvironmentObject private var forecastStore: ForecastStore
+    @State private var observation: ServerClient.Observation?
+    @State private var selectedTime: Date?
 
     var body: some View {
         List {
             if let error = forecastStore.lastError {
                 Text(error).foregroundStyle(.red).font(.footnote)
             }
-            if let forecast = forecastStore.forecast(for: spot) {
-                let upcoming = forecast.upcoming(from: Date(), hours: 48)
-                Section("Tuuli") {
-                    ForEach(upcoming.wind) { hour in
-                        WindRow(hour: hour, wave: wave(for: hour.time, in: upcoming))
+
+            if let observation, let speed = observation.windSpeed {
+                Section {
+                    HStack {
+                        Image(systemName: "dot.radiowaves.left.and.right")
+                            .foregroundStyle(.cyan)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Havainto lähiasemalta")
+                                .font(.subheadline)
+                            if let date = observation.date {
+                                Text(date, format: .dateTime.hour().minute())
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing) {
+                            Text(Format.speedMs(speed)).fontWeight(.semibold)
+                            if let gust = observation.windGust, let direction = observation.windDirection {
+                                Text("\(Format.speedMs(gust)) · \(GeoMath.compassName(degrees: direction))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
+            }
+
+            if let forecast = forecastStore.forecast(for: spot) {
+                let upcoming = forecast.upcoming(from: Date(), hours: 48)
+
+                Section {
+                    WindChart(spot: spot, wind: upcoming.wind, selectedTime: $selectedTime)
+                        .frame(height: 170)
+                        .listRowInsets(EdgeInsets(top: 12, leading: 8, bottom: 4, trailing: 12))
+                }
+
+                ForEach(days(of: upcoming.wind), id: \.self) { day in
+                    Section(day.formatted(.dateTime.weekday(.wide).day().month())) {
+                        ForEach(upcoming.wind.filter { sameDay($0.time, day) }) { hour in
+                            WindRow(hour: hour,
+                                    wave: wave(for: hour.time, in: upcoming),
+                                    matches: spot.matches(hour))
+                        }
+                    }
+                }
+
                 Section {
                     Text("Haettu \(forecast.fetchedAt, format: .dateTime.day().month().hour().minute()) · Open-Meteo")
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(stale(forecast) ? .orange : .secondary)
                 }
             } else if forecastStore.loading.contains(spot.id) {
                 ProgressView()
@@ -99,14 +166,37 @@ struct SpotForecastView: View {
         .navigationTitle(spot.name)
         .toolbar {
             Button {
-                Task { await forecastStore.refresh(spot: spot, force: true, allSpots: allSpots) }
+                Task { await refresh(force: true) }
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
         }
         .task {
-            await forecastStore.refresh(spot: spot, allSpots: allSpots)
+            await refresh(force: false)
         }
+    }
+
+    private func refresh(force: Bool) async {
+        await forecastStore.refresh(spot: spot, force: force, allSpots: allSpots)
+        observation = await ServerClient.shared.observation(latitude: spot.latitude, longitude: spot.longitude)
+    }
+
+    private func stale(_ forecast: SpotForecast) -> Bool {
+        Date().timeIntervalSince(forecast.fetchedAt) > 3 * 3600
+    }
+
+    private func days(of hours: [WindHour]) -> [Date] {
+        var seen: [Date] = []
+        let calendar = Calendar.current
+        for hour in hours {
+            let day = calendar.startOfDay(for: hour.time)
+            if seen.last != day { seen.append(day) }
+        }
+        return seen
+    }
+
+    private func sameDay(_ time: Date, _ day: Date) -> Bool {
+        Calendar.current.startOfDay(for: time) == day
     }
 
     private func wave(for time: Date, in forecast: SpotForecast) -> WaveHour? {
@@ -114,15 +204,124 @@ struct SpotForecastView: View {
     }
 }
 
+/// Tuulikäyrä 48 h: nopeus yhtenäisenä viivana, puuskat katkoviivana ja
+/// nopeus–puuska-väli samalla sävyllä himmeänä nauhana (sama suure → yksi akseli;
+/// viivatyyli erottaa sarjat myös ilman värinäköä). Tuuli-ikkunaan osuvat tunnit
+/// merkitään vihreällä pohjalla — sama tieto on listassa tekstinä.
+private struct WindChart: View {
+    let spot: SpotData
+    let wind: [WindHour]
+    @Binding var selectedTime: Date?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let selected = selectedHour {
+                Text("\(selected.time, format: .dateTime.weekday(.abbreviated).hour()): \(Format.speedMs(selected.speed)), puuskat \(Format.speedMs(selected.gust)), \(selected.directionName)")
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+            } else {
+                Text("Tuuli ja puuskat (m/s)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Chart {
+                // Tuuli-ikkunaosumien tausta.
+                ForEach(matchRanges(), id: \.start) { range in
+                    RectangleMark(
+                        xStart: .value("alku", range.start),
+                        xEnd: .value("loppu", range.end)
+                    )
+                    .foregroundStyle(.green.opacity(0.12))
+                }
+
+                ForEach(wind) { hour in
+                    AreaMark(
+                        x: .value("Aika", hour.time),
+                        yStart: .value("Tuuli", hour.speed),
+                        yEnd: .value("Puuska", hour.gust)
+                    )
+                    .foregroundStyle(.cyan.opacity(0.15))
+
+                    LineMark(
+                        x: .value("Aika", hour.time),
+                        y: .value("m/s", hour.speed),
+                        series: .value("Sarja", "Tuuli")
+                    )
+                    .foregroundStyle(.cyan)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
+
+                    LineMark(
+                        x: .value("Aika", hour.time),
+                        y: .value("m/s", hour.gust),
+                        series: .value("Sarja", "Puuska")
+                    )
+                    .foregroundStyle(.cyan.opacity(0.55))
+                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                }
+
+                if let selected = selectedHour {
+                    RuleMark(x: .value("Valinta", selected.time))
+                        .foregroundStyle(.secondary.opacity(0.5))
+                        .lineStyle(StrokeStyle(lineWidth: 1))
+                }
+            }
+            .chartXSelection(value: $selectedTime)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .hour, count: 6)) { _ in
+                    AxisGridLine()
+                    AxisValueLabel(format: .dateTime.hour())
+                }
+            }
+            .chartYAxis {
+                AxisMarks { _ in
+                    AxisGridLine()
+                    AxisValueLabel()
+                }
+            }
+        }
+    }
+
+    private var selectedHour: WindHour? {
+        guard let selectedTime else { return nil }
+        return wind.min {
+            abs($0.time.timeIntervalSince(selectedTime)) < abs($1.time.timeIntervalSince(selectedTime))
+        }
+    }
+
+    private func matchRanges() -> [(start: Date, end: Date)] {
+        guard spot.hasWindWindow else { return [] }
+        var ranges: [(start: Date, end: Date)] = []
+        var current: (start: Date, end: Date)?
+        for hour in wind {
+            if spot.matches(hour) {
+                if var range = current {
+                    range.end = hour.time.addingTimeInterval(3600)
+                    current = range
+                } else {
+                    current = (hour.time, hour.time.addingTimeInterval(3600))
+                }
+            } else if let range = current {
+                ranges.append(range)
+                current = nil
+            }
+        }
+        if let range = current { ranges.append(range) }
+        return ranges
+    }
+}
+
 private struct WindRow: View {
     let hour: WindHour
     let wave: WaveHour?
+    let matches: Bool
 
     var body: some View {
         HStack {
             VStack(alignment: .leading) {
-                Text(hour.time, format: .dateTime.weekday(.abbreviated).hour())
+                Text(hour.time, format: .dateTime.hour())
                     .font(.subheadline)
+                    .fontWeight(matches ? .bold : .regular)
                 if let wave {
                     Text(String(format: "aalto %.1f m · %.0f s", wave.height, wave.period)
                         .replacingOccurrences(of: ".", with: ","))
@@ -131,17 +330,24 @@ private struct WindRow: View {
                 }
             }
             Spacer()
+            if matches {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.caption)
+            }
             Text(hour.directionName)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Image(systemName: "arrow.up")
                 .rotationEffect(.degrees(hour.direction + 180))
-                .foregroundStyle(.cyan)
+                .foregroundStyle(matches ? .green : .cyan)
             VStack(alignment: .trailing) {
-                Text(Format.speedMs(hour.speed)).fontWeight(.medium)
+                Text(Format.speedMs(hour.speed))
+                    .fontWeight(matches ? .bold : .medium)
                 Text(Format.speedMs(hour.gust)).font(.caption).foregroundStyle(.secondary)
             }
             .frame(minWidth: 70, alignment: .trailing)
         }
+        .listRowBackground(matches ? Color.green.opacity(0.08) : nil)
     }
 }

@@ -92,6 +92,12 @@ public final class PumpDetector {
     }
 
     public func finish() -> PumpAnalysis {
+        Self.analysis(fromStrokeTimes: strokeTimes, config: config)
+    }
+
+    /// Rakentaa analyysin pelkistä pumppuhetkistä — käytetään myös kaatumisesta
+    /// palautumiseen, jossa raakasignaalia ei enää ole mutta pumppuhetket on talletettu.
+    public static func analysis(fromStrokeTimes strokeTimes: [TimeInterval], config: Config = Config()) -> PumpAnalysis {
         var bouts: [RideSegment] = []
         var boutStart: TimeInterval?
         var boutStrokes = 0
@@ -126,6 +132,9 @@ public final class PumpDetector {
             bouts: bouts
         )
     }
+
+    /// Tähän mennessä havaitut pumppuhetket (autosavea varten).
+    public var currentStrokeTimes: [TimeInterval] { strokeTimes }
 
     /// Jälkianalyysi valmiille näytelistalle.
     public static func analyze(_ samples: [MotionSample], config: Config = Config()) -> PumpAnalysis {

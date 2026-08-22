@@ -1,0 +1,17 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 520, "h": 280, "title": "Noste — UI" },
+    { "file": "WatchAloitus.dc.html", "x": 0, "y": 440, "w": 250, "h": 300, "title": "Kello · Aloitus" },
+    { "file": "WatchWing.dc.html", "x": 350, "y": 440, "w": 250, "h": 300, "title": "Kello · Wing-mittarit" },
+    { "file": "WatchPumppi.dc.html", "x": 700, "y": 440, "w": 250, "h": 300, "title": "Kello · Pumppi-mittarit" },
+    { "file": "WatchYhteenveto.dc.html", "x": 1050, "y": 440, "w": 250, "h": 380, "title": "Kello · Yhteenveto" },
+    { "file": "WatchEnnuste.dc.html", "x": 1400, "y": 440, "w": 250, "h": 380, "title": "Kello · Ennuste offline" },
+    { "file": "PhoneKartta.dc.html", "x": 0, "y": 960, "w": 390, "h": 844, "title": "iPhone · Kartta" },
+    { "file": "PhoneEnnuste.dc.html", "x": 490, "y": 960, "w": 390, "h": 844, "title": "iPhone · Spotin ennuste" },
+    { "file": "PhoneSessio.dc.html", "x": 980, "y": 960, "w": 390, "h": 844, "title": "iPhone · Sessio" }
+  ],
+  "annotations": [
+    { "id": "vihrea-keli", "x": 600, "y": 60, "w": 300, "text": "Vihreä tarkoittaa aina samaa: 'nyt lennetään' tai 'keli osuu ikkunaan'.\nSama väri kellossa, puhelimessa ja kartan foiliosuuksissa.\n\nOsumatunnit merkitään värin lisäksi lihavoinnilla ja merkillä — luettavissa myös ilman värinäköä." }
+  ],
+  "launch": { "view": "canvas" }
+}

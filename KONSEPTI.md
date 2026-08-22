@@ -82,11 +82,13 @@ Kun oma palvelin on käytössä, appin ennustehaut kulkevat sen läpisyötön ka
 Ennustenäkymä spottikohtainen: seuraavat 48–72 h, tuuli + puuskat + suunta nuolella,
 merispoteille aallokko. Sisävesispotti = sama näkymä ilman aaltoriviä.
 
-**Kelivahti:** spotille asetetaan ehdot (esim. min 8 m/s, max 14 m/s, sektori
-SW–NW, vähintään 2 h putkeen) ja **palvelin** tarkistaa ennusteet puolen tunnin
-välein ja etsii osumaikkunat. Tämä logiikka on jo palvelimessa (`/api/alerts`);
-ilmoituskanava (push/APNs) kytketään vaiheessa 2. Tämä on se ominaisuus joka
-säästää turhat ennusteiden tuijottelut.
+**Kelivahti:** spotille asetetaan tuuli-ikkuna (suunnat ilmansuuntina, min/max
+m/s) suoraan spottieditorissa, ja **palvelin** johtaa hälytykset spoteista,
+tarkistaa ennusteet puolen tunnin välein ja etsii vähintään 2 h osumaikkunat.
+Ilmoitukset lähtevät **ntfy:llä** (ilmainen, toimii heti: ntfy-appi puhelimeen,
+oma salainen aihe `NTFY_URL`-ympäristömuuttujaan) — sama ikkuna ilmoitetaan
+vain kerran. APNs-natiivipushit mahdollinen jatke myöhemmin. Sama tuuli-ikkuna
+korostaa osumatunnit ennustenäkymässä ja kellon glancessa.
 
 ## 3. Kartat
 

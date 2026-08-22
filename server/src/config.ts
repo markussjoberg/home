@@ -7,6 +7,8 @@ export interface Config {
   marineTileTemplate: string;
   /** Bearer-token, jolla appi tunnistautuu (synkka, kelivahti). */
   apiToken: string;
+  /** ntfy-aiheen osoite kelivahti-ilmoituksille (esim. https://ntfy.sh/oma-salainen-aihe). Tyhjä = ei ilmoituksia. */
+  ntfyUrl: string;
   dataDir: string;
   tileCacheDir: string;
   /** Tiilivälimuistin elinikä sekunteina (oletus 30 vrk). */
@@ -26,6 +28,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     mmlApiKey: env.MML_API_KEY ?? "",
     marineTileTemplate: env.MARINE_TILE_TEMPLATE ?? DEFAULT_MARINE_TEMPLATE,
     apiToken: env.NOSTE_TOKEN ?? "",
+    ntfyUrl: env.NTFY_URL ?? "",
     dataDir: env.DATA_DIR ?? "./data",
     tileCacheDir: env.TILE_CACHE_DIR ?? "./data/tiles",
     tileCacheTtl: Number(env.TILE_CACHE_TTL ?? 30 * 24 * 3600),

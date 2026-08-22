@@ -6,6 +6,9 @@ DerivedData/
 xcuserdata/
 *.xcuserstate
 
+# Design: seedattu kanvaasi generoidaan design/*.dc.html-tiedostoista
+design/noste-ui.html
+
 # Server
 server/node_modules/
 server/data/

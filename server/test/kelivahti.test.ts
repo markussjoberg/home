@@ -36,6 +36,19 @@ describe("directionInSector", () => {
   });
 });
 
+describe("goodDirections (ilmansuuntaindeksit)", () => {
+  it("oktantit ohittavat sektorin", () => {
+    const alert: Alert = { ...baseAlert, goodDirections: [5, 6] }; // SW, W
+    expect(matchAlert(alert, [hour(10, 9, 240), hour(11, 9, 250)])).toHaveLength(1);
+    expect(matchAlert(alert, [hour(10, 9, 90), hour(11, 9, 90)])).toHaveLength(0);
+  });
+
+  it("pohjoinen kiertyy oikein", () => {
+    const alert: Alert = { ...baseAlert, directionFrom: undefined, directionTo: undefined, goodDirections: [0] };
+    expect(matchAlert(alert, [hour(10, 9, 355), hour(11, 9, 10)])).toHaveLength(1);
+  });
+});
+
 describe("matchAlert", () => {
   it("löytää yhtenäisen ikkunan ja raportoi maksimin", () => {
     const wind = [hour(10, 5), hour(11, 9), hour(12, 12), hour(13, 10), hour(14, 4)];

@@ -18,6 +18,9 @@ public enum WaterType: String, Codable, CaseIterable, Sendable, Identifiable {
 }
 
 /// Spotti siirto- ja synkkausmuodossa (SwiftData-mallit iOS-apissa kääritään tähän).
+/// Tuuli-ikkuna (suunnat + voimakkuus) ohjaa ennusteiden korostusta, kellon
+/// glancea ja kelivahtia. Uudet kentät ovat optionaaleja, jotta vanha talletettu
+/// data dekoodautuu ongelmitta.
 public struct SpotData: Codable, Sendable, Equatable, Identifiable {
     public var id: UUID
     public var name: String
@@ -27,9 +30,20 @@ public struct SpotData: Codable, Sendable, Equatable, Identifiable {
     public var sports: [Sport]
     public var isFavorite: Bool
     public var notes: String
+    /// Toimivat tuulensuunnat kahdeksana ilmansuuntana (0 = N, 1 = NE … 7 = NW).
+    /// nil/tyhjä = kaikki suunnat käyvät.
+    public var goodDirections: [Int]?
+    /// Kelin alaraja m/s (nil = ei rajaa).
+    public var minWind: Double?
+    /// Kelin yläraja m/s (nil = ei rajaa).
+    public var maxWind: Double?
+    /// Kelivahti päällä tälle spotille (vaatii oman palvelimen).
+    public var alertEnabled: Bool?
 
     public init(id: UUID = UUID(), name: String, latitude: Double, longitude: Double,
-                waterType: WaterType = .sea, sports: [Sport] = [], isFavorite: Bool = false, notes: String = "") {
+                waterType: WaterType = .sea, sports: [Sport] = [], isFavorite: Bool = false, notes: String = "",
+                goodDirections: [Int]? = nil, minWind: Double? = nil, maxWind: Double? = nil,
+                alertEnabled: Bool? = nil) {
         self.id = id
         self.name = name
         self.latitude = latitude
@@ -38,5 +52,32 @@ public struct SpotData: Codable, Sendable, Equatable, Identifiable {
         self.sports = sports
         self.isFavorite = isFavorite
         self.notes = notes
+        self.goodDirections = goodDirections
+        self.minWind = minWind
+        self.maxWind = maxWind
+        self.alertEnabled = alertEnabled
+    }
+
+    /// Onko spotille määritetty tuuli-ikkuna (jotain, mitä vasten korostaa/vahtia).
+    public var hasWindWindow: Bool {
+        (goodDirections?.isEmpty == false) || minWind != nil || maxWind != nil
+    }
+
+    /// Osuuko ennustetunti spotin tuuli-ikkunaan. Ilman ikkunaa ei osumia
+    /// (korostus tarkoittaisi muuten "aina").
+    public func matches(_ hour: WindHour) -> Bool {
+        guard hasWindWindow else { return false }
+        if let min = minWind, hour.speed < min { return false }
+        if let max = maxWind, hour.speed > max { return false }
+        if let directions = goodDirections, !directions.isEmpty {
+            return directions.contains(Self.compassOctant(degrees: hour.direction))
+        }
+        return true
+    }
+
+    /// Suunta-asteet → ilmansuuntaindeksi 0–7 (0 = N, myötäpäivään 45° välein).
+    public static func compassOctant(degrees: Double) -> Int {
+        let index = Int((degrees / 45).rounded()) % 8
+        return (index + 8) % 8
     }
 }

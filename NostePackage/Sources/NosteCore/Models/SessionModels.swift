@@ -82,6 +82,11 @@ public struct RideAnalysis: Codable, Sendable, Equatable {
     }
 
     public var count: Int { segments.count }
+
+    /// Lennon keskikesto.
+    public var averageDuration: TimeInterval {
+        segments.isEmpty ? 0 : totalDuration / Double(segments.count)
+    }
 }
 
 /// Koko session yhteenveto — se mitä kello näyttää lopuksi ja mitä puhelin tallettaa.

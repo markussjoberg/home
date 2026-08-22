@@ -16,6 +16,30 @@ export interface SpotSync {
   sports: string[];
   isFavorite: boolean;
   notes: string;
+  /** Toimivat suunnat ilmansuuntaindekseinä 0–7 (0 = N). */
+  goodDirections?: number[];
+  minWind?: number;
+  maxWind?: number;
+  /** Kelivahti päällä — palvelin johtaa hälytyksen näistä kentistä. */
+  alertEnabled?: boolean;
+}
+
+/** Johtaa hälytyksen spotin tuuli-ikkunasta (sama logiikka kuin appin puolella). */
+export function alertFromSpot(spot: SpotSync): Alert | null {
+  if (!spot.alertEnabled) return null;
+  if (spot.minWind === undefined && spot.maxWind === undefined && !spot.goodDirections?.length) {
+    return null; // ei ikkunaa jota vahtia
+  }
+  return {
+    id: `spot-${spot.id}`,
+    spotId: spot.id,
+    spotName: spot.name,
+    minWind: spot.minWind ?? 0,
+    maxWind: spot.maxWind,
+    goodDirections: spot.goodDirections,
+    minHours: 2,
+    enabled: true,
+  };
 }
 
 export interface SessionSync {
@@ -185,8 +209,15 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
   });
 
   async function checkAlerts(): Promise<{ alertId: string; spotName: string; windows: AlertWindow[] }[]> {
-    const alerts = (await store.read<Alert[]>("alerts", [])).filter((a) => a.enabled);
+    const stored = (await store.read<Alert[]>("alerts", [])).filter((a) => a.enabled);
     const spots = await store.read<SpotSync[]>("spots", []);
+    // Hälytykset johdetaan ensisijaisesti spottien tuuli-ikkunoista; erikseen
+    // talletettu hälytys samalle spotille ohittaa johdetun.
+    const covered = new Set(stored.map((a) => a.spotId));
+    const derived = spots
+      .map(alertFromSpot)
+      .filter((a): a is Alert => a !== null && !covered.has(a.spotId));
+    const alerts = [...stored, ...derived];
     const results: { alertId: string; spotName: string; windows: AlertWindow[] }[] = [];
 
     for (const alert of alerts) {
@@ -208,8 +239,51 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
 
     if (results.length > 0) {
       await store.write("kelivahti-matches", { checkedAt: now().toISOString(), results });
+      await notifyNewWindows(results);
     }
     return results;
+  }
+
+  /** Lähettää ntfy-ilmoituksen uusista ikkunoista. Sama ikkuna ilmoitetaan vain kerran. */
+  async function notifyNewWindows(
+    results: { alertId: string; spotName: string; windows: AlertWindow[] }[],
+  ): Promise<number> {
+    if (!config.ntfyUrl) return 0;
+    const notified = await store.read<string[]>("kelivahti-notified", []);
+    const seen = new Set(notified);
+    let sent = 0;
+
+    for (const result of results) {
+      for (const window of result.windows) {
+        const key = `${result.alertId}|${window.start}`;
+        if (seen.has(key)) continue;
+        try {
+          const res = await fetchImpl(config.ntfyUrl, {
+            method: "POST",
+            headers: {
+              Title: `Kelivahti: ${result.spotName}`,
+              Tags: "wind_face",
+              Priority: "default",
+            },
+            body:
+              `Ennusteessa kelit ${window.start}–${window.end} UTC ` +
+              `(${window.hours} h, max ${window.maxSpeed.toFixed(1)} m/s).`,
+          });
+          if (res.ok) {
+            seen.add(key);
+            sent++;
+          }
+        } catch {
+          // Ilmoitusvirhe ei kaada kierrosta; yritetään seuraavalla.
+        }
+      }
+    }
+
+    if (sent > 0) {
+      // Pidä lista kurissa: uusimmat 500 avainta riittävät duplikaattisuojaan.
+      await store.write("kelivahti-notified", [...seen].slice(-500));
+    }
+    return sent;
   }
 
   return { app, checkAlerts };

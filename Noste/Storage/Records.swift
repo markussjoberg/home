@@ -13,6 +13,10 @@ final class SpotRecord {
     var isFavorite: Bool
     var notes: String
     var createdAt: Date
+    var goodDirections: [Int]?
+    var minWind: Double?
+    var maxWind: Double?
+    var alertEnabled: Bool = false
 
     init(from data: SpotData) {
         id = data.id
@@ -24,6 +28,10 @@ final class SpotRecord {
         isFavorite = data.isFavorite
         notes = data.notes
         createdAt = Date()
+        goodDirections = data.goodDirections
+        minWind = data.minWind
+        maxWind = data.maxWind
+        alertEnabled = data.alertEnabled ?? false
     }
 
     var data: SpotData {
@@ -35,7 +43,11 @@ final class SpotRecord {
             waterType: WaterType(rawValue: waterTypeRaw) ?? .sea,
             sports: sportsRaw.compactMap(Sport.init(rawValue:)),
             isFavorite: isFavorite,
-            notes: notes
+            notes: notes,
+            goodDirections: goodDirections,
+            minWind: minWind,
+            maxWind: maxWind,
+            alertEnabled: alertEnabled ? true : nil
         )
     }
 
@@ -47,6 +59,10 @@ final class SpotRecord {
         sportsRaw = data.sports.map(\.rawValue)
         isFavorite = data.isFavorite
         notes = data.notes
+        goodDirections = data.goodDirections
+        minWind = data.minWind
+        maxWind = data.maxWind
+        alertEnabled = data.alertEnabled ?? false
     }
 }
 

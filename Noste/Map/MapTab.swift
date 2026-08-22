@@ -91,13 +91,21 @@ struct MapTab: View {
                 modelContext.insert(SpotRecord(from: data))
             }
             try? modelContext.save()
+            // @Query päivittyy asynkronisesti — rakenna ajantasainen lista itse.
+            var updated = spots.map(\.data).filter { $0.id != data.id }
+            updated.append(data)
             Task {
-                await forecastStore.refresh(spot: data, force: true, allSpots: spots.map(\.data))
+                await forecastStore.refresh(spot: data, force: true, allSpots: updated)
+                await ServerClient.shared.backupSpots(updated)
             }
         case .delete:
             if let existing = spots.first(where: { $0.id == original.id }) {
                 modelContext.delete(existing)
                 try? modelContext.save()
+                let remaining = spots.map(\.data).filter { $0.id != original.id }
+                Task {
+                    await ServerClient.shared.backupSpots(remaining)
+                }
             }
         case .cancel:
             break

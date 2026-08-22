@@ -41,6 +41,30 @@ final class SessionAnalyzerTests: XCTestCase {
         XCTAssertEqual(summary.rides.count, 1, "pumpin irtoamisnopeus 2,2 m/s alittuu → yksi jakso")
     }
 
+    func testStationaryJitterDoesNotAccumulateDistance() {
+        // Seisotaan paikallaan: nopeus 0, sijainti värisee ±2,8 m.
+        let points = (0..<60).map { i in
+            TrackPoint(t: Double(i), latitude: 60.2,
+                       longitude: 25.0 + (i % 2 == 1 ? 0.00005 : 0),
+                       speed: 0, horizontalAccuracy: 5)
+        }
+        let summary = SessionAnalyzer.summarize(sport: .wingFoil, startDate: .now, points: points)
+        XCTAssertEqual(summary.distance, 0, accuracy: 0.001)
+        XCTAssertEqual(summary.averageMovingSpeed, 0, accuracy: 0.001)
+    }
+
+    func testUnknownSpeedFallsBackToStepSpeed() {
+        // GPS ei anna nopeutta (speed -1), mutta liikutaan itään 5 m/s.
+        let metersPerDegree = 111_320 * cos(60.2 * .pi / 180)
+        let points = (0..<20).map { i in
+            TrackPoint(t: Double(i), latitude: 60.2,
+                       longitude: 25.0 + 5.0 * Double(i) / metersPerDegree,
+                       speed: -1, horizontalAccuracy: 5)
+        }
+        let summary = SessionAnalyzer.summarize(sport: .wingFoil, startDate: .now, points: points)
+        XCTAssertEqual(summary.distance, 95, accuracy: 2)
+    }
+
     func testFiltersImplausibleSpeedSpike() {
         var points = makeTrack(speeds: [Double](repeating: 6.0, count: 20))
         points[10].speed = 80 // GPS-häiriö

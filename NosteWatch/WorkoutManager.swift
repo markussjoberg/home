@@ -9,12 +9,17 @@ import NosteCore
 /// Ajaa session: HealthKit-treeni, GPS, kiihtyvyysanturi ja live-mittarit.
 /// Raakadata (GPS-jälki + kiihtyvyys) kerätään talteen ja koko analyysi ajetaan
 /// lopuksi NosteCorella; livenä näytetään kevyet versiot samoista mittareista.
+///
+/// Kaatumissuoja: sessio talletetaan levylle 30 s välein. Jos appi kuolee kesken,
+/// seuraava käynnistys rakentaa yhteenvedon talletetusta datasta ja siirtää sen
+/// puhelimeen — mittari ei saa hukata puolentoista tunnin sessiota.
 @MainActor
 final class WorkoutManager: NSObject, ObservableObject {
 
     enum Phase {
         case idle
         case running
+        case paused
         case ended
     }
 
@@ -25,10 +30,11 @@ final class WorkoutManager: NSObject, ObservableObject {
     @Published var currentSpeed: Double = 0
     @Published var liveDistance: Double = 0
     @Published var livePumpCount: Int = 0
-    @Published var liveFoilTime: TimeInterval = 0
-    @Published var isOnFoil = false
+    @Published var rideState = LiveRideTracker.State(isRiding: false, currentRideDuration: 0, rideCount: 0, totalRideTime: 0)
     @Published var summary: SessionSummary?
     @Published var errorMessage: String?
+    /// Ilmoitus edellisen, kesken jääneen session palautuksesta.
+    @Published var recoveryNotice: String?
 
     private let healthStore = HKHealthStore()
     private var session: HKWorkoutSession?
@@ -39,7 +45,10 @@ final class WorkoutManager: NSObject, ObservableObject {
     private let motionQueue = OperationQueue()
 
     private var startDate = Date()
+    private var pausedTotal: TimeInterval = 0
+    private var pausedAt: Date?
     private var timer: AnyCancellable?
+    private var ticksSinceAutosave = 0
 
     // Raakadata analyysiin. Kiihtyvyyspuskuria suojaa lukko, koska CoreMotion
     // toimittaa näytteet omassa jonossaan.
@@ -47,10 +56,13 @@ final class WorkoutManager: NSObject, ObservableObject {
     private let motionLock = NSLock()
     private var motionSamples: [MotionSample] = []
     private var pumpDetector = PumpDetector()
+    private var rideTracker = LiveRideTracker(sport: .wingFoil)
+    private var lastGoodLocation: CLLocation?
 
-    // Live-foilitunnistus (nopeushystereesi; lopullinen tulos lasketaan batchina).
-    private var lastLocationTime: TimeInterval?
-    private var lastLocation: CLLocation?
+    override init() {
+        super.init()
+        recoverInterruptedSessionIfAny()
+    }
 
     func requestAuthorization() {
         guard HKHealthStore.isHealthDataAvailable() else { return }
@@ -63,40 +75,64 @@ final class WorkoutManager: NSObject, ObservableObject {
         locationManager.requestWhenInUseAuthorization()
     }
 
+    // MARK: - Elinkaari
+
     func start(sport: Sport) {
         guard phase == .idle else { return }
         self.sport = sport
         summary = nil
         errorMessage = nil
+        recoveryNotice = nil
         trackPoints = []
-        motionLock.lock(); motionSamples = []; motionLock.unlock()
-        pumpDetector = PumpDetector()
+        motionLock.lock(); motionSamples = []; pumpDetector = PumpDetector(); motionLock.unlock()
+        rideTracker = LiveRideTracker(sport: sport)
+        rideState = rideTracker.current
         livePumpCount = 0
-        liveFoilTime = 0
         liveDistance = 0
-        isOnFoil = false
-        lastLocationTime = nil
-        lastLocation = nil
+        currentSpeed = 0
+        lastGoodLocation = nil
+        pausedTotal = 0
+        pausedAt = nil
         startDate = Date()
+        ticksSinceAutosave = 0
 
         startWorkoutSession()
         startLocation()
         startMotion()
-
-        timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect().sink { [weak self] _ in
-            guard let self, self.phase == .running else { return }
-            self.elapsed = Date().timeIntervalSince(self.startDate)
-            self.motionLock.lock()
-            self.livePumpCount = self.pumpDetector.strokeCount
-            self.motionLock.unlock()
-        }
+        startTimer()
 
         phase = .running
         WKInterfaceDevice.current().enableWaterLock()
     }
 
-    func end() {
+    func pause() {
         guard phase == .running else { return }
+        phase = .paused
+        pausedAt = Date()
+        session?.pause()
+        locationManager.stopUpdatingLocation()
+        motionManager.stopDeviceMotionUpdates()
+        currentSpeed = 0
+    }
+
+    func resume() {
+        guard phase == .paused else { return }
+        if let pausedAt {
+            pausedTotal += Date().timeIntervalSince(pausedAt)
+        }
+        pausedAt = nil
+        session?.resume()
+        startLocation()
+        startMotion()
+        phase = .running
+        WKInterfaceDevice.current().enableWaterLock()
+    }
+
+    func end() {
+        guard phase == .running || phase == .paused else { return }
+        if phase == .paused, let pausedAt {
+            pausedTotal += Date().timeIntervalSince(pausedAt)
+        }
         phase = .ended
         timer?.cancel()
         locationManager.stopUpdatingLocation()
@@ -110,7 +146,7 @@ final class WorkoutManager: NSObject, ObservableObject {
             sport: sport,
             startDate: startDate,
             points: trackPoints,
-            motion: sport.usesFoil || sport.countsPumps ? motion : []
+            motion: motion
         )
         summary = result
 
@@ -121,6 +157,7 @@ final class WorkoutManager: NSObject, ObservableObject {
         session?.end()
 
         WatchConnectivityManager.shared.send(payload: WatchSync.SessionPayload(summary: result, track: trackPoints))
+        SessionRecovery.clear()
     }
 
     func reset() {
@@ -129,6 +166,55 @@ final class WorkoutManager: NSObject, ObservableObject {
         elapsed = 0
         heartRate = 0
         currentSpeed = 0
+    }
+
+    private func startTimer() {
+        timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect().sink { [weak self] _ in
+            guard let self, self.phase == .running else { return }
+            self.elapsed = Date().timeIntervalSince(self.startDate) - self.pausedTotal
+            self.motionLock.lock()
+            self.livePumpCount = self.pumpDetector.strokeCount
+            self.motionLock.unlock()
+
+            self.ticksSinceAutosave += 1
+            if self.ticksSinceAutosave >= 30 {
+                self.ticksSinceAutosave = 0
+                self.autosave()
+            }
+        }
+    }
+
+    // MARK: - Kaatumissuoja
+
+    private func autosave() {
+        motionLock.lock()
+        let strokes = pumpDetector.currentStrokeTimes
+        motionLock.unlock()
+        SessionRecovery.save(SessionRecovery.State(
+            sport: sport,
+            startDate: startDate,
+            points: trackPoints,
+            strokeTimes: strokes
+        ))
+    }
+
+    private func recoverInterruptedSessionIfAny() {
+        guard let state = SessionRecovery.load() else { return }
+        SessionRecovery.clear()
+        guard state.points.count >= 2 else { return }
+
+        // Rakenna yhteenveto talletetusta datasta: jaksot GPS:stä, pumput
+        // talletetuista pumppuhetkistä (raakasignaalia ei enää ole).
+        var recovered = SessionAnalyzer.summarize(
+            sport: state.sport,
+            startDate: state.startDate,
+            points: state.points
+        )
+        if state.sport.countsPumps {
+            recovered.pumps = PumpDetector.analysis(fromStrokeTimes: state.strokeTimes)
+        }
+        WatchConnectivityManager.shared.send(payload: WatchSync.SessionPayload(summary: recovered, track: state.points))
+        recoveryNotice = "Kesken jäänyt \(state.sport.displayName)-sessio (\(Format.duration(recovered.duration))) palautettiin ja siirrettiin puhelimeen."
     }
 
     // MARK: - HealthKit
@@ -162,6 +248,7 @@ final class WorkoutManager: NSObject, ObservableObject {
     }
 
     fileprivate func handle(locations: [CLLocation]) {
+        guard phase == .running else { return }
         for location in locations {
             let t = location.timestamp.timeIntervalSince(startDate)
             guard t >= 0 else { continue }
@@ -174,22 +261,13 @@ final class WorkoutManager: NSObject, ObservableObject {
                 horizontalAccuracy: location.horizontalAccuracy
             ))
             currentSpeed = max(0, speed)
-            if let previous = lastLocation, location.horizontalAccuracy <= 30, previous.horizontalAccuracy <= 30 {
-                liveDistance += location.distance(from: previous)
-            }
-            lastLocation = location
-
-            // Live-foilitila nopeushystereesillä.
-            if isOnFoil {
-                if speed >= 0 && speed < sport.touchdownSpeed {
-                    isOnFoil = false
-                } else if let last = lastLocationTime {
-                    liveFoilTime += t - last
+            if location.horizontalAccuracy >= 0 && location.horizontalAccuracy <= 30 {
+                if let previous = lastGoodLocation, max(0, speed) >= 1.0 {
+                    liveDistance += location.distance(from: previous)
                 }
-            } else if speed >= sport.takeoffSpeed {
-                isOnFoil = true
+                lastGoodLocation = location
             }
-            lastLocationTime = t
+            rideState = rideTracker.add(t: t, speed: speed)
         }
     }
 
@@ -242,4 +320,34 @@ extension WorkoutManager: HKLiveWorkoutBuilderDelegate {
     }
 
     nonisolated func workoutBuilderDidCollectEvent(_ workoutBuilder: HKLiveWorkoutBuilder) {}
+}
+
+/// Kesken jääneen session levytallennus.
+enum SessionRecovery {
+    struct State: Codable {
+        var sport: Sport
+        var startDate: Date
+        var points: [TrackPoint]
+        var strokeTimes: [TimeInterval]
+    }
+
+    private static var url: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("session-recovery.json")
+    }
+
+    static func save(_ state: State) {
+        if let data = try? JSONEncoder().encode(state) {
+            try? data.write(to: url, options: .atomic)
+        }
+    }
+
+    static func load() -> State? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(State.self, from: data)
+    }
+
+    static func clear() {
+        try? FileManager.default.removeItem(at: url)
+    }
 }

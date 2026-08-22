@@ -24,13 +24,29 @@ struct ControlsView: View {
     @EnvironmentObject private var workout: WorkoutManager
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             Button {
                 workout.end()
             } label: {
                 Label("Lopeta", systemImage: "stop.fill")
             }
             .tint(.red)
+
+            if workout.phase == .paused {
+                Button {
+                    workout.resume()
+                } label: {
+                    Label("Jatka", systemImage: "play.fill")
+                }
+                .tint(.green)
+            } else {
+                Button {
+                    workout.pause()
+                } label: {
+                    Label("Tauko", systemImage: "pause.fill")
+                }
+                .tint(.orange)
+            }
 
             Button {
                 WKInterfaceDevice.current().enableWaterLock()
@@ -39,48 +55,107 @@ struct ControlsView: View {
             }
             .tint(.blue)
         }
-        .padding()
+        .padding(.horizontal)
     }
 }
 
+/// Lajikohtainen mittarinäkymä: tärkein luku isoimpana.
+/// Pumppaajalle se on käynnissä olevan lennon kesto, wingaajalle nopeus.
 struct MetricsView: View {
     @EnvironmentObject private var workout: WorkoutManager
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(Format.duration(workout.elapsed))
-                .font(.system(size: 34, weight: .semibold, design: .rounded))
-                .foregroundStyle(.yellow)
-
-            metricRow(value: Format.speedKmh(workout.currentSpeed), label: workout.isOnFoil ? "foililla" : "nopeus",
-                      color: workout.isOnFoil ? .green : .primary)
-
-            if workout.sport.usesFoil {
-                metricRow(value: Format.duration(workout.liveFoilTime), label: "foiliaika", color: .green)
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(Format.duration(workout.elapsed))
+                    .font(.system(size: 26, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.yellow)
+                if workout.phase == .paused {
+                    Text("TAUKO")
+                        .font(.caption2.bold())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.orange, in: Capsule())
+                        .foregroundStyle(.black)
+                }
+                Spacer()
+                HStack(spacing: 2) {
+                    Image(systemName: "heart.fill").foregroundStyle(.red).font(.caption)
+                    Text(workout.heartRate > 0 ? "\(Int(workout.heartRate))" : "–")
+                        .font(.system(.body, design: .rounded))
+                }
             }
-            if workout.sport.countsPumps {
-                metricRow(value: "\(workout.livePumpCount)", label: "pumput", color: .cyan)
-            }
-            metricRow(value: Format.distance(workout.liveDistance), label: "matka", color: .primary)
 
-            HStack(spacing: 4) {
-                Image(systemName: "heart.fill").foregroundStyle(.red)
-                Text(workout.heartRate > 0 ? "\(Int(workout.heartRate))" : "–")
-                    .font(.system(.title3, design: .rounded))
+            hero
+
+            Divider().padding(.vertical, 1)
+
+            switch workout.sport {
+            case .pumpFoil:
+                row("Pumput", "\(workout.livePumpCount)", .cyan)
+                row("Lennot", "\(workout.rideState.rideCount)", .green)
+                row("Foiliaika", Format.duration(workout.rideState.totalRideTime), .green)
+            case .wingFoil:
+                row("Foiliaika", Format.duration(workout.rideState.totalRideTime), .green)
+                row("Lennot", "\(workout.rideState.rideCount)", .green)
+                row("Matka", Format.distance(workout.liveDistance), .primary)
+            case .surf, .sup:
+                row(workout.sport == .surf ? "Aallot" : "Vedot", "\(workout.rideState.rideCount)", .cyan)
+                row("Matka", Format.distance(workout.liveDistance), .primary)
+                row("Nopeus", Format.speedKmh(workout.currentSpeed), .primary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal)
     }
 
-    private func metricRow(value: String, label: String, color: Color) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+    /// Isoin mittari: lajin tärkein, hetkessä luettava luku.
+    @ViewBuilder
+    private var hero: some View {
+        switch workout.sport {
+        case .pumpFoil:
+            if workout.rideState.isRiding {
+                heroText(Format.duration(workout.rideState.currentRideDuration), label: "LENNOSSA", color: .green)
+            } else {
+                heroText("\(workout.livePumpCount)", label: "pumppua", color: .cyan)
+            }
+        case .wingFoil:
+            heroText(
+                Format.speedKmh(workout.currentSpeed),
+                label: workout.rideState.isRiding ? "FOILILLA · \(Format.duration(workout.rideState.currentRideDuration))" : "nopeus",
+                color: workout.rideState.isRiding ? .green : .primary
+            )
+        case .surf, .sup:
+            heroText(
+                Format.speedKmh(workout.currentSpeed),
+                label: workout.rideState.isRiding ? "AALLOSSA · \(Format.duration(workout.rideState.currentRideDuration))" : "nopeus",
+                color: workout.rideState.isRiding ? .green : .primary
+            )
+        }
+    }
+
+    private func heroText(_ value: String, label: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
             Text(value)
-                .font(.system(.title2, design: .rounded).weight(.medium))
+                .font(.system(size: 38, weight: .bold, design: .rounded))
                 .foregroundStyle(color)
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(color == .primary ? .secondary : color)
+        }
+    }
+
+    private func row(_ label: String, _ value: String, _ color: Color) -> some View {
+        HStack {
             Text(label)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.system(.body, design: .rounded).weight(.medium))
+                .foregroundStyle(color)
         }
     }
 }

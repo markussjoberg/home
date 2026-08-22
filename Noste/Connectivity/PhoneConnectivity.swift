@@ -53,6 +53,11 @@ final class PhoneConnectivity: NSObject, ObservableObject {
 
         context.insert(SessionRecord(summary: payload.summary, track: payload.track, spotName: spotName))
         try? context.save()
+
+        // Varmuuskopio palvelimelle (best effort — paikallinen talletus on jo tehty).
+        Task {
+            await ServerClient.shared.backupSession(payload)
+        }
     }
 
     private func distance(_ spot: SpotRecord, _ point: TrackPoint) -> Double {

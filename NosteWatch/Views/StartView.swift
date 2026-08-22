@@ -7,6 +7,14 @@ struct StartView: View {
 
     var body: some View {
         List {
+            if let notice = workout.recoveryNotice {
+                Section {
+                    Label(notice, systemImage: "arrow.counterclockwise.circle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
+            }
+
             Section {
                 ForEach(Sport.allCases) { sport in
                     Button {
@@ -20,16 +28,31 @@ struct StartView: View {
                 Text("Aloita sessio")
             }
 
-            if connectivity.snapshot != nil {
+            if let snapshot = connectivity.snapshot {
                 Section {
                     NavigationLink {
                         ForecastGlanceView()
                     } label: {
-                        Label("Ennuste", systemImage: "wind")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Label("Ennuste", systemImage: "wind")
+                            if let hint = windNow(snapshot) {
+                                Text(hint)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
             }
         }
         .navigationTitle("Noste")
+    }
+
+    /// "Nyt 8,2 m/s SW @ Kotispotti" — ensimmäisen suosikin tuore tunti.
+    private func windNow(_ snapshot: WatchSync.Snapshot) -> String? {
+        guard let forecast = snapshot.forecasts.first,
+              let hour = forecast.upcoming(from: Date(), hours: 1).wind.first
+        else { return nil }
+        return "Nyt \(Format.speedMs(hour.speed)) \(hour.directionName) @ \(forecast.spotName)"
     }
 }

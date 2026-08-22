@@ -14,13 +14,24 @@ const windBody = {
   },
 };
 
-function testFetch(): typeof fetch {
-  return (async (url: string) => {
+interface NtfyPost {
+  url: string;
+  title: string | undefined;
+  body: string;
+}
+
+function testFetch(ntfyLog: NtfyPost[] = []): typeof fetch {
+  return (async (url: string, init?: RequestInit) => {
     if (url.includes("api.open-meteo.com")) {
       return new Response(JSON.stringify(windBody), { status: 200 });
     }
     if (url.includes("maanmittauslaitos") || url.includes("traficom")) {
       return new Response(new Uint8Array([0x89, 0x50]), { status: 200 });
+    }
+    if (url.includes("ntfy.example")) {
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      ntfyLog.push({ url, title: headers.Title, body: String(init?.body ?? "") });
+      return new Response("ok", { status: 200 });
     }
     return new Response("not found", { status: 404 });
   }) as unknown as typeof fetch;
@@ -30,19 +41,22 @@ describe("app", () => {
   let dir: string;
   let app: ReturnType<typeof createApp>["app"];
   let checkAlerts: ReturnType<typeof createApp>["checkAlerts"];
+  let ntfyLog: NtfyPost[];
   const auth = { headers: { authorization: "Bearer secret" } };
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "noste-app-"));
+    ntfyLog = [];
     const config = loadConfig({
       NOSTE_TOKEN: "secret",
       MML_API_KEY: "mml-key",
+      NTFY_URL: "https://ntfy.example/noste",
       DATA_DIR: join(dir, "data"),
       TILE_CACHE_DIR: join(dir, "tiles"),
     } as NodeJS.ProcessEnv);
     ({ app, checkAlerts } = createApp({
       config,
-      fetchImpl: testFetch(),
+      fetchImpl: testFetch(ntfyLog),
       now: () => new Date("2026-08-21T08:00:00Z"),
     }));
   });
@@ -137,5 +151,62 @@ describe("app", () => {
 
     const viaApi = await (await app.request("/api/alerts/matches", auth)).json();
     expect(viaApi).toHaveLength(1);
+  });
+
+  it("kelivahti johdetaan spotin tuuli-ikkunasta ilman erillistä hälytystä", async () => {
+    await app.request("/api/spots", {
+      method: "PUT",
+      headers: { ...auth.headers, "content-type": "application/json" },
+      body: JSON.stringify([{
+        id: "s1", name: "Kotispotti", latitude: 60.1, longitude: 24.9,
+        waterType: "lake", sports: [], isFavorite: true, notes: "",
+        alertEnabled: true, minWind: 8, goodDirections: [5, 6],
+      }]),
+    });
+
+    const results = await checkAlerts();
+    expect(results).toHaveLength(1);
+    expect(results[0]!.alertId).toBe("spot-s1");
+    expect(results[0]!.windows[0]!.hours).toBe(3);
+  });
+
+  it("spotti ilman alertEnabled-lippua ei hälytä", async () => {
+    await app.request("/api/spots", {
+      method: "PUT",
+      headers: { ...auth.headers, "content-type": "application/json" },
+      body: JSON.stringify([{
+        id: "s1", name: "Kotispotti", latitude: 60.1, longitude: 24.9,
+        waterType: "lake", sports: [], isFavorite: true, notes: "", minWind: 8,
+      }]),
+    });
+    expect(await checkAlerts()).toHaveLength(0);
+  });
+
+  it("ntfy-ilmoitus lähtee kerran per ikkuna", async () => {
+    await app.request("/api/spots", {
+      method: "PUT",
+      headers: { ...auth.headers, "content-type": "application/json" },
+      body: JSON.stringify([{
+        id: "s1", name: "Kotispotti", latitude: 60.1, longitude: 24.9,
+        waterType: "lake", sports: [], isFavorite: true, notes: "",
+      }]),
+    });
+    await app.request("/api/alerts", {
+      method: "PUT",
+      headers: { ...auth.headers, "content-type": "application/json" },
+      body: JSON.stringify([{
+        id: "a1", spotId: "s1", spotName: "Kotispotti",
+        minWind: 8, minHours: 2, enabled: true,
+      }]),
+    });
+
+    await checkAlerts();
+    expect(ntfyLog).toHaveLength(1);
+    expect(ntfyLog[0]!.title).toBe("Kelivahti: Kotispotti");
+    expect(ntfyLog[0]!.body).toContain("max 11.0 m/s");
+
+    // Sama ikkuna toisella kierroksella → ei uutta ilmoitusta.
+    await checkAlerts();
+    expect(ntfyLog).toHaveLength(1);
   });
 });
