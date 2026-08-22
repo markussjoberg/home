@@ -71,7 +71,7 @@ struct MetricsView: View {
                     .font(.system(size: 26, weight: .semibold, design: .rounded))
                     .foregroundStyle(.yellow)
                 if workout.phase == .paused {
-                    Text("TAUKO")
+                    Text(workout.isAutoPaused ? "AUTOPAUSSI" : "TAUKO")
                         .font(.caption2.bold())
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)

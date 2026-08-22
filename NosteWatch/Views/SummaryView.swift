@@ -7,6 +7,11 @@ struct SummaryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
+                if let notice = workout.notice {
+                    Label(notice, systemImage: "info.circle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
                 if let summary = workout.summary {
                     Label(summary.sport.displayName, systemImage: summary.sport.symbolName)
                         .font(.headline)
@@ -14,6 +19,9 @@ struct SummaryView: View {
                     row("Kesto", Format.duration(summary.duration))
                     row("Matka", Format.distance(summary.distance))
                     row("Maksimi", Format.speedKmh(summary.maxSpeed))
+                    if let heart = summary.heartRate {
+                        row("Syke", "\(Int(heart.average.rounded())) / \(Int(heart.max.rounded()))")
+                    }
 
                     if summary.sport.usesFoil {
                         Divider()

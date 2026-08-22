@@ -62,9 +62,36 @@ tärkein luku.
 
 ### Yhteiset
 
-Kaikissa lajeissa: kesto, matka, maksimi- ja keskinopeus, syke, kalorit, GPS-jälki.
-Analytiikka on `NosteCore`-paketissa puhtaana Swiftinä → sama koodi kellossa,
-puhelimessa ja yksikkötesteissä (testattavissa myös Linuxilla, ilman laitteita).
+Kaikissa lajeissa: kesto, matka, maksimi- ja keskinopeus, **syke** (keski/max
+yhteenvedossa, koko sarja talteen), kalorit, GPS-jälki. Analytiikka on
+`NosteCore`-paketissa puhtaana Swiftinä → sama koodi kellossa, puhelimessa ja
+yksikkötesteissä.
+
+### Autopaussi (unohtunut mittari ei pilaa dataa)
+
+Trackerit jäävät päälle, ja autoilu sotkee sitten nopeudet ja matkat. Ilman
+karttadataa maissa olo tunnistetaan kolmella säännöllä:
+
+1. **Paikallaan 90 s → autopaussi.** Lähtöpaikan lähellä (< 120 m) jo 45 s:ssa,
+   koska lähtöpaikka on yleensä myös lopetuspaikka.
+2. **Lähtöpaikalla tullut paussi ei jatku automaattisesti** — sessio on
+   todennäköisesti ohi, ja juuri tässä tilanteessa autolla lähtö (esim. 50 km/h
+   = wingille "uskottava" 13,9 m/s) sotkisi datan. Vesillä (lepopaussi muualla)
+   liikkeelle lähtö jatkaa session automaattisesti 5 s:ssa.
+3. **Lajille epäuskottava nopeus paussin aikana** (pumppi > 9 m/s, wing > 20 m/s,
+   30 s yhtäjaksoisesti) **tai yli 20 min paussi → sessio päätetään
+   automaattisesti** ja yhteenveto talletetaan.
+
+Varmistuksena analyysi suodattaa lajikohtaisen nopeuskaton ylittävät lukemat,
+eli maksiminopeudeksi ei koskaan päädy autoilua.
+
+### Mittaus puhelimella (ilman kelloa)
+
+Sessio + -napista Sessiot-välilehdellä: sama analytiikka, autopaussi ja
+kaatumissuoja kuin kellossa — GPS ja liikeanturi puhelimesta (pumpputunnistus
+toimii parhaiten liivin/vyötärön taskussa), syke ja HealthKit-treeni jäävät
+pois. Tämä avaa appin myös kaverille, jolla ei ole kelloa mutta kännykkä kulkee
+foilatessa mukana.
 
 ## 2. Ennusteet (myös sisämaahan)
 

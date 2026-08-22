@@ -1,0 +1,203 @@
+import SwiftUI
+import SwiftData
+import NosteCore
+
+/// Session tallennus puhelimella: lajivalinta → mittarinäkymä → yhteenveto ja talletus.
+struct RecordSessionView: View {
+    @StateObject private var workout = PhoneWorkoutManager()
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                switch workout.phase {
+                case .idle:
+                    sportPicker
+                case .running, .paused:
+                    metrics
+                case .ended:
+                    ended
+                }
+            }
+            .navigationTitle("Tallenna puhelimella")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if workout.phase == .idle {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Sulje") { dismiss() }
+                    }
+                }
+            }
+            .interactiveDismissDisabled(workout.phase == .running || workout.phase == .paused)
+        }
+    }
+
+    private var sportPicker: some View {
+        List {
+            if let recovered = workout.recoveredPayload {
+                Section {
+                    Button {
+                        store(payload: recovered)
+                        workout.recoveredPayload = nil
+                    } label: {
+                        Label("Talleta kesken jäänyt \(recovered.summary.sport.displayName)-sessio (\(Format.duration(recovered.summary.duration)))",
+                              systemImage: "arrow.counterclockwise.circle.fill")
+                    }
+                } header: {
+                    Text("Palautettu sessio")
+                }
+            }
+            Section {
+                ForEach(Sport.allCases) { sport in
+                    Button {
+                        workout.start(sport: sport)
+                    } label: {
+                        Label(sport.displayName, systemImage: sport.symbolName)
+                            .font(.headline)
+                    }
+                }
+            } header: {
+                Text("Aloita sessio")
+            } footer: {
+                Text("Puhelin mittaa GPS:llä ja liikeanturilla — pidä se mukana (liivi/vyötärötaskussa pumpputunnistus toimii parhaiten). Sykettä ei mitata ilman kelloa. Autopaussi pysäyttää mittauksen maissa.")
+            }
+        }
+    }
+
+    private var metrics: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text(Format.duration(workout.elapsed))
+                    .font(.system(size: 54, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.yellow)
+                if workout.phase == .paused {
+                    Text(workout.isAutoPaused ? "AUTOPAUSSI" : "TAUKO")
+                        .font(.caption.bold())
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.orange, in: Capsule())
+                        .foregroundStyle(.black)
+                }
+            }
+
+            if let notice = workout.notice {
+                Text(notice)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+
+            Grid(horizontalSpacing: 24, verticalSpacing: 14) {
+                GridRow {
+                    metric(Format.speedKmh(workout.currentSpeed),
+                           workout.rideState.isRiding ? "foililla" : "nopeus",
+                           workout.rideState.isRiding ? .green : .primary)
+                    metric(Format.distance(workout.liveDistance), "matka", .primary)
+                }
+                GridRow {
+                    if workout.sport.usesFoil {
+                        metric(Format.duration(workout.rideState.totalRideTime), "foiliaika", .green)
+                        metric("\(workout.rideState.rideCount)", "lennot", .green)
+                    } else {
+                        metric("\(workout.rideState.rideCount)",
+                               workout.sport == .surf ? "aallot" : "vedot", .cyan)
+                        metric(Format.duration(workout.rideState.currentRideDuration), "meneillään", .green)
+                    }
+                }
+                if workout.sport.countsPumps {
+                    GridRow {
+                        metric("\(workout.livePumpCount)", "pumput", .cyan)
+                        metric(Format.duration(workout.rideState.currentRideDuration), "lento nyt", .green)
+                    }
+                }
+            }
+
+            Spacer()
+
+            HStack(spacing: 12) {
+                Button {
+                    workout.phase == .paused ? workout.resume() : workout.pause()
+                } label: {
+                    Label(workout.phase == .paused ? "Jatka" : "Tauko",
+                          systemImage: workout.phase == .paused ? "play.fill" : "pause.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .tint(workout.phase == .paused ? .green : .orange)
+
+                Button {
+                    workout.end()
+                } label: {
+                    Label("Lopeta", systemImage: "stop.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+            }
+            .padding(.horizontal)
+        }
+        .padding(.top, 24)
+        .padding(.bottom, 16)
+    }
+
+    private var ended: some View {
+        List {
+            if let notice = workout.notice {
+                Section {
+                    Label(notice, systemImage: "info.circle.fill")
+                        .foregroundStyle(.orange)
+                        .font(.footnote)
+                }
+            }
+            if let summary = workout.summary {
+                Section("Yhteenveto") {
+                    LabeledContent("Kesto", value: Format.duration(summary.duration))
+                    LabeledContent("Matka", value: Format.distance(summary.distance))
+                    LabeledContent("Maksiminopeus", value: Format.speedKmh(summary.maxSpeed))
+                    if summary.sport.usesFoil {
+                        LabeledContent("Foiliaika", value: "\(Format.duration(summary.rides.totalDuration)) (\(Format.percent(summary.rideFraction)))")
+                        LabeledContent("Lennot", value: "\(summary.rides.count)")
+                    }
+                    if let pumps = summary.pumps {
+                        LabeledContent("Pumput", value: "\(pumps.strokeCount)")
+                    }
+                }
+                Section {
+                    Button {
+                        store(payload: WatchSync.SessionPayload(summary: summary, track: workout.trackForSummary))
+                        dismiss()
+                    } label: {
+                        Label("Tallenna sessio", systemImage: "checkmark.circle.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Button("Hylkää", role: .destructive) {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private func metric(_ value: String, _ label: String, _ color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.system(.title, design: .rounded).weight(.semibold))
+                .foregroundStyle(color)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(minWidth: 130)
+    }
+
+    private func store(payload: WatchSync.SessionPayload) {
+        modelContext.insert(SessionRecord(summary: payload.summary, track: payload.track))
+        try? modelContext.save()
+        Task {
+            await ServerClient.shared.backupSession(payload)
+        }
+    }
+}

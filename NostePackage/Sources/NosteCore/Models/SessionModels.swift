@@ -30,6 +30,36 @@ public struct MotionSample: Codable, Sendable, Equatable {
     }
 }
 
+/// Sykenäyte (lyönnit/min), aika session alusta.
+public struct HeartRateSample: Codable, Sendable, Equatable {
+    public var t: TimeInterval
+    public var bpm: Double
+
+    public init(t: TimeInterval, bpm: Double) {
+        self.t = t
+        self.bpm = bpm
+    }
+}
+
+/// Sykeyhteenveto.
+public struct HeartRateStats: Codable, Sendable, Equatable {
+    public var average: Double
+    public var max: Double
+
+    public init(average: Double, max: Double) {
+        self.average = average
+        self.max = max
+    }
+
+    /// Laskee tilastot näytteistä; nil jos näytteitä ei ole.
+    public static func from(_ samples: [HeartRateSample]) -> HeartRateStats? {
+        guard !samples.isEmpty else { return nil }
+        let sum = samples.reduce(0) { $0 + $1.bpm }
+        let peak = samples.map(\.bpm).max() ?? 0
+        return HeartRateStats(average: sum / Double(samples.count), max: peak)
+    }
+}
+
 /// Yhtenäinen jakso foililla / aallossa.
 public struct RideSegment: Codable, Sendable, Equatable {
     public var start: TimeInterval
@@ -100,8 +130,10 @@ public struct SessionSummary: Codable, Sendable, Equatable {
     /// Foilijaksot (wing/pumppi) tai lasketut aallot (surffi).
     public var rides: RideAnalysis
     public var pumps: PumpAnalysis?
+    /// Sykeyhteenveto (nil jos sykedataa ei ollut — esim. puhelimella tallennettu sessio).
+    public var heartRate: HeartRateStats?
 
-    public init(sport: Sport, startDate: Date, duration: TimeInterval, distance: Double, maxSpeed: Double, averageMovingSpeed: Double, rides: RideAnalysis, pumps: PumpAnalysis?) {
+    public init(sport: Sport, startDate: Date, duration: TimeInterval, distance: Double, maxSpeed: Double, averageMovingSpeed: Double, rides: RideAnalysis, pumps: PumpAnalysis?, heartRate: HeartRateStats? = nil) {
         self.sport = sport
         self.startDate = startDate
         self.duration = duration
@@ -110,6 +142,7 @@ public struct SessionSummary: Codable, Sendable, Equatable {
         self.averageMovingSpeed = averageMovingSpeed
         self.rides = rides
         self.pumps = pumps
+        self.heartRate = heartRate
     }
 
     /// Foiliajan osuus koko sessiosta (0–1).

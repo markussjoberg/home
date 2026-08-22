@@ -7,7 +7,7 @@ struct StartView: View {
 
     var body: some View {
         List {
-            if let notice = workout.recoveryNotice {
+            if let notice = workout.notice {
                 Section {
                     Label(notice, systemImage: "arrow.counterclockwise.circle.fill")
                         .font(.footnote)

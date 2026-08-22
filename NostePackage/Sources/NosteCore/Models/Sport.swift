@@ -57,4 +57,16 @@ public enum Sport: String, Codable, CaseIterable, Sendable, Identifiable {
         case .sup: return 2.0
         }
     }
+
+    /// Suurin lajissa uskottava nopeus (m/s). Kovemmat lukemat ovat GPS-häiriötä
+    /// tai autoilua — ne suodatetaan analyysistä ja laukaisevat autopaussin
+    /// ajontunnistuksen. Kalibroidaan kenttädatalla.
+    public var maxPlausibleSpeed: Double {
+        switch self {
+        case .wingFoil: return 20   // 72 km/h
+        case .pumpFoil: return 9    // 32 km/h
+        case .surf: return 15
+        case .sup: return 8
+        }
+    }
 }

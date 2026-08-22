@@ -6,6 +6,7 @@ import NosteCore
 struct SessionsTab: View {
     @Query(sort: \SessionRecord.startDate, order: .reverse) private var sessions: [SessionRecord]
     @Environment(\.modelContext) private var modelContext
+    @State private var showRecorder = false
 
     var body: some View {
         NavigationStack {
@@ -14,7 +15,7 @@ struct SessionsTab: View {
                     ContentUnavailableView(
                         "Ei sessioita",
                         systemImage: "figure.surfing",
-                        description: Text("Aloita sessio kellosta — se ilmestyy tänne automaattisesti.")
+                        description: Text("Aloita sessio kellosta — se ilmestyy tänne automaattisesti. Ilman kelloa voit tallentaa sessioita puhelimella (+).")
                     )
                 } else {
                     List {
@@ -35,6 +36,16 @@ struct SessionsTab: View {
                 }
             }
             .navigationTitle("Sessiot")
+            .toolbar {
+                Button {
+                    showRecorder = true
+                } label: {
+                    Image(systemName: "plus.circle")
+                }
+            }
+            .sheet(isPresented: $showRecorder) {
+                RecordSessionView()
+            }
         }
     }
 }
@@ -92,6 +103,9 @@ struct SessionDetailView: View {
                     row("Matka", Format.distance(summary.distance))
                     row("Maksiminopeus", Format.speedKmh(summary.maxSpeed))
                     row("Keskinopeus liikkeessä", Format.speedKmh(summary.averageMovingSpeed))
+                    if let heart = summary.heartRate {
+                        row("Syke (keski / max)", "\(Int(heart.average.rounded())) / \(Int(heart.max.rounded()))")
+                    }
                 }
                 if summary.sport.usesFoil {
                     Section("Foili") {

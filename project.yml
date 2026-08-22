@@ -36,9 +36,14 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        UIBackgroundModes:
+          - location
         NSLocationWhenInUseUsageDescription: >-
-          Sijaintia käytetään näyttämään oma paikka kartalla ja lisäämään spotti
-          nykyiseen sijaintiin.
+          Sijaintia käytetään kartalla, spottien lisäämiseen ja session GPS-jäljen,
+          nopeuden ja foiliajan mittaamiseen myös näytön ollessa sammuksissa.
+        NSMotionUsageDescription: >-
+          Liikeanturia käytetään pumppausten ja foiliajan tunnistamiseen, kun
+          sessio tallennetaan puhelimella.
 
   NosteWatch:
     type: application
