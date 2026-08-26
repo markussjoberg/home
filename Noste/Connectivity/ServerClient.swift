@@ -29,6 +29,8 @@ struct ServerClient {
         var sport: String
         var summary: SessionSummary
         var track: [TrackPoint]
+        var rating: Int?
+        var wind: RatedWind?
     }
 
     static let shared = ServerClient()
@@ -72,14 +74,18 @@ struct ServerClient {
         _ = try? await URLSession.shared.data(for: request)
     }
 
-    /// Vie yhden session palvelimelle raakajälkineen.
-    func backupSession(_ payload: WatchSync.SessionPayload) async {
+    /// Vie yhden session palvelimelle raakajälkineen. Vakaa id → uudelleenvienti
+    /// (esim. reittauksen jälkeen) päivittää saman session, ei duplikoi.
+    func backupSession(_ payload: WatchSync.SessionPayload, id: UUID,
+                       rating: WindRating? = nil, wind: RatedWind? = nil) async {
         let upload = SessionUpload(
-            id: UUID().uuidString,
+            id: id.uuidString,
             startDate: ISO8601DateFormatter().string(from: payload.summary.startDate),
             sport: payload.summary.sport.rawValue,
             summary: payload.summary,
-            track: payload.track
+            track: payload.track,
+            rating: rating?.rawValue,
+            wind: wind
         )
         guard let body = try? JSONEncoder().encode(upload),
               let request = request(path: "api/sessions", method: "POST", body: body)

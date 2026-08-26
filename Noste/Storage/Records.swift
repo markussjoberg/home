@@ -76,6 +76,12 @@ final class SessionRecord {
     /// JSON-koodattu [TrackPoint] — raakajälki uudelleenanalyysiä ja karttaa varten.
     var trackData: Data?
     var spotName: String?
+    /// Tuuliarvosana (WindRating.rawValue; 0 = ei riittänyt, nil = ei reittausta).
+    var ratingRaw: Int?
+    /// Session aikana vallinnut tuuli (haetaan reittauksen yhteydessä).
+    var windSpeed: Double?
+    var windGust: Double?
+    var windDirection: Double?
 
     init(id: UUID = UUID(), summary: SessionSummary, track: [TrackPoint], spotName: String? = nil) {
         self.id = id
@@ -95,5 +101,22 @@ final class SessionRecord {
     var track: [TrackPoint] {
         guard let trackData else { return [] }
         return (try? WatchSync.decode([TrackPoint].self, from: trackData)) ?? []
+    }
+
+    var rating: WindRating? {
+        get { ratingRaw.flatMap(WindRating.init(rawValue:)) }
+        set { ratingRaw = newValue?.rawValue }
+    }
+
+    var sessionWind: RatedWind? {
+        get {
+            guard let windSpeed, let windGust, let windDirection else { return nil }
+            return RatedWind(speed: windSpeed, gust: windGust, direction: windDirection)
+        }
+        set {
+            windSpeed = newValue?.speed
+            windGust = newValue?.gust
+            windDirection = newValue?.direction
+        }
     }
 }

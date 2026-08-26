@@ -19,6 +19,12 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
         WCSession.default.activate()
     }
 
+    /// Lähettää tuuliarvosanan puhelimeen. transferUserInfo jonottaa ja toimittaa
+    /// perille, vaikka puhelin ei olisi juuri nyt saatavilla.
+    func send(rating: WindRating, for startDate: Date) {
+        WCSession.default.transferUserInfo(WatchSync.RatingMessage.encode(startDate: startDate, rating: rating))
+    }
+
     /// Lähettää session puhelimeen tiedostona (jälki voi olla iso).
     /// transferFile jonottaa siirron ja hoitaa sen kun puhelin on taas saatavilla.
     func send(payload: WatchSync.SessionPayload) {

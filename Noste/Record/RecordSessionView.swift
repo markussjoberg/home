@@ -7,6 +7,7 @@ struct RecordSessionView: View {
     @StateObject private var workout = PhoneWorkoutManager()
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @State private var rating: WindRating?
 
     var body: some View {
         NavigationStack {
@@ -164,6 +165,9 @@ struct RecordSessionView: View {
                         LabeledContent("Pumput", value: "\(pumps.strokeCount)")
                     }
                 }
+                Section("Millainen tuuli?") {
+                    RatingControl(rating: rating) { rating = $0 }
+                }
                 Section {
                     Button {
                         store(payload: WatchSync.SessionPayload(summary: summary, track: workout.trackForSummary))
@@ -194,10 +198,17 @@ struct RecordSessionView: View {
     }
 
     private func store(payload: WatchSync.SessionPayload) {
-        modelContext.insert(SessionRecord(summary: payload.summary, track: payload.track))
+        let record = SessionRecord(summary: payload.summary, track: payload.track)
+        modelContext.insert(record)
         try? modelContext.save()
+        let context = modelContext
+        let chosenRating = rating
         Task {
-            await ServerClient.shared.backupSession(payload)
+            if let chosenRating {
+                await RatingService.apply(rating: chosenRating, to: record, context: context)
+            } else {
+                await ServerClient.shared.backupSession(payload, id: record.id)
+            }
         }
     }
 }

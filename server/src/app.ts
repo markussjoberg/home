@@ -48,6 +48,10 @@ export interface SessionSync {
   sport: string;
   summary: unknown;
   track?: unknown;
+  /** Tuuliarvosana 0–5 (0 = ei riittänyt). Uudelleenvienti samalla id:llä päivittää. */
+  rating?: number;
+  /** Session aikana vallinnut tuuli {speed, gust, direction}. */
+  wind?: unknown;
 }
 
 export interface AppDeps {

@@ -97,8 +97,14 @@ struct SpotForecastView: View {
     let spot: SpotData
     let allSpots: [SpotData]
     @EnvironmentObject private var forecastStore: ForecastStore
+    @Query private var allSessions: [SessionRecord]
     @State private var observation: ServerClient.Observation?
     @State private var selectedTime: Date?
+
+    /// Spotin oppiva tuuliprofiili reittatuista sessioista.
+    private var profile: SpotWindProfile {
+        RatingService.profile(spotName: spot.name, sessions: allSessions)
+    }
 
     var body: some View {
         List {
@@ -133,6 +139,18 @@ struct SpotForecastView: View {
                 }
             }
 
+            if profile.sessionCount > 0 {
+                Section {
+                    profileCard
+                } header: {
+                    Text("Spotin oppi")
+                } footer: {
+                    if !profile.isReady {
+                        Text("Tähtiennuste käynnistyy, kun reittauksia on vähintään 5 (nyt \(profile.sessionCount)).")
+                    }
+                }
+            }
+
             if let forecast = forecastStore.forecast(for: spot) {
                 let upcoming = forecast.upcoming(from: Date(), hours: 48)
 
@@ -147,7 +165,8 @@ struct SpotForecastView: View {
                         ForEach(upcoming.wind.filter { sameDay($0.time, day) }) { hour in
                             WindRow(hour: hour,
                                     wave: wave(for: hour.time, in: upcoming),
-                                    matches: spot.matches(hour))
+                                    matches: spot.matches(hour),
+                                    stars: profile.predictedRating(for: hour))
                         }
                     }
                 }
@@ -174,6 +193,41 @@ struct SpotForecastView: View {
         .task {
             await refresh(force: false)
         }
+    }
+
+    /// Reittauksista opittu: sopivat suunnat ilmansuunnittain tähtineen.
+    private var profileCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "graduationcap.fill")
+                    .foregroundStyle(.cyan)
+                Text("\(profile.sessionCount) reittattua sessiota")
+                    .font(.subheadline)
+                Spacer()
+                if !profile.goodOctants.isEmpty {
+                    Text("Toimii: " + profile.goodOctants.map { GeoMath.compassName(degrees: Double($0) * 45) }.joined(separator: ", "))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.green)
+                }
+            }
+            let summaries = profile.directionSummaries()
+            if !summaries.isEmpty {
+                HStack(spacing: 12) {
+                    ForEach(summaries) { summary in
+                        VStack(spacing: 2) {
+                            Text(GeoMath.compassName(degrees: Double(summary.octant) * 45))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            StarBadge(value: summary.averageRating)
+                            Text("\(summary.count)×")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 2)
     }
 
     private func refresh(force: Bool) async {
@@ -315,13 +369,19 @@ private struct WindRow: View {
     let hour: WindHour
     let wave: WaveHour?
     let matches: Bool
+    var stars: Double?
 
     var body: some View {
         HStack {
             VStack(alignment: .leading) {
-                Text(hour.time, format: .dateTime.hour())
-                    .font(.subheadline)
-                    .fontWeight(matches ? .bold : .regular)
+                HStack(spacing: 6) {
+                    Text(hour.time, format: .dateTime.hour())
+                        .font(.subheadline)
+                        .fontWeight(matches ? .bold : .regular)
+                    if let stars {
+                        StarBadge(value: stars)
+                    }
+                }
                 if let wave {
                     Text(String(format: "aalto %.1f m · %.0f s", wave.height, wave.period)
                         .replacingOccurrences(of: ".", with: ","))

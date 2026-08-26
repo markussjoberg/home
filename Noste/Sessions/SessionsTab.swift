@@ -64,8 +64,17 @@ private struct SessionRow: View {
                 Text(record.startDate, format: .dateTime.day().month().hour().minute())
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if let spotName = record.spotName {
-                    Text(spotName).font(.caption).foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    if let spotName = record.spotName {
+                        Text(spotName).font(.caption).foregroundStyle(.secondary)
+                    }
+                    if let rating = record.rating {
+                        if rating == .insufficient {
+                            Text("ei tuulta").font(.caption2).foregroundStyle(.orange)
+                        } else {
+                            StarBadge(value: rating.score, highlight: false)
+                        }
+                    }
                 }
             }
             Spacer()
@@ -87,6 +96,7 @@ private struct SessionRow: View {
 
 struct SessionDetailView: View {
     let record: SessionRecord
+    @Environment(\.modelContext) private var modelContext
 
     var body: some View {
         List {
@@ -97,6 +107,22 @@ struct SessionDetailView: View {
                         .listRowInsets(EdgeInsets())
                 }
             }
+            Section {
+                RatingControl(rating: record.rating) { rating in
+                    Task {
+                        await RatingService.apply(rating: rating, to: record, context: modelContext)
+                    }
+                }
+                if let wind = record.sessionWind {
+                    LabeledContent("Tuuli sessiossa",
+                                   value: "\(Format.speedMs(wind.speed)) (\(Format.speedMs(wind.gust))) \(GeoMath.compassName(degrees: wind.direction))")
+                }
+            } header: {
+                Text("Millainen tuuli oli?")
+            } footer: {
+                Text("Arvosanoista spotti oppii sopivat suunnat ja voimakkuudet — ja lopulta ennuste saa tähdet.")
+            }
+
             if let summary = record.summary {
                 Section("Yhteenveto") {
                     row("Kesto", Format.duration(summary.duration))

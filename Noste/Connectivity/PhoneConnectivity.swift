@@ -51,13 +51,25 @@ final class PhoneConnectivity: NSObject, ObservableObject {
             }
         }
 
-        context.insert(SessionRecord(summary: payload.summary, track: payload.track, spotName: spotName))
+        let record = SessionRecord(summary: payload.summary, track: payload.track, spotName: spotName)
+        context.insert(record)
         try? context.save()
 
         // Varmuuskopio palvelimelle (best effort — paikallinen talletus on jo tehty).
+        let recordID = record.id
         Task {
-            await ServerClient.shared.backupSession(payload)
+            await ServerClient.shared.backupSession(payload, id: recordID)
         }
+    }
+
+    /// Kellosta tullut tuuliarvosana: etsi sessio alkuhetkellä ja käsittele.
+    @MainActor
+    private func applyRating(_ rating: WindRating, startDate: Date) async {
+        guard let container else { return }
+        let context = container.mainContext
+        let records = (try? context.fetch(FetchDescriptor<SessionRecord>())) ?? []
+        guard let record = records.first(where: { abs($0.startDate.timeIntervalSince(startDate)) < 2 }) else { return }
+        await RatingService.apply(rating: rating, to: record, context: context)
     }
 
     private func distance(_ spot: SpotRecord, _ point: TrackPoint) -> Double {
@@ -70,6 +82,13 @@ extension PhoneConnectivity: WCSessionDelegate {
     func sessionDidBecomeInactive(_ session: WCSession) {}
     func sessionDidDeactivate(_ session: WCSession) {
         session.activate()
+    }
+
+    func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
+        guard let (startDate, rating) = WatchSync.RatingMessage.decode(userInfo) else { return }
+        Task { @MainActor in
+            await self.applyRating(rating, startDate: startDate)
+        }
     }
 
     func session(_ session: WCSession, didReceive file: WCSessionFile) {

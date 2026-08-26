@@ -117,6 +117,28 @@ oma salainen aihe `NTFY_URL`-ympäristömuuttujaan) — sama ikkuna ilmoitetaan
 vain kerran. APNs-natiivipushit mahdollinen jatke myöhemmin. Sama tuuli-ikkuna
 korostaa osumatunnit ennustenäkymässä ja kellon glancessa.
 
+### Tuulen reittaus ja spotin oppi
+
+Session jälkeen tuuli reittataan: **1–5 tähteä tai "ei riittänyt"** — suoraan
+kellon yhteenvedosta (paras hetki) tai puhelimesta. Appi hakee jälkikäteen
+toteutuneen tuulen session ajalta (Open-Meteon historia, suunta
+vektorikeskiarvona) ja tallettaa parin *(tuuli, tähdet)*.
+
+Näistä spotti oppii (`SpotWindProfile`):
+
+- **Sopivat tuulensuunnat**: ilmansuunnittain keskiarvosana ja määrä; "toimii"
+  kun keskiarvo ≥ 3,5 vähintään kahdesta sessiosta. "Ei riittänyt" ei osallistu
+  suuntatilastoon (kertoo voimakkuudesta, ei suunnasta).
+- **Tähtiennuste**: kun reittauksia on ≥ 5, jokaiselle ennustetunnille
+  lasketaan arvio lähimpien koettujen sessioiden painotettuna keskiarvona
+  (gaussinen paino nopeus- ja suuntaerolle, σ = 2,5 m/s ja 40°). "Ei riittänyt"
+  vetää heikkojen tuulten ennusteen alas. Jos tunti on kaukana kaikesta
+  koetusta, ennustetta ei anneta — ei huonoja arvauksia.
+
+Tähdet näkyvät ennusteriveillä ja spotin oppi -kortissa ennustenäkymässä.
+Reittaukset kulkevat myös palvelimen varmuuskopioon (sama sessio-id päivittyy,
+ei duplikaatteja).
+
 ## 3. Kartat
 
 MapKitin päälle `MKTileOverlay`-tasot:

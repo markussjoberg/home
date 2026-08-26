@@ -85,6 +85,30 @@ public struct OpenMeteoClient {
         return try Self.decodeWaves(data)
     }
 
+    /// Toteutunut tuuli aikavälillä (session reittausta varten). Open-Meteon
+    /// forecast-rajapinta palauttaa myös menneet tunnit `past_days`-parametrilla;
+    /// historia kattaa enintään 7 vrk taakse.
+    public func windHistory(latitude: Double, longitude: Double,
+                            from: Date, to: Date, now: Date = Date()) async throws -> [WindHour] {
+        let daysBack = max(1, min(7, Int(ceil(now.timeIntervalSince(from) / 86_400))))
+        var components = server?.components(path: "api/openmeteo/forecast")
+            ?? URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
+        components.queryItems = (components.queryItems ?? []) + [
+            URLQueryItem(name: "latitude", value: String(format: "%.4f", latitude)),
+            URLQueryItem(name: "longitude", value: String(format: "%.4f", longitude)),
+            URLQueryItem(name: "hourly", value: "wind_speed_10m,wind_gusts_10m,wind_direction_10m"),
+            URLQueryItem(name: "wind_speed_unit", value: "ms"),
+            URLQueryItem(name: "timezone", value: "UTC"),
+            URLQueryItem(name: "past_days", value: String(daysBack)),
+            URLQueryItem(name: "forecast_days", value: "1")
+        ]
+        let data = try await fetch(components.url!)
+        let margin: TimeInterval = 1800
+        return try Self.decodeWind(data).filter {
+            $0.time >= from.addingTimeInterval(-margin) && $0.time <= to.addingTimeInterval(margin)
+        }
+    }
+
     private func fetch(_ url: URL) async throws -> Data {
         let (data, response) = try await session.data(from: url)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {

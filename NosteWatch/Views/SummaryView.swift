@@ -3,6 +3,7 @@ import NosteCore
 
 struct SummaryView: View {
     @EnvironmentObject private var workout: WorkoutManager
+    @State private var rating: WindRating?
 
     var body: some View {
         ScrollView {
@@ -48,6 +49,9 @@ struct SummaryView: View {
                         }
                     }
 
+                    Divider()
+                    ratingSection(summary: summary)
+
                     Text("Sessio siirtyy puhelimeen automaattisesti.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -66,6 +70,50 @@ struct SummaryView: View {
         }
         .navigationTitle("Yhteenveto")
         .navigationBarBackButtonHidden(true)
+    }
+
+    /// Tuuliarvosana: tähdet tai "ei riittänyt". Lähetetään puhelimeen, joka
+    /// hakee session ajalta toteutuneen tuulen ja opettaa spotin tuuliprofiilia.
+    private func ratingSection(summary: SessionSummary) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Millainen tuuli?")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+                ForEach(1...5, id: \.self) { star in
+                    Button {
+                        select(WindRating(rawValue: star)!, summary: summary)
+                    } label: {
+                        Image(systemName: star <= (rating?.rawValue ?? 0) ? "star.fill" : "star")
+                            .font(.title3)
+                            .foregroundStyle(.yellow)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Button {
+                select(.insufficient, summary: summary)
+            } label: {
+                Text("Ei riittänyt")
+                    .font(.footnote)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(rating == .insufficient ? Color.orange : Color(white: 0.15),
+                                in: Capsule())
+                    .foregroundStyle(rating == .insufficient ? .black : .primary)
+            }
+            .buttonStyle(.plain)
+            if rating != nil {
+                Text("Kiitos — spotti oppii tästä.")
+                    .font(.footnote)
+                    .foregroundStyle(.green)
+            }
+        }
+    }
+
+    private func select(_ value: WindRating, summary: SessionSummary) {
+        rating = value
+        WatchConnectivityManager.shared.send(rating: value, for: summary.startDate)
     }
 
     private func row(_ label: String, _ value: String) -> some View {
