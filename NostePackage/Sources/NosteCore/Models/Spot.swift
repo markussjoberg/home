@@ -39,11 +39,19 @@ public struct SpotData: Codable, Sendable, Equatable, Identifiable {
     public var maxWind: Double?
     /// Kelivahti päällä tälle spotille (vaatii oman palvelimen).
     public var alertEnabled: Bool?
+    /// Julkinen spotti: saa näkyä muille, kun spottien jako toteutuu.
+    /// nil/false = yksityinen (oletus).
+    public var isPublic: Bool?
+    /// Maastoanalyysi ilmansuunnittain (0 = N … 7 = NW): pyyhkäisymatka (km)
+    /// järviaaltojen laskentaan ja avoimuus 0–1. Haetaan palvelimelta.
+    public var fetchKmByOctant: [Double]?
+    public var exposureByOctant: [Double]?
 
     public init(id: UUID = UUID(), name: String, latitude: Double, longitude: Double,
                 waterType: WaterType = .sea, sports: [Sport] = [], isFavorite: Bool = false, notes: String = "",
                 goodDirections: [Int]? = nil, minWind: Double? = nil, maxWind: Double? = nil,
-                alertEnabled: Bool? = nil) {
+                alertEnabled: Bool? = nil, isPublic: Bool? = nil,
+                fetchKmByOctant: [Double]? = nil, exposureByOctant: [Double]? = nil) {
         self.id = id
         self.name = name
         self.latitude = latitude
@@ -56,6 +64,9 @@ public struct SpotData: Codable, Sendable, Equatable, Identifiable {
         self.minWind = minWind
         self.maxWind = maxWind
         self.alertEnabled = alertEnabled
+        self.isPublic = isPublic
+        self.fetchKmByOctant = fetchKmByOctant
+        self.exposureByOctant = exposureByOctant
     }
 
     /// Onko spotille määritetty tuuli-ikkuna (jotain, mitä vasten korostaa/vahtia).

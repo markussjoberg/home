@@ -33,6 +33,36 @@ struct ServerClient {
         var wind: RatedWind?
     }
 
+    /// Maastoanalyysi: fetch (km) ja avoimuus (0–1) ilmansuunnittain.
+    struct SpotMetaOctant: Codable {
+        var octant: Int
+        var fetchKm: Double
+        var exposure: Double
+    }
+
+    struct SpotMetaResponse: Codable {
+        var latitude: Double
+        var longitude: Double
+        var elevation: Double
+        var octants: [SpotMetaOctant]
+    }
+
+    /// Rantainfo (OSM + Lipas).
+    struct Place: Codable, Identifiable {
+        var category: String
+        var name: String?
+        var latitude: Double
+        var longitude: Double
+        var distanceM: Int
+        var source: String
+
+        var id: String { "\(category)-\(latitude)-\(longitude)" }
+    }
+
+    private struct PlacesResponse: Codable {
+        var nearest: [Place]
+    }
+
     static let shared = ServerClient()
 
     private func request(path: String, query: [URLQueryItem] = [], method: String = "GET", body: Data? = nil) -> URLRequest? {
@@ -64,6 +94,33 @@ struct ServerClient {
               let decoded = try? JSONDecoder().decode(ObservationResponse.self, from: data)
         else { return nil }
         return decoded.observation
+    }
+
+    /// Spotin maastoanalyysi (fetch + avoimuus). Palvelin laskee korkeusdatasta
+    /// ja välimuistittaa pysyvästi — maasto ei muutu.
+    func spotMeta(latitude: Double, longitude: Double) async -> SpotMetaResponse? {
+        guard let request = request(path: "api/spotmeta", query: [
+            URLQueryItem(name: "lat", value: String(format: "%.4f", latitude)),
+            URLQueryItem(name: "lon", value: String(format: "%.4f", longitude))
+        ]) else { return nil }
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let decoded = try? JSONDecoder().decode(SpotMetaResponse.self, from: data)
+        else { return nil }
+        return decoded
+    }
+
+    /// Lähimmät rantapalvelut kategorioittain (uimaranta, laituri, luiska, parkki…).
+    func places(latitude: Double, longitude: Double) async -> [Place]? {
+        guard let request = request(path: "api/places", query: [
+            URLQueryItem(name: "lat", value: String(format: "%.4f", latitude)),
+            URLQueryItem(name: "lon", value: String(format: "%.4f", longitude))
+        ]) else { return nil }
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let decoded = try? JSONDecoder().decode(PlacesResponse.self, from: data)
+        else { return nil }
+        return decoded.nearest
     }
 
     /// Vie koko spottilistan palvelimelle (varmuuskopio + kelivahdin lähtödata).

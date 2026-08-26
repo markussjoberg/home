@@ -6,7 +6,9 @@
  */
 import { readFileSync } from "node:fs";
 import { loadConfig } from "./config.js";
+import { fetchSpotMeta } from "./elevation.js";
 import { buildObservationUrl, parseLatestObservation } from "./fmi.js";
+import { OVERPASS_URL, lipasUrl, overpassQuery, parseLipas, parseOverpass } from "./places.js";
 import { buildMarineUrl, buildWindUrl, parseWind } from "./openmeteo.js";
 import { marineTileUrl, terrainTileUrl } from "./tiles.js";
 
@@ -99,6 +101,41 @@ async function main(): Promise<void> {
     }
   } catch (error) {
     fail("aallokko", String(error));
+  }
+
+  console.log("\nMaastoanalyysi (Open-Meteo Elevation):");
+  try {
+    const meta = await fetchSpotMeta(LAT, LON);
+    const sw = meta.octants[5]!;
+    ok("korkeusprofiilit", `spotin korkeus ${meta.elevation} m, SW: fetch ${sw.fetchKm} km, avoimuus ${sw.exposure}`);
+  } catch (error) {
+    fail("korkeusprofiilit", String(error));
+  }
+
+  console.log("\nRantainfo:");
+  try {
+    const res = await fetch(OVERPASS_URL, {
+      method: "POST",
+      body: `data=${encodeURIComponent(overpassQuery(LAT, LON))}`,
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+    if (!res.ok) {
+      fail("OSM/Overpass", `HTTP ${res.status}`, "Overpass voi olla ruuhkainen — yritä hetken päästä");
+    } else {
+      ok("OSM/Overpass", `${parseOverpass(await res.json(), LAT, LON).length} kohdetta säteellä`);
+    }
+  } catch (error) {
+    fail("OSM/Overpass", String(error));
+  }
+  try {
+    const res = await fetch(lipasUrl(config.lipasBase, LAT, LON));
+    if (!res.ok) {
+      fail("Lipas", `HTTP ${res.status}`, "Tarkista LIPAS_BASE — rajapinnan osoite tai parametrit voivat olla muuttuneet");
+    } else {
+      ok("Lipas", `${parseLipas(await res.json(), LAT, LON).length} uimapaikkaa säteellä`);
+    }
+  } catch (error) {
+    fail("Lipas", String(error));
   }
 
   console.log("\nHavainnot (FMI):");

@@ -9,6 +9,8 @@ export interface Config {
   apiToken: string;
   /** ntfy-aiheen osoite kelivahti-ilmoituksille (esim. https://ntfy.sh/oma-salainen-aihe). Tyhjä = ei ilmoituksia. */
   ntfyUrl: string;
+  /** Lipas-rajapinnan juuri (liikuntapaikat, mm. uimarannat). */
+  lipasBase: string;
   dataDir: string;
   tileCacheDir: string;
   /** Tiilivälimuistin elinikä sekunteina (oletus 30 vrk). */
@@ -29,6 +31,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     marineTileTemplate: env.MARINE_TILE_TEMPLATE ?? DEFAULT_MARINE_TEMPLATE,
     apiToken: env.NOSTE_TOKEN ?? "",
     ntfyUrl: env.NTFY_URL ?? "",
+    lipasBase: env.LIPAS_BASE ?? "https://lipas.cc.jyu.fi/api",
     dataDir: env.DATA_DIR ?? "./data",
     tileCacheDir: env.TILE_CACHE_DIR ?? "./data/tiles",
     tileCacheTtl: Number(env.TILE_CACHE_TTL ?? 30 * 24 * 3600),

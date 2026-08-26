@@ -85,18 +85,30 @@ struct MapTab: View {
     private func handle(_ action: SpotEditorView.Action, original: SpotData) {
         switch action {
         case .save(let data):
+            let record: SpotRecord
             if let existing = spots.first(where: { $0.id == data.id }) {
                 existing.update(from: data)
+                record = existing
             } else {
-                modelContext.insert(SpotRecord(from: data))
+                record = SpotRecord(from: data)
+                modelContext.insert(record)
             }
             try? modelContext.save()
             // @Query päivittyy asynkronisesti — rakenna ajantasainen lista itse.
             var updated = spots.map(\.data).filter { $0.id != data.id }
             updated.append(data)
+            let context = modelContext
             Task {
                 await forecastStore.refresh(spot: data, force: true, allSpots: updated)
                 await ServerClient.shared.backupSpots(updated)
+                // Maastoanalyysi kerran per spotti: fetch + avoimuus ilmansuunnittain.
+                if record.fetchKmByOctant == nil,
+                   let meta = await ServerClient.shared.spotMeta(latitude: data.latitude, longitude: data.longitude) {
+                    let sorted = meta.octants.sorted { $0.octant < $1.octant }
+                    record.fetchKmByOctant = sorted.map(\.fetchKm)
+                    record.exposureByOctant = sorted.map(\.exposure)
+                    try? context.save()
+                }
             }
         case .delete:
             if let existing = spots.first(where: { $0.id == original.id }) {

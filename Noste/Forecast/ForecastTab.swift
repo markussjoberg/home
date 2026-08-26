@@ -100,6 +100,8 @@ struct SpotForecastView: View {
     @Query private var allSessions: [SessionRecord]
     @State private var observation: ServerClient.Observation?
     @State private var selectedTime: Date?
+    @State private var places: [ServerClient.Place]?
+    @State private var mediumRange: [MediumRangeDay]?
 
     /// Spotin oppiva tuuliprofiili reittatuista sessioista.
     private var profile: SpotWindProfile {
@@ -139,6 +141,32 @@ struct SpotForecastView: View {
                 }
             }
 
+            if exposureText != nil || places?.isEmpty == false {
+                Section("Ranta & maasto") {
+                    if let exposureText {
+                        Label(exposureText, systemImage: "mountain.2")
+                            .font(.subheadline)
+                    }
+                    if let places {
+                        ForEach(places) { place in
+                            HStack {
+                                Text(place.name ?? place.category)
+                                    .font(.subheadline)
+                                Spacer()
+                                if place.name != nil {
+                                    Text(place.category)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Text("\(place.distanceM) m")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+
             if profile.sessionCount > 0 {
                 Section {
                     profileCard
@@ -163,11 +191,25 @@ struct SpotForecastView: View {
                 ForEach(days(of: upcoming.wind), id: \.self) { day in
                     Section(day.formatted(.dateTime.weekday(.wide).day().month())) {
                         ForEach(upcoming.wind.filter { sameDay($0.time, day) }) { hour in
+                            let waveInfo = waveInfo(for: hour, in: upcoming)
                             WindRow(hour: hour,
-                                    wave: wave(for: hour.time, in: upcoming),
+                                    wave: waveInfo.wave,
+                                    waveEstimated: waveInfo.estimated,
                                     matches: spot.matches(hour),
                                     stars: profile.predictedRating(for: hour))
                         }
+                    }
+                }
+
+                if let mediumRange, mediumRange.count > 3 {
+                    Section {
+                        ForEach(mediumRange.dropFirst(2)) { day in
+                            MediumRangeRow(day: day, matches: matchesWindow(day))
+                        }
+                    } header: {
+                        Text("Pitkä ennuste (ECMWF)")
+                    } footer: {
+                        Text("Päivän maksimituuli ja vallitseva suunta — suuntaa-antava reissusuunnitteluun.")
                     }
                 }
 
@@ -233,6 +275,42 @@ struct SpotForecastView: View {
     private func refresh(force: Bool) async {
         await forecastStore.refresh(spot: spot, force: force, allSpots: allSpots)
         observation = await ServerClient.shared.observation(latitude: spot.latitude, longitude: spot.longitude)
+        if places == nil {
+            places = await ServerClient.shared.places(latitude: spot.latitude, longitude: spot.longitude)
+        }
+        if mediumRange == nil || force {
+            let client = OpenMeteoClient(server: ServerSettings.current)
+            mediumRange = try? await client.mediumRange(latitude: spot.latitude, longitude: spot.longitude)
+        }
+    }
+
+    /// Aalto riville: merellä mallista, järvellä laskennallisesti fetchistä.
+    private func waveInfo(for hour: WindHour, in forecast: SpotForecast) -> (wave: WaveHour?, estimated: Bool) {
+        if let real = wave(for: hour.time, in: forecast) {
+            return (real, false)
+        }
+        if spot.waterType == .lake,
+           let estimate = LakeWaves.estimate(for: hour, fetchKmByOctant: spot.fetchKmByOctant) {
+            return (WaveHour(time: hour.time, height: estimate.height, period: estimate.period, direction: hour.direction), true)
+        }
+        return (nil, false)
+    }
+
+    /// Maaston avoimuus tekstinä: avoimet ja suojaisat suunnat.
+    private var exposureText: String? {
+        guard let exposure = spot.exposureByOctant, exposure.count == 8 else { return nil }
+        let name = { (i: Int) in GeoMath.compassName(degrees: Double(i) * 45) }
+        let open = (0..<8).filter { exposure[$0] >= 0.7 }.map(name)
+        let sheltered = (0..<8).filter { exposure[$0] <= 0.3 }.map(name)
+        var parts: [String] = []
+        if !open.isEmpty { parts.append("Avoin: \(open.joined(separator: ", "))") }
+        if !sheltered.isEmpty { parts.append("Suojainen: \(sheltered.joined(separator: ", "))") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// Osuuko keskipitkän ennusteen päivä spotin tuuli-ikkunaan (karkea: maksimituuli + vallitseva suunta).
+    private func matchesWindow(_ day: MediumRangeDay) -> Bool {
+        spot.matches(WindHour(time: day.date, speed: day.windMax, gust: day.gustMax, direction: day.direction))
     }
 
     private func stale(_ forecast: SpotForecast) -> Bool {
@@ -365,9 +443,44 @@ private struct WindChart: View {
     }
 }
 
+/// Keskipitkän ennusteen päivärivi.
+private struct MediumRangeRow: View {
+    let day: MediumRangeDay
+    let matches: Bool
+
+    var body: some View {
+        HStack {
+            Text(day.date, format: .dateTime.weekday(.abbreviated).day().month())
+                .font(.subheadline)
+                .fontWeight(matches ? .bold : .regular)
+            Spacer()
+            if matches {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.caption)
+            }
+            Text(day.directionName)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Image(systemName: "arrow.up")
+                .rotationEffect(.degrees(day.direction + 180))
+                .foregroundStyle(matches ? .green : .cyan)
+            VStack(alignment: .trailing) {
+                Text("max \(Format.speedMs(day.windMax))")
+                    .fontWeight(matches ? .bold : .medium)
+                Text(Format.speedMs(day.gustMax))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(minWidth: 86, alignment: .trailing)
+        }
+    }
+}
+
 private struct WindRow: View {
     let hour: WindHour
     let wave: WaveHour?
+    var waveEstimated = false
     let matches: Bool
     var stars: Double?
 
@@ -383,7 +496,8 @@ private struct WindRow: View {
                     }
                 }
                 if let wave {
-                    Text(String(format: "aalto %.1f m · %.0f s", wave.height, wave.period)
+                    Text(String(format: waveEstimated ? "aalto ~%.1f m · %.0f s (lask.)" : "aalto %.1f m · %.0f s",
+                                wave.height, wave.period)
                         .replacingOccurrences(of: ".", with: ","))
                         .font(.caption)
                         .foregroundStyle(.secondary)

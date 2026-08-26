@@ -85,6 +85,24 @@ public struct OpenMeteoClient {
         return try Self.decodeWaves(data)
     }
 
+    /// Keskipitkä ennuste (ECMWF IFS): päiväkohtainen maksimituuli, -puuska ja
+    /// vallitseva suunta 10 vrk. "Kannattaako ensi viikonloppuna suunnitella reissua."
+    public func mediumRange(latitude: Double, longitude: Double, days: Int = 10) async throws -> [MediumRangeDay] {
+        var components = server?.components(path: "api/openmeteo/forecast")
+            ?? URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
+        components.queryItems = (components.queryItems ?? []) + [
+            URLQueryItem(name: "latitude", value: String(format: "%.4f", latitude)),
+            URLQueryItem(name: "longitude", value: String(format: "%.4f", longitude)),
+            URLQueryItem(name: "daily", value: "wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant"),
+            URLQueryItem(name: "wind_speed_unit", value: "ms"),
+            URLQueryItem(name: "timezone", value: "UTC"),
+            URLQueryItem(name: "forecast_days", value: String(days)),
+            URLQueryItem(name: "models", value: "ecmwf_ifs025")
+        ]
+        let data = try await fetch(components.url!)
+        return try Self.decodeMediumRange(data)
+    }
+
     /// Toteutunut tuuli aikavälillä (session reittausta varten). Open-Meteon
     /// forecast-rajapinta palauttaa myös menneet tunnit `past_days`-parametrilla;
     /// historia kattaa enintään 7 vrk taakse.
@@ -159,6 +177,40 @@ public struct OpenMeteoClient {
                   i < hourly.wind_direction_10m.count, let direction = hourly.wind_direction_10m[i]
             else { continue }
             result.append(WindHour(time: time, speed: speed, gust: gust, direction: direction))
+        }
+        guard !result.isEmpty else { throw ClientError.emptyData }
+        return result
+    }
+
+    struct DailyResponse: Decodable {
+        struct Daily: Decodable {
+            let time: [String]
+            let wind_speed_10m_max: [Double?]
+            let wind_gusts_10m_max: [Double?]
+            let wind_direction_10m_dominant: [Double?]
+        }
+        let daily: Daily
+    }
+
+    static func parseDay(_ string: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: string)
+    }
+
+    public static func decodeMediumRange(_ data: Data) throws -> [MediumRangeDay] {
+        let response = try JSONDecoder().decode(DailyResponse.self, from: data)
+        let daily = response.daily
+        var result: [MediumRangeDay] = []
+        for (i, dayString) in daily.time.enumerated() {
+            guard let date = parseDay(dayString),
+                  i < daily.wind_speed_10m_max.count, let windMax = daily.wind_speed_10m_max[i],
+                  i < daily.wind_gusts_10m_max.count, let gustMax = daily.wind_gusts_10m_max[i],
+                  i < daily.wind_direction_10m_dominant.count, let direction = daily.wind_direction_10m_dominant[i]
+            else { continue }
+            result.append(MediumRangeDay(date: date, windMax: windMax, gustMax: gustMax, direction: direction))
         }
         guard !result.isEmpty else { throw ClientError.emptyData }
         return result

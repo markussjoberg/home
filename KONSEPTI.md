@@ -100,8 +100,21 @@ Kaksi lähdettä, molemmat ilmaisia ja avaimettomia:
 | Lähde | Mitä | Huom |
 |---|---|---|
 | **Open-Meteo** | Tuuli 10 m (nopeus, puuskat, suunta) tunneittain, useita malleja; `met_no`-malli (MET Nordic ~1 km) kattaa Suomen järviä myöten | Ei API-avainta, CORS ok, ei-kaupallinen ilmainen |
-| **Open-Meteo Marine** | Merkitsevä aallonkorkeus, jaksonaika, suunta; erikseen tuuliaallokko ja maininki | Toimii Itämerellä; sisävesispoteille näytetään vain tuuli |
+| **ECMWF IFS** (Open-Meteon kautta) | **Keskipitkä ennuste**: päivän maksimituuli, -puuska ja vallitseva suunta 10 vrk — "Pitkä ennuste" -osio spottinäkymässä, tuuli-ikkunaosumat merkittynä | Sama avaimeton rajapinta (`models=ecmwf_ifs025`) |
+| **Open-Meteo Marine** | Merkitsevä aallonkorkeus, jaksonaika, suunta; erikseen tuuliaallokko ja maininki | Toimii Itämerellä |
+| **Open-Meteo Elevation** | Korkeusprofiilit spotin ympäriltä 8 suuntaan → **maastoanalyysi**: avoimuus ja fetch per ilmansuunta | Copernicus GLO-90; palvelin laskee ja välimuistittaa pysyvästi |
 | **FMI avoin data** | *Toteutunut* tuuli lähimmältä havaintoasemalta (WFS) — palvelimen `/api/observation` | "Mitä siellä puhaltaa juuri nyt" — ennusteen rinnalle (appin UI:hin vaiheessa 1) |
+| **OSM (Overpass)** | Rantainfra: uimarannat, laiturit, veneluiskat, satamat, parkit, WC:t spotin ympäriltä | Palvelimen `/api/places`, 24 h välimuisti |
+| **Lipas** | Viralliset uimarannat ja -paikat (JY:n liikuntapaikkarekisteri) | Samaan `/api/places`-vastaukseen |
+
+**Järviaallot lasketaan** fetch-rajoitteisella JONSWAP-kaavalla: maastoanalyysin
+fetch tuulen suunnalta + ennustetuuli → Hs ja Tp (esim. 10 m/s ja 10 km → ~0,5 m
+ja 2,9 s; katkaistu täysin kehittyneen merenkäynnin tasoon). Näkyy ennusteriveillä
+merkinnällä "(lask.)". Merispoteilla aaltomalli on ensisijainen.
+
+**Maaston avoimuus** näkyy spottinäkymässä ("Avoin: W, SW · Suojainen: NE") —
+heuristiikka korkeusdatasta (keskinousu ≤ 2 km tuulen yläpuolella); metsänpeite
+(Luke/Copernicus) olisi seuraava tarkennus, korkeus ajaa asian pitkälle.
 
 Kun oma palvelin on käytössä, appin ennustehaut kulkevat sen läpisyötön kautta
 (sama muoto, palvelin välimuistittaa 15 min) — muuten suoraan Open-Meteoon.
@@ -172,7 +185,10 @@ kevyt versio).
 
 - Tallennus kartalta (pitkä painallus) tai nykyisestä sijainnista.
 - Spotille: nimi, laji(t), tyyppi (meri/järvi), suosikki, muistiinpanot,
-  toimivat tuulensuunnat (kelivahtia ja ennustenäkymää varten).
+  toimivat tuulensuunnat (kelivahtia ja ennustenäkymää varten),
+  **yksityinen/julkinen** (julkinen saa näkyä muille kun spottien jako toteutuu).
+- Tallennettaessa palvelin laskee spotin maastoanalyysin (avoimuus + fetch) ja
+  rantainfon (OSM + Lipas) automaattisesti.
 - Suosikkispotit synkataan kelloon ja niiden ennusteet pidetään tuoreina.
 - Sessiot linkittyvät automaattisesti lähimpään spottiin.
 

@@ -55,6 +55,23 @@ final class OpenMeteoTests: XCTestCase {
         XCTAssertThrowsError(try OpenMeteoClient.decodeWind(Data(json.utf8)))
     }
 
+    func testDecodeMediumRange() throws {
+        let json = """
+        {"daily":{"time":["2026-08-27","2026-08-28","2026-08-29"],
+        "wind_speed_10m_max":[8.4,null,11.2],
+        "wind_gusts_10m_max":[12.1,13.0,16.5],
+        "wind_direction_10m_dominant":[225,230,250]}}
+        """
+        let days = try OpenMeteoClient.decodeMediumRange(Data(json.utf8))
+        XCTAssertEqual(days.count, 2)
+        XCTAssertEqual(days[0].windMax, 8.4, accuracy: 0.001)
+        XCTAssertEqual(days[0].directionName, "SW")
+        XCTAssertEqual(days[1].gustMax, 16.5, accuracy: 0.001)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        XCTAssertEqual(calendar.component(.day, from: days[0].date), 27)
+    }
+
     func testForecastSnapshotRoundTripAndUpcoming() throws {
         let base = Date(timeIntervalSince1970: 1_750_000_000)
         let wind = (0..<48).map { i in

@@ -1,7 +1,9 @@
 import { Hono } from "hono";
 import { TtlCache } from "./cache.js";
 import { type Config, DEFAULT_MARINE_TEMPLATE } from "./config.js";
+import { fetchSpotMeta, type SpotMeta } from "./elevation.js";
 import { fetchLatestObservation, type WindObservation } from "./fmi.js";
+import { fetchPlaces, type Place } from "./places.js";
 import { type Alert, type AlertWindow, matchAlert } from "./kelivahti.js";
 import { type CombinedForecast, fetchCombinedForecast } from "./openmeteo.js";
 import { JsonStore } from "./store.js";
@@ -139,6 +141,44 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
         fetchLatestObservation(lat, lon, fetchImpl),
       );
       return c.json({ observation });
+    } catch (error) {
+      return c.json({ error: String(error) }, 502);
+    }
+  });
+
+  // Maastoanalyysi: fetch + avoimuus ilmansuunnittain korkeusdatasta.
+  // Maasto ei muutu → tulos talletetaan pysyvästi levylle.
+  app.get("/api/spotmeta", async (c) => {
+    const lat = Number(c.req.query("lat"));
+    const lon = Number(c.req.query("lon"));
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return c.json({ error: "lat ja lon vaaditaan" }, 400);
+    }
+    const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+    const cached = await store.read<Record<string, SpotMeta>>("spotmeta", {});
+    if (cached[key]) return c.json(cached[key]);
+    try {
+      const meta = await fetchSpotMeta(lat, lon, fetchImpl);
+      cached[key] = meta;
+      await store.write("spotmeta", cached);
+      return c.json(meta);
+    } catch (error) {
+      return c.json({ error: String(error) }, 502);
+    }
+  });
+
+  // Rantainfo: OSM (Overpass) + Lipas.
+  const placesCache = new TtlCache<{ nearest: Place[]; all: Place[] }>(24 * 3600);
+  app.get("/api/places", async (c) => {
+    const lat = Number(c.req.query("lat"));
+    const lon = Number(c.req.query("lon"));
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return c.json({ error: "lat ja lon vaaditaan" }, 400);
+    }
+    try {
+      const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+      const result = await placesCache.getOrSet(key, () => fetchPlaces(lat, lon, config.lipasBase, fetchImpl));
+      return c.json(result);
     } catch (error) {
       return c.json({ error: String(error) }, 502);
     }

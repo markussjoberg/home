@@ -22,6 +22,18 @@ interface NtfyPost {
 
 function testFetch(ntfyLog: NtfyPost[] = []): typeof fetch {
   return (async (url: string, init?: RequestInit) => {
+    if (url.includes("v1/elevation")) {
+      const count = new URL(url).searchParams.get("latitude")!.split(",").length;
+      return new Response(JSON.stringify({ elevation: new Array(count).fill(0) }), { status: 200 });
+    }
+    if (url.includes("overpass")) {
+      return new Response(JSON.stringify({
+        elements: [{ type: "node", lat: 60.101, lon: 24.9, tags: { natural: "beach", name: "Ranta" } }]
+      }), { status: 200 });
+    }
+    if (url.includes("lipas")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
     if (url.includes("api.open-meteo.com")) {
       return new Response(JSON.stringify(windBody), { status: 200 });
     }
@@ -151,6 +163,25 @@ describe("app", () => {
 
     const viaApi = await (await app.request("/api/alerts/matches", auth)).json();
     expect(viaApi).toHaveLength(1);
+  });
+
+  it("spotmeta lasketaan ja välimuistittuu levylle", async () => {
+    const first = await app.request("/api/spotmeta?lat=60.1&lon=24.9", auth);
+    expect(first.status).toBe(200);
+    const meta = await first.json();
+    expect(meta.octants).toHaveLength(8);
+    expect(meta.octants[0].fetchKm).toBe(20);
+    // Toinen kutsu tulee levycachesta (fake fetch ei haittaa — sama tulos).
+    const second = await app.request("/api/spotmeta?lat=60.1&lon=24.9", auth);
+    expect((await second.json()).octants).toHaveLength(8);
+  });
+
+  it("rantainfo yhdistää OSM:n ja Lipaksen", async () => {
+    const res = await app.request("/api/places?lat=60.1&lon=24.9", auth);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.nearest).toHaveLength(1);
+    expect(body.nearest[0]).toMatchObject({ category: "Uimaranta", name: "Ranta" });
   });
 
   it("kelivahti johdetaan spotin tuuli-ikkunasta ilman erillistä hälytystä", async () => {

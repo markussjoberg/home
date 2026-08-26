@@ -71,6 +71,12 @@ struct SpotEditorView: View {
                     }
                 }
 
+                Section {
+                    Toggle("Julkinen spotti", isOn: publicBinding)
+                } footer: {
+                    Text("Yksityinen näkyy vain sinulle. Julkinen saa näkyä muille, kun spottien jako kavereille toteutuu — merkintä kannattaa tehdä jo nyt.")
+                }
+
                 Section("Muistiinpanot") {
                     TextField("Esim. pysäköinti, karikot, laituri…", text: $draft.notes, axis: .vertical)
                         .lineLimit(3...6)
@@ -161,6 +167,13 @@ struct SpotEditorView: View {
             }
             Slider(value: value, in: range, step: 1)
         }
+    }
+
+    private var publicBinding: Binding<Bool> {
+        Binding(
+            get: { draft.isPublic ?? false },
+            set: { draft.isPublic = $0 ? true : nil }
+        )
     }
 
     private var alertBinding: Binding<Bool> {

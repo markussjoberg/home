@@ -17,6 +17,9 @@ final class SpotRecord {
     var minWind: Double?
     var maxWind: Double?
     var alertEnabled: Bool = false
+    var isPublic: Bool = false
+    var fetchKmByOctant: [Double]?
+    var exposureByOctant: [Double]?
 
     init(from data: SpotData) {
         id = data.id
@@ -32,6 +35,9 @@ final class SpotRecord {
         minWind = data.minWind
         maxWind = data.maxWind
         alertEnabled = data.alertEnabled ?? false
+        isPublic = data.isPublic ?? false
+        fetchKmByOctant = data.fetchKmByOctant
+        exposureByOctant = data.exposureByOctant
     }
 
     var data: SpotData {
@@ -47,7 +53,10 @@ final class SpotRecord {
             goodDirections: goodDirections,
             minWind: minWind,
             maxWind: maxWind,
-            alertEnabled: alertEnabled ? true : nil
+            alertEnabled: alertEnabled ? true : nil,
+            isPublic: isPublic ? true : nil,
+            fetchKmByOctant: fetchKmByOctant,
+            exposureByOctant: exposureByOctant
         )
     }
 
@@ -63,6 +72,9 @@ final class SpotRecord {
         minWind = data.minWind
         maxWind = data.maxWind
         alertEnabled = data.alertEnabled ?? false
+        isPublic = data.isPublic ?? false
+        if let fetch = data.fetchKmByOctant { fetchKmByOctant = fetch }
+        if let exposure = data.exposureByOctant { exposureByOctant = exposure }
     }
 }
 

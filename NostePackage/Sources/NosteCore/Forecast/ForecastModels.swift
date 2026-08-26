@@ -41,6 +41,24 @@ public struct WaveHour: Codable, Sendable, Equatable, Identifiable {
     public var id: Date { time }
 }
 
+/// Keskipitkän ennusteen päivä (ECMWF): maksimituuli, -puuska ja vallitseva suunta.
+public struct MediumRangeDay: Codable, Sendable, Equatable, Identifiable {
+    public var date: Date
+    public var windMax: Double
+    public var gustMax: Double
+    public var direction: Double
+
+    public init(date: Date, windMax: Double, gustMax: Double, direction: Double) {
+        self.date = date
+        self.windMax = windMax
+        self.gustMax = gustMax
+        self.direction = direction
+    }
+
+    public var id: Date { date }
+    public var directionName: String { GeoMath.compassName(degrees: direction) }
+}
+
 /// Spotin koottu ennuste. Codable, jotta sama paketti kulkee kelloon snapshotina.
 public struct SpotForecast: Codable, Sendable, Equatable {
     public var spotID: UUID

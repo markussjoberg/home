@@ -54,7 +54,10 @@ palvelimen kautta, eikä appiin tarvita mitään avaimia.
 
 API (kaikki vaativat `Authorization: Bearer <token>` tai `?token=`):
 `/api/forecast?lat&lon&sea=1` koottu ennuste · `/api/observation?lat&lon`
-FMI-havainto · `/api/openmeteo/{forecast,marine}` läpisyöttö välimuistilla ·
+FMI-havainto · `/api/openmeteo/{forecast,marine}` läpisyöttö välimuistilla
+(myös ECMWF-keskipitkä `models=ecmwf_ifs025` ja historia `past_days`) ·
+`/api/spotmeta?lat&lon` maastoanalyysi (avoimuus + fetch ilmansuunnittain) ·
+`/api/places?lat&lon` rantainfo (OSM + Lipas) ·
 `/api/tiles/{terrain,marine}/{z}/{x}/{y}.png` tiilet · `/api/spots`,
 `/api/sessions` synkka · `/api/alerts`, `/api/alerts/matches` kelivahti.
 
