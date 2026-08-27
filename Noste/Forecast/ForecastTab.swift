@@ -191,10 +191,10 @@ struct SpotForecastView: View {
                 ForEach(days(of: upcoming.wind), id: \.self) { day in
                     Section(day.formatted(.dateTime.weekday(.wide).day().month())) {
                         ForEach(upcoming.wind.filter { sameDay($0.time, day) }) { hour in
-                            let waveInfo = waveInfo(for: hour, in: upcoming)
+                            let wave = waveInfo(for: hour, in: upcoming)
                             WindRow(hour: hour,
-                                    wave: waveInfo.wave,
-                                    waveEstimated: waveInfo.estimated,
+                                    wave: wave.wave,
+                                    waveEstimated: wave.estimated,
                                     matches: spot.matches(hour),
                                     stars: profile.predictedRating(for: hour))
                         }
