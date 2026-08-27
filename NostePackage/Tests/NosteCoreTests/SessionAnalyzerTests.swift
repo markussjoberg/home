@@ -72,6 +72,14 @@ final class SessionAnalyzerTests: XCTestCase {
         XCTAssertEqual(summary.maxSpeed, 6.0, accuracy: 0.01)
     }
 
+    func testTrackPointDecodesWithoutAccuracyField() throws {
+        // Vanha talletettu jälki ilman horizontalAccuracy-kenttää ei saa kadota.
+        let old = #"{"t":1.5,"latitude":60.1,"longitude":24.9,"speed":5.2}"#
+        let point = try JSONDecoder().decode(TrackPoint.self, from: Data(old.utf8))
+        XCTAssertEqual(point.horizontalAccuracy, -1)
+        XCTAssertEqual(point.speed, 5.2, accuracy: 0.001)
+    }
+
     func testSummaryRoundTripsThroughJSON() throws {
         let summary = SessionAnalyzer.summarize(
             sport: .pumpFoil,

@@ -28,9 +28,10 @@ Xcodessa:
 1. Aseta molemmille targeteille oma kehittäjätiimi (Signing & Capabilities).
 2. `NosteWatch`-targetilla on HealthKit-entitlement valmiina; Xcode lisää
    capabilityn provisiointiin automaattisesti.
-3. Jos watch-appi ei näy iPhone-appiin upotettuna (Embed Watch Content),
-   lisää se Noste-targetin *General → Frameworks, Libraries, and Embedded
-   Content* -kohdasta — XcodeGen-versiot käsittelevät tämän hieman eri tavoin.
+3. Käytä tuoretta XcodeGeniä (≥ 2.38): uudet versiot upottavat watchOS-appin
+   oikein iPhone-appiin (*Embed Watch Content*). Jos upotus puuttuu tai watch-
+   appi upottuu väärin (frameworkina), päivitä XcodeGen tai lisää upotus käsin
+   Noste-targetin *General*-välilehdeltä.
 4. Aja `NosteWatch`-scheme kelloon/simulaattoriin ja `Noste` puhelimeen.
 
 ## Palvelin (Hetzner)

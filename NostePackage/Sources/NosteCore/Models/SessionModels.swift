@@ -17,6 +17,17 @@ public struct TrackPoint: Codable, Sendable, Equatable {
         self.speed = speed
         self.horizontalAccuracy = horizontalAccuracy
     }
+
+    // Käsin kirjoitettu dekoodaus, jotta myöhemmin lisättävät kentät eivät koskaan
+    // riko vanhojen jälkien lukua (init-oletusarvo ei päde synteettiseen Decodableen).
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        t = try container.decode(TimeInterval.self, forKey: .t)
+        latitude = try container.decode(Double.self, forKey: .latitude)
+        longitude = try container.decode(Double.self, forKey: .longitude)
+        speed = try container.decode(Double.self, forKey: .speed)
+        horizontalAccuracy = try container.decodeIfPresent(Double.self, forKey: .horizontalAccuracy) ?? -1
+    }
 }
 
 /// Kiihtyvyysnäyte: käyttäjäkiihtyvyys painovoiman suunnassa (m/s²), aika session alusta.
