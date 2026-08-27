@@ -103,6 +103,11 @@ public struct PumpAnalysis: Codable, Sendable, Equatable {
         self.averageCadence = averageCadence
         self.bouts = bouts
     }
+
+    /// Aktiivisen pumppauksen kokonaiskesto (jaksojen summa).
+    public var totalBoutTime: TimeInterval {
+        bouts.reduce(0) { $0 + $1.duration }
+    }
 }
 
 /// Foili-/laskujaksojen analyysin tulos.
@@ -143,8 +148,11 @@ public struct SessionSummary: Codable, Sendable, Equatable {
     public var pumps: PumpAnalysis?
     /// Sykeyhteenveto (nil jos sykedataa ei ollut — esim. puhelimella tallennettu sessio).
     public var heartRate: HeartRateStats?
+    /// Suorituskohtaiset tiedot per lento/lasku: kesto, matka, pumput, frekvenssi,
+    /// huippu- ja keskivauhti. Reitti = raakajälki lennon aikaikkunalla.
+    public var flights: [FlightDetail]?
 
-    public init(sport: Sport, startDate: Date, duration: TimeInterval, distance: Double, maxSpeed: Double, averageMovingSpeed: Double, rides: RideAnalysis, pumps: PumpAnalysis?, heartRate: HeartRateStats? = nil) {
+    public init(sport: Sport, startDate: Date, duration: TimeInterval, distance: Double, maxSpeed: Double, averageMovingSpeed: Double, rides: RideAnalysis, pumps: PumpAnalysis?, heartRate: HeartRateStats? = nil, flights: [FlightDetail]? = nil) {
         self.sport = sport
         self.startDate = startDate
         self.duration = duration
@@ -154,6 +162,7 @@ public struct SessionSummary: Codable, Sendable, Equatable {
         self.rides = rides
         self.pumps = pumps
         self.heartRate = heartRate
+        self.flights = flights
     }
 
     /// Foiliajan osuus koko sessiosta (0–1).

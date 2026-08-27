@@ -53,6 +53,15 @@ public enum SessionRecovery {
         )
         if state.sport.countsPumps {
             summary.pumps = PumpDetector.analysis(fromStrokeTimes: state.strokeTimes)
+            // Suorituskohtaiset pumppumäärät talletetuista pumppuhetkistä.
+            if !summary.rides.segments.isEmpty {
+                summary.flights = FlightDetail.compute(
+                    segments: summary.rides.segments,
+                    points: state.points,
+                    strokeTimes: state.strokeTimes,
+                    maxPlausibleSpeed: state.sport.maxPlausibleSpeed
+                )
+            }
         }
         return summary
     }

@@ -39,6 +39,7 @@ struct SummaryView: View {
                         Divider()
                         row("Pumput", "\(pumps.strokeCount)")
                         row("Kadenssi", String(format: "%.0f/min", pumps.averageCadence))
+                        row("Pumppausaika", Format.duration(pumps.totalBoutTime))
                         row("Pumppausjaksoja", "\(pumps.bouts.count)")
                     }
                     if summary.sport == .surf || summary.sport == .sup {

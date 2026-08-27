@@ -79,6 +79,12 @@ public enum SessionAnalyzer {
             config: rideConfig ?? .forSport(sport)
         )
         let pumps = sport.countsPumps ? PumpDetector.analyze(motion, config: pumpConfig) : nil
+        let flights = rides.segments.isEmpty ? nil : FlightDetail.compute(
+            segments: rides.segments,
+            points: points,
+            strokeTimes: pumps?.strokeTimes ?? [],
+            maxPlausibleSpeed: speedCap
+        )
 
         return SessionSummary(
             sport: sport,
@@ -89,7 +95,8 @@ public enum SessionAnalyzer {
             averageMovingSpeed: movingTime > 0 ? movingDistance / movingTime : 0,
             rides: rides,
             pumps: pumps,
-            heartRate: HeartRateStats.from(heartRate)
+            heartRate: HeartRateStats.from(heartRate),
+            flights: flights
         )
     }
 }

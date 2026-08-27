@@ -150,7 +150,15 @@ struct SessionDetailView: View {
                     Section("Pumppaus") {
                         row("Pumput", "\(pumps.strokeCount)")
                         row("Kadenssi", String(format: "%.0f/min", pumps.averageCadence))
+                        row("Pumppausaika", Format.duration(pumps.totalBoutTime))
                         row("Pumppausjaksoja", "\(pumps.bouts.count)")
+                    }
+                }
+                if let flights = summary.flights, !flights.isEmpty, summary.sport.usesFoil {
+                    Section("Suoritukset (\(flights.count))") {
+                        ForEach(Array(flights.enumerated()), id: \.element.id) { index, flight in
+                            FlightRow(index: index + 1, flight: flight, showPumps: summary.sport.countsPumps)
+                        }
                     }
                 }
                 if summary.sport == .surf {
@@ -169,6 +177,40 @@ struct SessionDetailView: View {
 
     private func row(_ label: String, _ value: String) -> some View {
         LabeledContent(label, value: value)
+    }
+}
+
+/// Yksittäinen suoritus: kesto, matka, pumput, frekvenssi, vauhdit.
+/// Reitti näkyy kartalla vihreänä samalla aikaikkunalla.
+private struct FlightRow: View {
+    let index: Int
+    let flight: FlightDetail
+    let showPumps: Bool
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text("#\(index)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 30, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(Format.duration(flight.duration)) · \(Format.distance(flight.distance))")
+                    .font(.subheadline.weight(.medium))
+                if showPumps {
+                    Text(String(format: "%d pumppua · %.0f/min", flight.strokeCount, flight.cadence))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("max \(Format.speedKmh(flight.maxSpeed))")
+                    .font(.subheadline)
+                Text("ka \(Format.speedKmh(flight.averageSpeed))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 

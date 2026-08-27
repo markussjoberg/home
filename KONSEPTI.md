@@ -51,9 +51,11 @@ Pumppaus näkyy ranteessa jaksollisena pystykiihtyvyytenä ~0,5–1,5 Hz. Tunnis
 signaalin tasoitus + huippujen poiminta minimietäisyydellä ja -korkeudella
 (prominenssi), jotta aallokon keinunta ja käden heilautukset eivät laske pumpuiksi.
 
-Tuloksena: **pumppujen määrä, kadenssi (pumppua/min), pumppausjaksot**, ja pump
-foilissa yhdessä foilitunnistuksen kanssa: lentojen määrä ja pisin lento — pumppilajin
-tärkein luku.
+Tuloksena: **pumppujen määrä, kadenssi (pumppua/min), pumppausjaksot ja
+aktiivinen pumppausaika**, ja yhdessä foilitunnistuksen kanssa **suorituskohtaiset
+tiedot jokaisesta lennosta**: kesto, matka, pumput, frekvenssi, huippu- ja
+keskivauhti — sessionäkymän suorituslistassa, ja reitti kartalla samalla
+aikaikkunalla (foiliosuudet vihreällä).
 
 ### Surffimittarit
 
