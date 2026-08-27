@@ -122,13 +122,23 @@ public struct RideAnalysis: Codable, Sendable, Equatable {
     public var longestByDuration: RideSegment?
     /// Keskinopeus jaksojen aikana (m/s).
     public var averageSpeed: Double
+    /// Yritysten määrä: kaikki irtoamiset, myös alle minimikeston jääneet
+    /// (dock start -onnistumisprosentti = count / attemptCount).
+    public var attemptCount: Int?
 
-    public init(segments: [RideSegment] = [], totalDuration: TimeInterval = 0, totalDistance: Double = 0, longestByDuration: RideSegment? = nil, averageSpeed: Double = 0) {
+    public init(segments: [RideSegment] = [], totalDuration: TimeInterval = 0, totalDistance: Double = 0, longestByDuration: RideSegment? = nil, averageSpeed: Double = 0, attemptCount: Int? = nil) {
         self.segments = segments
         self.totalDuration = totalDuration
         self.totalDistance = totalDistance
         self.longestByDuration = longestByDuration
         self.averageSpeed = averageSpeed
+        self.attemptCount = attemptCount
+    }
+
+    /// Onnistumisprosentti (0–1), jos yrityksiä on kirjattu.
+    public var successRate: Double? {
+        guard let attemptCount, attemptCount > 0 else { return nil }
+        return Double(segments.count) / Double(attemptCount)
     }
 
     public var count: Int { segments.count }
@@ -155,8 +165,10 @@ public struct SessionSummary: Codable, Sendable, Equatable {
     /// Suorituskohtaiset tiedot per lento/lasku: kesto, matka, pumput, frekvenssi,
     /// huippu- ja keskivauhti. Reitti = raakajälki lennon aikaikkunalla.
     public var flights: [FlightDetail]?
+    /// Huippunopeudet: paras 2 s / 10 s / 100 m.
+    public var speedRecords: SpeedRecords?
 
-    public init(sport: Sport, startDate: Date, duration: TimeInterval, distance: Double, maxSpeed: Double, averageMovingSpeed: Double, rides: RideAnalysis, pumps: PumpAnalysis?, heartRate: HeartRateStats? = nil, flights: [FlightDetail]? = nil) {
+    public init(sport: Sport, startDate: Date, duration: TimeInterval, distance: Double, maxSpeed: Double, averageMovingSpeed: Double, rides: RideAnalysis, pumps: PumpAnalysis?, heartRate: HeartRateStats? = nil, flights: [FlightDetail]? = nil, speedRecords: SpeedRecords? = nil) {
         self.sport = sport
         self.startDate = startDate
         self.duration = duration
@@ -167,6 +179,7 @@ public struct SessionSummary: Codable, Sendable, Equatable {
         self.pumps = pumps
         self.heartRate = heartRate
         self.flights = flights
+        self.speedRecords = speedRecords
     }
 
     /// Foiliajan osuus koko sessiosta (0–1).

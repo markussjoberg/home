@@ -225,6 +225,34 @@ project.yml              XcodeGen-projektimääritys → `xcodegen` tuottaa .xco
 - Appi toimii ilman palvelinta; palvelin lisää välimuistin, avaimettomuuden ja
   kelivahdin.
 
+## Kilpailijakenttä ja poimitut ideat
+
+Katsaus 8/2026: pumpfoil.org (avoin lähdekoodi, AGPL; monikellotuki, palvelinpuolen
+ML-analyysi, jälki väritettynä pumppu-/liitovaiheittain, spottichatit ja
+-ennätykset), Waterspeed (30+ lajia, speedsurfing-huiput 2 s/10 s, live-jako
+selainlinkillä, GPX), Surfr (hyppykorkeus/airtime wingiin), Dawn Patrol (surffi:
+aallot + Surfline-kamerasynkka), FoilMotion (dock start -onnistumis-%,
+vesikosketustunnistus, muokattavat kellonäytöt, käännösanalyysi), Hoolan
+(ilmainen; jibe/tack-onnistumis-%, upwind gain, 100/500 m -huiput).
+
+**Poimittu ja toteutettu:**
+- *Startit ja onnistumis-%* (FoilMotion): kaikki irtoamiset lasketaan — myös
+  heti lässähtäneet — ja pumpparin yhteenveto näyttää esim. "12/17 (71 %)".
+- *Pumppaus vs. liito* (pumpfoil.org): lennon sisältä erotellaan aktiivinen
+  pumppausaika ja liito; liito-osuus per lento ja per sessio — pumppauksen
+  tehokkuuden ydinmittari.
+- *Huippunopeudet 2 s / 10 s / 100 m* (Waterspeed/Hoolan): speedsurfing-vakiot,
+  häiriösuodatettuina.
+- *GPX-vienti* (Waterspeed): sessio ulos jakonapista (Strava yms.).
+
+**Roadmapiin (vaihe 2+):** jäljen väritys valitulla suureella (nopeus/syke/
+kadenssi) + pumppuiskut kartalle; trendikäyrät historiasta; hyppytunnistus
+wingiin; jibe/tack-onnistumis-% ja upwind gain; live-jako selainlinkillä;
+.fit/ulkoisten tallenteiden tuonti; spottikohtaiset ennätykset kun jako
+kavereille toteutuu. Nosteen omat valtit joita kellään muulla ei ole:
+spotin oppiva tuuliprofiili + tähtiennuste, maastoanalyysi (avoimuus + fetch),
+järviaaltolaskenta, kelivahti omalla palvelimella ja FMI-havainnot.
+
 ## Vaiheistus
 
 - **V0 (tämä)**: konsepti, projektirunko, NosteCore-algoritmit + testit, iOS- ja

@@ -102,7 +102,8 @@ public enum SessionAnalyzer {
             segments: rides.segments,
             points: points,
             strokeTimes: pumps?.strokeTimes ?? [],
-            maxPlausibleSpeed: speedCap
+            maxPlausibleSpeed: speedCap,
+            bouts: pumps?.bouts ?? []
         )
 
         return SessionSummary(
@@ -115,7 +116,8 @@ public enum SessionAnalyzer {
             rides: rides,
             pumps: pumps,
             heartRate: HeartRateStats.from(heartRate),
-            flights: flights
+            flights: flights,
+            speedRecords: SpeedRecords.compute(points: points, maxPlausibleSpeed: speedCap)
         )
     }
 

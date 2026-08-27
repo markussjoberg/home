@@ -52,14 +52,16 @@ public enum SessionRecovery {
             heartRate: state.heartRate ?? []
         )
         if state.sport.countsPumps {
-            summary.pumps = PumpDetector.analysis(fromStrokeTimes: state.strokeTimes)
+            let pumps = PumpDetector.analysis(fromStrokeTimes: state.strokeTimes)
+            summary.pumps = pumps
             // Suorituskohtaiset pumppumäärät talletetuista pumppuhetkistä.
             if !summary.rides.segments.isEmpty {
                 summary.flights = FlightDetail.compute(
                     segments: summary.rides.segments,
                     points: state.points,
                     strokeTimes: state.strokeTimes,
-                    maxPlausibleSpeed: state.sport.maxPlausibleSpeed
+                    maxPlausibleSpeed: state.sport.maxPlausibleSpeed,
+                    bouts: pumps.bouts
                 )
             }
         }

@@ -129,7 +129,9 @@ public enum RideSegmenter {
             totalDuration: totalDuration,
             totalDistance: totalDistance,
             longestByDuration: segments.max { $0.duration < $1.duration },
-            averageSpeed: totalDuration > 0 ? totalDistance / totalDuration : 0
+            averageSpeed: totalDuration > 0 ? totalDistance / totalDuration : 0,
+            // Kaikki irtoamiset (myös heti lässähtäneet) = startti-/lentoyritykset.
+            attemptCount: merged.count
         )
     }
 }

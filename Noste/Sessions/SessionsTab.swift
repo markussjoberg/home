@@ -151,12 +151,26 @@ struct SessionDetailView: View {
                 }
                 if let pumps = summary.pumps {
                     Section("Pumppaus") {
+                        if let attempts = summary.rides.attemptCount, let rate = summary.rides.successRate {
+                            row("Startit", "\(summary.rides.count) / \(attempts) (\(Format.percent(rate)))")
+                        }
                         row("Pumput", "\(pumps.strokeCount)")
                         row("Kadenssi", String(format: "%.0f/min", pumps.averageCadence))
                         row("Pumppausaika", Format.duration(pumps.totalBoutTime))
-                        row("Pumppausjaksoja", "\(pumps.bouts.count)")
+                        if let glide = sessionGlideRatio(summary) {
+                            row("Liito-osuus", Format.percent(glide))
+                        }
                         if let swimTime = pumps.swimTime {
                             row("Uinnissa", Format.duration(swimTime))
+                        }
+                    }
+                }
+                if let records = summary.speedRecords {
+                    Section("Huippunopeudet") {
+                        row("Paras 2 s", Format.speedKmh(records.best2s))
+                        row("Paras 10 s", Format.speedKmh(records.best10s))
+                        if records.best100m > 0 {
+                            row("Nopein 100 m", Format.speedKmh(records.best100m))
                         }
                     }
                 }
@@ -189,6 +203,37 @@ struct SessionDetailView: View {
         }
         .navigationTitle(record.startDate.formatted(.dateTime.day().month()))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let url = gpxURL() {
+                ShareLink(item: url) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+            }
+        }
+    }
+
+    /// GPX-tiedosto jakoa varten (Strava tms.).
+    private func gpxURL() -> URL? {
+        let track = record.track
+        guard !track.isEmpty else { return nil }
+        let name = "\(record.sport.displayName) \(record.startDate.formatted(.dateTime.day().month().year()))"
+        let gpx = GPXExporter.gpx(track: track, startDate: record.startDate, name: name)
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("noste-\(Int(record.startDate.timeIntervalSince1970)).gpx")
+        do {
+            try gpx.write(to: url, atomically: true, encoding: .utf8)
+            return url
+        } catch {
+            return nil
+        }
+    }
+
+    /// Koko session liito-osuus lentojen pumppausajoista.
+    private func sessionGlideRatio(_ summary: SessionSummary) -> Double? {
+        guard let flights = summary.flights, summary.rides.totalDuration > 0 else { return nil }
+        let pumping = flights.compactMap(\.pumpingTime).reduce(0, +)
+        guard pumping > 0 || flights.contains(where: { $0.pumpingTime != nil }) else { return nil }
+        return max(0, min(1, 1 - pumping / summary.rides.totalDuration))
     }
 
     private func row(_ label: String, _ value: String) -> some View {
@@ -214,7 +259,7 @@ private struct FlightRow: View {
                 Text("\(Format.duration(flight.duration)) · \(Format.distance(flight.distance))")
                     .font(.subheadline.weight(.medium))
                 if showPumps {
-                    Text(String(format: "%d pumppua · %.0f/min", flight.strokeCount, flight.cadence))
+                    Text(pumpLine)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -229,6 +274,14 @@ private struct FlightRow: View {
             }
         }
         .listRowBackground(isSelected ? Color.orange.opacity(0.08) : nil)
+    }
+
+    private var pumpLine: String {
+        var text = String(format: "%d pumppua · %.0f/min", flight.strokeCount, flight.cadence)
+        if let glide = flight.glideRatio {
+            text += " · liito \(Format.percent(glide))"
+        }
+        return text
     }
 }
 

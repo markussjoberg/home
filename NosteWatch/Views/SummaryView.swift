@@ -37,10 +37,15 @@ struct SummaryView: View {
                     }
                     if let pumps = summary.pumps {
                         Divider()
+                        if let attempts = summary.rides.attemptCount, let rate = summary.rides.successRate {
+                            row("Startit", "\(summary.rides.count)/\(attempts) (\(Format.percent(rate)))")
+                        }
                         row("Pumput", "\(pumps.strokeCount)")
                         row("Kadenssi", String(format: "%.0f/min", pumps.averageCadence))
                         row("Pumppausaika", Format.duration(pumps.totalBoutTime))
-                        row("Pumppausjaksoja", "\(pumps.bouts.count)")
+                        if let swimTime = pumps.swimTime {
+                            row("Uinnissa", Format.duration(swimTime))
+                        }
                     }
                     if summary.sport == .surf || summary.sport == .sup {
                         Divider()
