@@ -97,12 +97,15 @@ private struct SessionRow: View {
 struct SessionDetailView: View {
     let record: SessionRecord
     @Environment(\.modelContext) private var modelContext
+    @State private var selectedFlightStart: TimeInterval?
 
     var body: some View {
         List {
             if !record.track.isEmpty {
                 Section {
-                    SessionTrackMap(track: record.track, rides: record.summary?.rides.segments ?? [])
+                    SessionTrackMap(track: record.track,
+                                    rides: record.summary?.rides.segments ?? [],
+                                    selectedStart: selectedFlightStart)
                         .frame(height: 260)
                         .listRowInsets(EdgeInsets())
                 }
@@ -152,13 +155,26 @@ struct SessionDetailView: View {
                         row("Kadenssi", String(format: "%.0f/min", pumps.averageCadence))
                         row("Pumppausaika", Format.duration(pumps.totalBoutTime))
                         row("Pumppausjaksoja", "\(pumps.bouts.count)")
+                        if let swimTime = pumps.swimTime {
+                            row("Uinnissa", Format.duration(swimTime))
+                        }
                     }
                 }
                 if let flights = summary.flights, !flights.isEmpty, summary.sport.usesFoil {
-                    Section("Suoritukset (\(flights.count))") {
+                    Section {
                         ForEach(Array(flights.enumerated()), id: \.element.id) { index, flight in
-                            FlightRow(index: index + 1, flight: flight, showPumps: summary.sport.countsPumps)
+                            FlightRow(index: index + 1, flight: flight,
+                                      showPumps: summary.sport.countsPumps,
+                                      isSelected: selectedFlightStart == flight.start)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    selectedFlightStart = selectedFlightStart == flight.start ? nil : flight.start
+                                }
                         }
+                    } header: {
+                        Text("Suoritukset (\(flights.count))")
+                    } footer: {
+                        Text("Napauta suoritusta — sen reitti korostuu kartalla.")
                     }
                 }
                 if summary.sport == .surf {
@@ -186,12 +202,13 @@ private struct FlightRow: View {
     let index: Int
     let flight: FlightDetail
     let showPumps: Bool
+    var isSelected = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             Text("#\(index)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.caption.weight(isSelected ? .bold : .regular))
+                .foregroundStyle(isSelected ? .orange : .secondary)
                 .frame(width: 30, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(Format.duration(flight.duration)) · \(Format.distance(flight.distance))")
@@ -211,13 +228,15 @@ private struct FlightRow: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .listRowBackground(isSelected ? Color.orange.opacity(0.08) : nil)
     }
 }
 
-/// Reitti kartalla: foilijaksot korostettuna vihreällä.
+/// Reitti kartalla: foilijaksot vihreällä, valittu suoritus oranssilla.
 struct SessionTrackMap: View {
     let track: [TrackPoint]
     let rides: [RideSegment]
+    var selectedStart: TimeInterval?
 
     var body: some View {
         Map {
@@ -228,10 +247,11 @@ struct SessionTrackMap: View {
 
             ForEach(Array(rides.enumerated()), id: \.offset) { _, ride in
                 let points = track.filter { $0.t >= ride.start && $0.t <= ride.end }
+                let selected = selectedStart == ride.start
                 MapPolyline(coordinates: points.map {
                     CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
                 })
-                .stroke(.green, lineWidth: 4)
+                .stroke(selected ? Color.orange : Color.green, lineWidth: selected ? 6 : 4)
             }
         }
     }

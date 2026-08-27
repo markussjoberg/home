@@ -54,8 +54,14 @@ signaalin tasoitus + huippujen poiminta minimietäisyydellä ja -korkeudella
 Tuloksena: **pumppujen määrä, kadenssi (pumppua/min), pumppausjaksot ja
 aktiivinen pumppausaika**, ja yhdessä foilitunnistuksen kanssa **suorituskohtaiset
 tiedot jokaisesta lennosta**: kesto, matka, pumput, frekvenssi, huippu- ja
-keskivauhti — sessionäkymän suorituslistassa, ja reitti kartalla samalla
-aikaikkunalla (foiliosuudet vihreällä).
+keskivauhti — sessionäkymän suorituslistassa, josta suorituksen voi napauttaa
+ja sen reitti korostuu kartalla.
+
+**Uinti ei ole pumppausta**: käsivedot näyttävät ranteessa pumppaukselta, joten
+pumppu lasketaan vain vauhdissa (≥ 1,5 m/s — uidessa ei liikuta näin lujaa).
+Portti toimii sekä livenä että analyysissä. Lisäksi tunnistetaan **uintiaika**
+(hidas vauhti + voimakas käsiliike) omaksi luvukseen — laituripaluut ja
+kaatumisten jälkeiset uinnit näkyvät pumpparin yhteenvedossa.
 
 ### Surffimittarit
 

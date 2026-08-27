@@ -62,6 +62,9 @@ final class WorkoutManager: NSObject, ObservableObject {
     private let motionLock = NSLock()
     private var motionSamples: [MotionSample] = []
     private var pumpDetector = PumpDetector()
+    /// Viimeisin GPS-nopeus liikeanturisäikeelle (motionLock suojaa):
+    /// pumppu lasketaan vain vauhdissa — uinnin käsivedot eivät ole pumppuja.
+    private var gatedSpeed: Double = -1
     private var rideTracker = LiveRideTracker(sport: .wingFoil)
     private var autoPause = AutoPauseController(sport: .wingFoil)
     private var lastGoodLocation: CLLocation?
@@ -327,6 +330,7 @@ final class WorkoutManager: NSObject, ObservableObject {
                     horizontalAccuracy: location.horizontalAccuracy
                 ))
                 currentSpeed = max(0, speed)
+                motionLock.lock(); gatedSpeed = speed; motionLock.unlock()
                 if accurate {
                     if let previous = lastGoodLocation, max(0, speed) >= 1.0 {
                         liveDistance += location.distance(from: previous)
@@ -358,7 +362,9 @@ final class WorkoutManager: NSObject, ObservableObject {
             let sample = MotionSample(t: Date().timeIntervalSince(start), verticalAcceleration: vertical)
             self.motionLock.lock()
             self.motionSamples.append(sample)
-            self.pumpDetector.add(sample)
+            if self.gatedSpeed < 0 || self.gatedSpeed >= 1.5 {
+                self.pumpDetector.add(sample)
+            }
             self.motionLock.unlock()
         }
     }

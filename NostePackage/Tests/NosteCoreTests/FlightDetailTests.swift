@@ -64,6 +64,41 @@ final class FlightDetailTests: XCTestCase {
         XCTAssertEqual(summary.pumps?.totalBoutTime ?? 0, 27, accuracy: 4, "aktiivinen pumppausaika")
     }
 
+    func testSwimStrokesAreNotCountedAsPumps() {
+        // Pumppisessio: lento [10,40), tyyntä [40,45), sitten UINTIA takaisin
+        // laiturille [45,60) — käsivedot näyttävät ranteessa pumppaukselta,
+        // mutta vauhti (0,8 m/s) paljastaa uinnin.
+        let speeds = [Double](repeating: 1.0, count: 10)
+            + [Double](repeating: 3.0, count: 30)
+            + [Double](repeating: 1.0, count: 5)
+            + [Double](repeating: 0.8, count: 15)
+        let motion = (0..<(60 * 50)).map { i -> MotionSample in
+            let t = Double(i) / 50
+            let active = (t >= 10 && t < 40) || (t >= 45 && t < 60)
+            return MotionSample(t: t, verticalAcceleration: active ? 3.0 * sin(2 * .pi * 1.0 * t) : 0.0)
+        }
+        let summary = SessionAnalyzer.summarize(sport: .pumpFoil, startDate: .now, points: makeTrack(speeds: speeds), motion: motion)
+        let pumps = summary.pumps!
+
+        // Ilman porttia laskuri näyttäisi ~40; uinnin vedot on suodatettu pois.
+        XCTAssertTrue((24...31).contains(pumps.strokeCount), "strokeCount oli \(pumps.strokeCount)")
+        XCTAssertEqual(summary.flights?.first?.strokeCount, pumps.strokeCount, "kaikki pumput lennon sisällä")
+
+        // Uintiaika tunnistuu: hidas vauhti + voimakas käsiliike.
+        XCTAssertEqual(pumps.swimTime ?? 0, 14, accuracy: 3)
+    }
+
+    func testCalmPaddlingIsNeitherPumpingNorSwimming() {
+        // Rauhallinen melonta 1,0 m/s ilman käsiliikettä: ei pumppuja, ei uintia.
+        let speeds = [Double](repeating: 1.0, count: 60)
+        let motion = (0..<(60 * 50)).map { i in
+            MotionSample(t: Double(i) / 50, verticalAcceleration: 0.1)
+        }
+        let summary = SessionAnalyzer.summarize(sport: .pumpFoil, startDate: .now, points: makeTrack(speeds: speeds), motion: motion)
+        XCTAssertEqual(summary.pumps?.strokeCount, 0)
+        XCTAssertNil(summary.pumps?.swimTime)
+    }
+
     func testFlightsSurviveJSONRoundTrip() throws {
         let points = makeTrack(speeds: speeds)
         let summary = SessionAnalyzer.summarize(sport: .pumpFoil, startDate: Date(timeIntervalSince1970: 1_700_000_000), points: points)

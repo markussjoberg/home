@@ -11,6 +11,13 @@ public enum SessionAnalyzer {
         /// unohtuneen trackerin päällä ei saa päätyä maksiminopeudeksi.
         public var maxPlausibleSpeed: Double?
         public var maxAccuracy: Double = 30
+        /// Pumppu lasketaan vain tämän nopeuden yli — uinnin käsivedot näyttävät
+        /// ranteessa pumppaukselta, mutta uidessa ei liikuta näin lujaa.
+        public var pumpingMinSpeed: Double = 1.5
+        /// Uintitunnistus: vauhti tällä välillä + voimakas käsiliike.
+        public var swimSpeedRange: ClosedRange<Double> = 0.2...1.4
+        /// Käsiliikkeen kynnys uinnille (kiihtyvyyden liukuva keskihajonta, m/s²).
+        public var swimRoughness: Double = 1.0
 
         public init() {}
     }
@@ -78,7 +85,19 @@ public enum SessionAnalyzer {
             roughness: roughness,
             config: rideConfig ?? .forSport(sport)
         )
-        let pumps = sport.countsPumps ? PumpDetector.analyze(motion, config: pumpConfig) : nil
+        var pumps: PumpAnalysis?
+        if sport.countsPumps {
+            // Raakatunnistus koko signaalista, sitten nopeusportti: uinnin
+            // käsivedot (hidas vauhti) eivät päädy pumppulaskuriin.
+            let raw = PumpDetector.analyze(motion, config: pumpConfig)
+            let validStrokes = raw.strokeTimes.filter { t in
+                guard let speed = Self.speed(at: t, in: points) else { return true }
+                return speed >= config.pumpingMinSpeed
+            }
+            var filtered = PumpDetector.analysis(fromStrokeTimes: validStrokes, config: pumpConfig)
+            filtered.swimTime = Self.swimTime(points: points, roughness: roughness, config: config)
+            pumps = filtered
+        }
         let flights = rides.segments.isEmpty ? nil : FlightDetail.compute(
             segments: rides.segments,
             points: points,
@@ -98,5 +117,45 @@ public enum SessionAnalyzer {
             heartRate: HeartRateStats.from(heartRate),
             flights: flights
         )
+    }
+
+    /// GPS-nopeus hetkellä t (lähin piste 3 s sisällä); nil jos ei tiedossa.
+    static func speed(at t: TimeInterval, in points: [TrackPoint]) -> Double? {
+        var best: TrackPoint?
+        var bestDelta = Double.infinity
+        // Pisteet ovat aikajärjestyksessä — binäärihaku riittäisi, mutta jäljet
+        // ovat lyhyitä (~tuhansia pisteitä) ja tätä kutsutaan per pumppu.
+        for point in points {
+            let delta = abs(point.t - t)
+            if delta < bestDelta {
+                bestDelta = delta
+                best = point
+            } else if point.t > t {
+                break
+            }
+        }
+        guard let best, bestDelta <= 3, best.speed >= 0 else { return nil }
+        return best.speed
+    }
+
+    /// Uintiaika: peräkkäiset pisteet uintivauhdilla ja käsiliike voimakasta.
+    static func swimTime(points: [TrackPoint], roughness: [MotionSample], config: Config) -> TimeInterval? {
+        guard !points.isEmpty, !roughness.isEmpty else { return nil }
+        var total: TimeInterval = 0
+        var roughnessIndex = 0
+        var previous: TrackPoint?
+        for point in points {
+            defer { previous = point }
+            guard let prev = previous else { continue }
+            guard point.speed >= 0, config.swimSpeedRange.contains(point.speed),
+                  prev.speed >= 0, config.swimSpeedRange.contains(prev.speed) else { continue }
+            while roughnessIndex + 1 < roughness.count && roughness[roughnessIndex + 1].t <= point.t {
+                roughnessIndex += 1
+            }
+            if roughness[roughnessIndex].verticalAcceleration >= config.swimRoughness {
+                total += point.t - prev.t
+            }
+        }
+        return total > 0 ? total : nil
     }
 }

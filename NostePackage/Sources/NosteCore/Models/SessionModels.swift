@@ -96,12 +96,16 @@ public struct PumpAnalysis: Codable, Sendable, Equatable {
     public var averageCadence: Double
     /// Yhtenäiset pumppausjaksot (peräkkäisiä pumppuja alle katkaisurajan välein).
     public var bouts: [RideSegment]
+    /// Uintiaika (s): hidas vauhti + voimakas käsiliike — esim. laituripaluu.
+    /// Uinnin käsivedot EIVÄT ole mukana pumppulaskurissa.
+    public var swimTime: TimeInterval?
 
-    public init(strokeCount: Int = 0, strokeTimes: [TimeInterval] = [], averageCadence: Double = 0, bouts: [RideSegment] = []) {
+    public init(strokeCount: Int = 0, strokeTimes: [TimeInterval] = [], averageCadence: Double = 0, bouts: [RideSegment] = [], swimTime: TimeInterval? = nil) {
         self.strokeCount = strokeCount
         self.strokeTimes = strokeTimes
         self.averageCadence = averageCadence
         self.bouts = bouts
+        self.swimTime = swimTime
     }
 
     /// Aktiivisen pumppauksen kokonaiskesto (jaksojen summa).
