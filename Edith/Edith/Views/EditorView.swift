@@ -24,11 +24,27 @@ struct MovieFile: Transferable {
 }
 
 struct EditorView: View {
-    @State private var model = EditorModel()
+    /// Sama editori toimii sekä appina että share-extensionin sisällä.
+    /// Extensionissa share sheetiä ei voi avata, joten vienti tarjoaa
+    /// tallennuksen Kuviin ja "Valmis" sulkee extensionin.
+    enum Context {
+        case app
+        case shareExtension(onFinish: () -> Void)
+    }
+
+    @State private var model: EditorModel
+    private let context: Context
+
     @State private var pickedVideos: [PhotosPickerItem] = []
     @State private var pickedAudioSource: PhotosPickerItem?
     @State private var showsMusicImporter = false
     @State private var trimTarget: Clip?
+    @State private var savedToPhotos = false
+
+    init(model: EditorModel = EditorModel(), context: Context = .app) {
+        _model = State(initialValue: model)
+        self.context = context
+    }
 
     var body: some View {
         NavigationStack {
@@ -39,8 +55,15 @@ struct EditorView: View {
                 importAndExportBar
             }
             .padding(.horizontal)
-            .navigationTitle("Pikaleikkaus")
+            .navigationTitle("Edith")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if case .shareExtension(let onFinish) = context {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Peruuta") { onFinish() }
+                    }
+                }
+            }
         }
         .onChange(of: pickedVideos) { _, items in
             guard !items.isEmpty else { return }
@@ -54,6 +77,7 @@ struct EditorView: View {
         }
         .onChange(of: model.format) { model.refreshPreview() }
         .onChange(of: model.crossfade) { model.refreshPreview() }
+        .onChange(of: model.exportResult?.id) { savedToPhotos = false }
         .fileImporter(
             isPresented: $showsMusicImporter,
             allowedContentTypes: [.audio],
@@ -62,7 +86,7 @@ struct EditorView: View {
             importMusicFile(result)
         }
         .sheet(item: $trimTarget) { clip in
-            TrimSheet(clip: clip) { updated in
+            TrimSheet(clip: clip, timelineSeconds: model.totalDurationSeconds) { updated in
                 model.update(updated)
             }
         }
@@ -166,22 +190,62 @@ struct EditorView: View {
         .padding(.bottom, 8)
     }
 
+    @ViewBuilder
     private func exportSheet(_ result: ExportResult) -> some View {
         VStack(spacing: 16) {
             Text("Video on valmis")
                 .font(.headline)
-            Text("Jaa Viesteihin tai someen, tai valitse ”Tallenna video” lisätäksesi sen Kuviin.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            ShareLink(item: result.url) {
-                Label("Jaa tai tallenna", systemImage: "square.and.arrow.up")
+
+            if case .shareExtension(let onFinish) = context {
+                Button {
+                    Task { await saveToPhotos(result.url) }
+                } label: {
+                    Label(
+                        savedToPhotos ? "Tallennettu Kuviin" : "Tallenna Kuviin",
+                        systemImage: savedToPhotos ? "checkmark.circle.fill" : "square.and.arrow.down"
+                    )
                     .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(savedToPhotos)
+
+                Button("Valmis") { onFinish() }
+            } else {
+                Text("Jaa Viesteihin tai someen, tai tallenna Kuviin.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                ShareLink(item: result.url) {
+                    Label("Jaa", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button {
+                    Task { await saveToPhotos(result.url) }
+                } label: {
+                    Label(
+                        savedToPhotos ? "Tallennettu Kuviin" : "Tallenna Kuviin",
+                        systemImage: savedToPhotos ? "checkmark.circle.fill" : "square.and.arrow.down"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(savedToPhotos)
             }
-            .buttonStyle(.borderedProminent)
         }
         .padding()
-        .presentationDetents([.fraction(0.3)])
+        .presentationDetents([.fraction(0.35)])
+    }
+
+    private func saveToPhotos(_ url: URL) async {
+        do {
+            try await PhotosSaver.save(url)
+            savedToPhotos = true
+        } catch {
+            model.errorMessage = error.localizedDescription
+        }
     }
 
     private var exportingOverlay: some View {

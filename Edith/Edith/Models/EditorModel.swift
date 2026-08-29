@@ -101,10 +101,27 @@ final class EditorModel {
         }
     }
 
+    /// Passthrough kelpaa, kun mitään ei tarvitse renderöidä uusiksi:
+    /// yksi klippi ilman taustaääniä, kiertoa tai äänimuutoksia.
+    private var passthroughCandidate: Clip? {
+        guard videoClips.count == 1, audioOnlyClips.isEmpty else { return nil }
+        let clip = videoClips[0]
+        guard clip.quarterTurns % 4 == 0, !clip.isMuted, clip.volume == 1 else { return nil }
+        return clip
+    }
+
     func export() async {
         guard !isExporting else { return }
         isExporting = true
         defer { isExporting = false }
+
+        if let clip = passthroughCandidate,
+           let url = try? await Exporter.exportPassthrough(clip: clip) {
+            exportResult = ExportResult(url: url)
+            return
+        }
+        // Passthrough ei kelvannut tai epäonnistui (esim. kontti/koodekki) →
+        // normaali kompositiopolku.
         do {
             guard let built = try await CompositionBuilder.build(
                 clips: clips,

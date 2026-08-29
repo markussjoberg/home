@@ -1,0 +1,553 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		ED17ED17ED17ED17ED17A001 /* EdithApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED170001 /* EdithApp.swift */; };
+		ED17ED17ED17ED17ED17A002 /* Clip.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED170002 /* Clip.swift */; };
+		ED17ED17ED17ED17ED17A003 /* EditorModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED170003 /* EditorModel.swift */; };
+		ED17ED17ED17ED17ED17A004 /* CompositionBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED170004 /* CompositionBuilder.swift */; };
+		ED17ED17ED17ED17ED17A005 /* Exporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED170005 /* Exporter.swift */; };
+		ED17ED17ED17ED17ED17A006 /* WaveformLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED170006 /* WaveformLoader.swift */; };
+		ED17ED17ED17ED17ED17A007 /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED170007 /* EditorView.swift */; };
+		ED17ED17ED17ED17ED17A008 /* TimelineStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED170008 /* TimelineStrip.swift */; };
+		ED17ED17ED17ED17ED17A009 /* TrimSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED170009 /* TrimSheet.swift */; };
+		ED17ED17ED17ED17ED17A00A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED17000A /* Assets.xcassets */; };
+		ED17ED17ED17ED17ED17A00B /* EdithShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED17000C /* EdithShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		ED17ED17ED17ED17ED17B002 /* Clip.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED170002 /* Clip.swift */; };
+		ED17ED17ED17ED17ED17B003 /* EditorModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED170003 /* EditorModel.swift */; };
+		ED17ED17ED17ED17ED17B004 /* CompositionBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED170004 /* CompositionBuilder.swift */; };
+		ED17ED17ED17ED17ED17B005 /* Exporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED170005 /* Exporter.swift */; };
+		ED17ED17ED17ED17ED17B006 /* WaveformLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED170006 /* WaveformLoader.swift */; };
+		ED17ED17ED17ED17ED17B007 /* EditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED170007 /* EditorView.swift */; };
+		ED17ED17ED17ED17ED17B008 /* TimelineStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED170008 /* TimelineStrip.swift */; };
+		ED17ED17ED17ED17ED17B009 /* TrimSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED170009 /* TrimSheet.swift */; };
+		ED17ED17ED17ED17ED17B00D /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED17ED17ED17ED17ED17000D /* ShareViewController.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		ED17ED17ED17ED17ED174002 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = ED17ED17ED17ED17ED172000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = ED17ED17ED17ED17ED172002;
+			remoteInfo = EdithShare;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		ED17ED17ED17ED17ED173004 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				ED17ED17ED17ED17ED17A00B /* EdithShare.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		ED17ED17ED17ED17ED170001 /* EdithApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdithApp.swift; sourceTree = "<group>"; };
+		ED17ED17ED17ED17ED170002 /* Clip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Clip.swift; sourceTree = "<group>"; };
+		ED17ED17ED17ED17ED170003 /* EditorModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorModel.swift; sourceTree = "<group>"; };
+		ED17ED17ED17ED17ED170004 /* CompositionBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositionBuilder.swift; sourceTree = "<group>"; };
+		ED17ED17ED17ED17ED170005 /* Exporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Exporter.swift; sourceTree = "<group>"; };
+		ED17ED17ED17ED17ED170006 /* WaveformLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformLoader.swift; sourceTree = "<group>"; };
+		ED17ED17ED17ED17ED170007 /* EditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorView.swift; sourceTree = "<group>"; };
+		ED17ED17ED17ED17ED170008 /* TimelineStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineStrip.swift; sourceTree = "<group>"; };
+		ED17ED17ED17ED17ED170009 /* TrimSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrimSheet.swift; sourceTree = "<group>"; };
+		ED17ED17ED17ED17ED17000A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		ED17ED17ED17ED17ED17000B /* Edith.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Edith.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		ED17ED17ED17ED17ED17000C /* EdithShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = EdithShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		ED17ED17ED17ED17ED17000D /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		ED17ED17ED17ED17ED17000E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		ED17ED17ED17ED17ED173002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ED17ED17ED17ED17ED173006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		ED17ED17ED17ED17ED171001 = {
+			isa = PBXGroup;
+			children = (
+				ED17ED17ED17ED17ED171002 /* Edith */,
+				ED17ED17ED17ED17ED171007 /* EdithShare */,
+				ED17ED17ED17ED17ED171003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		ED17ED17ED17ED17ED171002 /* Edith */ = {
+			isa = PBXGroup;
+			children = (
+				ED17ED17ED17ED17ED170001 /* EdithApp.swift */,
+				ED17ED17ED17ED17ED171004 /* Models */,
+				ED17ED17ED17ED17ED171005 /* Engine */,
+				ED17ED17ED17ED17ED171006 /* Views */,
+				ED17ED17ED17ED17ED17000A /* Assets.xcassets */,
+			);
+			path = Edith;
+			sourceTree = "<group>";
+		};
+		ED17ED17ED17ED17ED171003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				ED17ED17ED17ED17ED17000B /* Edith.app */,
+				ED17ED17ED17ED17ED17000C /* EdithShare.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		ED17ED17ED17ED17ED171004 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				ED17ED17ED17ED17ED170002 /* Clip.swift */,
+				ED17ED17ED17ED17ED170003 /* EditorModel.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		ED17ED17ED17ED17ED171005 /* Engine */ = {
+			isa = PBXGroup;
+			children = (
+				ED17ED17ED17ED17ED170004 /* CompositionBuilder.swift */,
+				ED17ED17ED17ED17ED170005 /* Exporter.swift */,
+				ED17ED17ED17ED17ED170006 /* WaveformLoader.swift */,
+			);
+			path = Engine;
+			sourceTree = "<group>";
+		};
+		ED17ED17ED17ED17ED171006 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				ED17ED17ED17ED17ED170007 /* EditorView.swift */,
+				ED17ED17ED17ED17ED170008 /* TimelineStrip.swift */,
+				ED17ED17ED17ED17ED170009 /* TrimSheet.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		ED17ED17ED17ED17ED171007 /* EdithShare */ = {
+			isa = PBXGroup;
+			children = (
+				ED17ED17ED17ED17ED17000D /* ShareViewController.swift */,
+				ED17ED17ED17ED17ED17000E /* Info.plist */,
+			);
+			path = EdithShare;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		ED17ED17ED17ED17ED172001 /* Edith */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ED17ED17ED17ED17ED175002 /* Build configuration list for PBXNativeTarget "Edith" */;
+			buildPhases = (
+				ED17ED17ED17ED17ED173001 /* Sources */,
+				ED17ED17ED17ED17ED173002 /* Frameworks */,
+				ED17ED17ED17ED17ED173003 /* Resources */,
+				ED17ED17ED17ED17ED173004 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				ED17ED17ED17ED17ED174001 /* PBXTargetDependency */,
+			);
+			name = Edith;
+			productName = Edith;
+			productReference = ED17ED17ED17ED17ED17000B /* Edith.app */;
+			productType = "com.apple.product-type.application";
+		};
+		ED17ED17ED17ED17ED172002 /* EdithShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ED17ED17ED17ED17ED175003 /* Build configuration list for PBXNativeTarget "EdithShare" */;
+			buildPhases = (
+				ED17ED17ED17ED17ED173005 /* Sources */,
+				ED17ED17ED17ED17ED173006 /* Frameworks */,
+				ED17ED17ED17ED17ED173007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = EdithShare;
+			productName = EdithShare;
+			productReference = ED17ED17ED17ED17ED17000C /* EdithShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		ED17ED17ED17ED17ED172000 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					ED17ED17ED17ED17ED172001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					ED17ED17ED17ED17ED172002 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = ED17ED17ED17ED17ED175001 /* Build configuration list for PBXProject "Edith" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = ED17ED17ED17ED17ED171001;
+			productRefGroup = ED17ED17ED17ED17ED171003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				ED17ED17ED17ED17ED172001 /* Edith */,
+				ED17ED17ED17ED17ED172002 /* EdithShare */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		ED17ED17ED17ED17ED173003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ED17ED17ED17ED17ED17A00A /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ED17ED17ED17ED17ED173007 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		ED17ED17ED17ED17ED173001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ED17ED17ED17ED17ED17A001 /* EdithApp.swift in Sources */,
+				ED17ED17ED17ED17ED17A002 /* Clip.swift in Sources */,
+				ED17ED17ED17ED17ED17A003 /* EditorModel.swift in Sources */,
+				ED17ED17ED17ED17ED17A004 /* CompositionBuilder.swift in Sources */,
+				ED17ED17ED17ED17ED17A005 /* Exporter.swift in Sources */,
+				ED17ED17ED17ED17ED17A006 /* WaveformLoader.swift in Sources */,
+				ED17ED17ED17ED17ED17A007 /* EditorView.swift in Sources */,
+				ED17ED17ED17ED17ED17A008 /* TimelineStrip.swift in Sources */,
+				ED17ED17ED17ED17ED17A009 /* TrimSheet.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ED17ED17ED17ED17ED173005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ED17ED17ED17ED17ED17B00D /* ShareViewController.swift in Sources */,
+				ED17ED17ED17ED17ED17B002 /* Clip.swift in Sources */,
+				ED17ED17ED17ED17ED17B003 /* EditorModel.swift in Sources */,
+				ED17ED17ED17ED17ED17B004 /* CompositionBuilder.swift in Sources */,
+				ED17ED17ED17ED17ED17B005 /* Exporter.swift in Sources */,
+				ED17ED17ED17ED17ED17B006 /* WaveformLoader.swift in Sources */,
+				ED17ED17ED17ED17ED17B007 /* EditorView.swift in Sources */,
+				ED17ED17ED17ED17ED17B008 /* TimelineStrip.swift in Sources */,
+				ED17ED17ED17ED17ED17B009 /* TrimSheet.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		ED17ED17ED17ED17ED174001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = ED17ED17ED17ED17ED172002 /* EdithShare */;
+			targetProxy = ED17ED17ED17ED17ED174002 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		ED17ED17ED17ED17ED176001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		ED17ED17ED17ED17ED176002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		ED17ED17ED17ED17ED176003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Edith;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Edith tallentaa valmiin videon Kuviin.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = fi.sjoberg.Edith;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		ED17ED17ED17ED17ED176004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Edith;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Edith tallentaa valmiin videon Kuviin.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = fi.sjoberg.Edith;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		ED17ED17ED17ED17ED176005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = EdithShare/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Edith;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = fi.sjoberg.Edith.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		ED17ED17ED17ED17ED176006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = EdithShare/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Edith;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = fi.sjoberg.Edith.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		ED17ED17ED17ED17ED175001 /* Build configuration list for PBXProject "Edith" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ED17ED17ED17ED17ED176001 /* Debug */,
+				ED17ED17ED17ED17ED176002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		ED17ED17ED17ED17ED175002 /* Build configuration list for PBXNativeTarget "Edith" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ED17ED17ED17ED17ED176003 /* Debug */,
+				ED17ED17ED17ED17ED176004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		ED17ED17ED17ED17ED175003 /* Build configuration list for PBXNativeTarget "EdithShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ED17ED17ED17ED17ED176005 /* Debug */,
+				ED17ED17ED17ED17ED176006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = ED17ED17ED17ED17ED172000 /* Project object */;
+}

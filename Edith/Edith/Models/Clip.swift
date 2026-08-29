@@ -21,7 +21,11 @@ struct Clip: Identifiable {
     var volume: Float = 1.0
     /// Käyttäjän lisäämä kierto neljänneskierroksina (0–3), preferredTransformin päälle.
     var quarterTurns = 0
+    /// Taustaraidan (audioOnly) aloituskohta aikajanalla sekunteina.
+    var timelineOffsetSeconds: Double = 0
     var thumbnail: UIImage?
+    /// Normalisoidut huippuarvot (0–1) aaltomuodon piirtoon.
+    var waveform: [Float] = []
 
     var trimmedRange: CMTimeRange {
         CMTimeRange(start: trimStart, end: trimEnd)
@@ -56,6 +60,10 @@ struct Clip: Identifiable {
             if let cgImage = try? await generator.image(at: .zero).image {
                 clip.thumbnail = UIImage(cgImage: cgImage)
             }
+        }
+
+        if clip.hasAudio {
+            clip.waveform = (try? await WaveformLoader.samples(from: asset, bucketCount: 140)) ?? []
         }
         return clip
     }

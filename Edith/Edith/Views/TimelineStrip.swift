@@ -139,9 +139,14 @@ struct TimelineStrip: View {
                 Text(clip.displayName)
                     .font(.caption)
                     .lineLimit(1)
-                Text(String(format: "%.1f s", clip.trimmedDuration.seconds))
+                Text(audioSubtitle(clip))
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
+            }
+
+            if !clip.waveform.isEmpty {
+                WaveformView(samples: clip.waveform, color: clip.isMuted ? .secondary : .accentColor)
+                    .frame(width: 64, height: 24)
             }
 
             Slider(
@@ -166,6 +171,14 @@ struct TimelineStrip: View {
         .contextMenu {
             audioMenu(clip)
         }
+    }
+
+    private func audioSubtitle(_ clip: Clip) -> String {
+        let duration = String(format: "%.1f s", clip.trimmedDuration.seconds)
+        if clip.timelineOffsetSeconds > 0 {
+            return duration + String(format: " · alkaa %.1f s", clip.timelineOffsetSeconds)
+        }
+        return duration
     }
 
     @ViewBuilder
@@ -200,6 +213,33 @@ struct TimelineStrip: View {
             model.remove(clip)
         } label: {
             Label("Poista", systemImage: "trash")
+        }
+    }
+}
+
+/// Kevyt aaltomuotopiirto Canvasilla — käytössä ääniriveillä ja
+/// trimmausnäkymässä.
+struct WaveformView: View {
+    let samples: [Float]
+    var color: Color = .accentColor
+
+    var body: some View {
+        Canvas { context, size in
+            guard !samples.isEmpty else { return }
+            let barWidth = size.width / CGFloat(samples.count)
+            for (index, sample) in samples.enumerated() {
+                let height = max(1, CGFloat(sample) * size.height)
+                let rect = CGRect(
+                    x: CGFloat(index) * barWidth + barWidth * 0.15,
+                    y: (size.height - height) / 2,
+                    width: barWidth * 0.7,
+                    height: height
+                )
+                context.fill(
+                    Path(roundedRect: rect, cornerRadius: barWidth * 0.35),
+                    with: .color(color)
+                )
+            }
         }
     }
 }

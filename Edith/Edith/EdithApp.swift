@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct PikaleikkausApp: App {
+struct EdithApp: App {
     var body: some Scene {
         WindowGroup {
             EditorView()

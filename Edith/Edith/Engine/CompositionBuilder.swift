@@ -101,14 +101,34 @@ enum CompositionBuilder {
             let end = cursor + clip.trimmedDuration
             placed.append(PlacedClip(track: videoTrack, start: cursor, end: end, transform: transform))
 
+            let isLast = index == videoClips.count - 1
+
             if !clip.isMuted, clip.hasAudio,
                let sourceAudio = try await clip.asset.loadTracks(withMediaType: .audio).first {
                 let audioTrack = useTrackA ? audioTrackA : audioTrackB
                 try audioTrack.insertTimeRange(clip.trimmedRange, of: sourceAudio, at: cursor)
-                (useTrackA ? audioParamsA : audioParamsB).setVolume(clip.volume, at: cursor)
+
+                // Crossfaden kohdalla ääni ristihäivytetään volume-rampeilla:
+                // saapuva klippi nousee 0 → volume, lähtevä laskee volume → 0.
+                let params = useTrackA ? audioParamsA : audioParamsB
+                if fade > .zero, index > 0 {
+                    params.setVolumeRamp(
+                        fromStartVolume: 0,
+                        toEndVolume: clip.volume,
+                        timeRange: CMTimeRange(start: cursor, duration: fade)
+                    )
+                } else {
+                    params.setVolume(clip.volume, at: cursor)
+                }
+                if fade > .zero, !isLast {
+                    params.setVolumeRamp(
+                        fromStartVolume: clip.volume,
+                        toEndVolume: 0,
+                        timeRange: CMTimeRange(start: end - fade, end: end)
+                    )
+                }
             }
 
-            let isLast = index == videoClips.count - 1
             cursor = isLast ? end : end - fade
         }
 
@@ -151,18 +171,22 @@ enum CompositionBuilder {
             }
         }
 
-        // Taustaraidat (puhe, musiikki, toisen klipin ääni) alkavat ajasta 0
-        // ja katkeavat viimeistään videon loppuun.
+        // Taustaraidat (puhe, musiikki, toisen klipin ääni) alkavat valitusta
+        // aikajanan kohdasta ja katkeavat viimeistään videon loppuun.
         for clip in audioOnlyClips where !clip.isMuted {
             guard let sourceAudio = try await clip.asset.loadTracks(withMediaType: .audio).first,
                   let track = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
             else { continue }
 
+            let offset = CMTime(seconds: max(0, clip.timelineOffsetSeconds), preferredTimescale: 600)
+            guard offset < totalDuration else { continue }
+
             var range = clip.trimmedRange
-            if range.duration > totalDuration {
-                range = CMTimeRange(start: range.start, duration: totalDuration)
+            let available = totalDuration - offset
+            if range.duration > available {
+                range = CMTimeRange(start: range.start, duration: available)
             }
-            try track.insertTimeRange(range, of: sourceAudio, at: .zero)
+            try track.insertTimeRange(range, of: sourceAudio, at: offset)
 
             let params = AVMutableAudioMixInputParameters(track: track)
             params.setVolume(clip.volume, at: .zero)
