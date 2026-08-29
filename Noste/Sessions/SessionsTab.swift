@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import MapKit
+import Charts
 import NosteCore
 
 struct SessionsTab: View {
@@ -19,6 +20,11 @@ struct SessionsTab: View {
                     )
                 } else {
                     List {
+                        if sessions.count >= 3 {
+                            Section("Kehitys") {
+                                TrendChart(sessions: sessions)
+                            }
+                        }
                         ForEach(sessions) { session in
                             NavigationLink {
                                 SessionDetailView(record: session)
@@ -47,6 +53,74 @@ struct SessionsTab: View {
                 RecordSessionView()
             }
         }
+    }
+}
+
+/// Kehitys sessioittain: yksi valittava mittari pylväinä (viimeiset 15 sessiota).
+private struct TrendChart: View {
+    let sessions: [SessionRecord]
+    @State private var metric: Metric = .foilTime
+
+    enum Metric: String, CaseIterable, Identifiable {
+        case foilTime
+        case longestFlight
+        case pumps
+
+        var id: String { rawValue }
+        var displayName: String {
+            switch self {
+            case .foilTime: return "Foiliaika (min)"
+            case .longestFlight: return "Pisin lento (s)"
+            case .pumps: return "Pumput"
+            }
+        }
+    }
+
+    private var data: [(date: Date, value: Double)] {
+        sessions.prefix(15).reversed().compactMap { record in
+            guard let summary = record.summary else { return nil }
+            let value: Double
+            switch metric {
+            case .foilTime: value = summary.rides.totalDuration / 60
+            case .longestFlight: value = summary.rides.longestByDuration?.duration ?? 0
+            case .pumps: value = Double(summary.pumps?.strokeCount ?? 0)
+            }
+            return value > 0 ? (record.startDate, value) : nil
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Mittari", selection: $metric) {
+                ForEach(Metric.allCases) { metric in
+                    Text(metric.displayName).tag(metric)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if data.isEmpty {
+                Text("Ei vielä dataa tälle mittarille.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                Chart(Array(data.enumerated()), id: \.offset) { _, item in
+                    BarMark(
+                        x: .value("Sessio", item.date, unit: .day),
+                        y: .value(metric.displayName, item.value)
+                    )
+                    .foregroundStyle(.cyan)
+                    .cornerRadius(3)
+                }
+                .frame(height: 130)
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                        AxisGridLine()
+                        AxisValueLabel(format: .dateTime.day().month())
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 
@@ -98,6 +172,7 @@ struct SessionDetailView: View {
     let record: SessionRecord
     @Environment(\.modelContext) private var modelContext
     @State private var selectedFlightStart: TimeInterval?
+    @State private var colorMode: SessionTrackMap.ColorMode = .foil
 
     var body: some View {
         List {
@@ -105,9 +180,25 @@ struct SessionDetailView: View {
                 Section {
                     SessionTrackMap(track: record.track,
                                     rides: record.summary?.rides.segments ?? [],
-                                    selectedStart: selectedFlightStart)
+                                    selectedStart: selectedFlightStart,
+                                    mode: colorMode,
+                                    strokeTimes: record.summary?.pumps?.strokeTimes ?? [],
+                                    maxSpeed: max(1, record.summary?.maxSpeed ?? 10))
                         .frame(height: 260)
                         .listRowInsets(EdgeInsets())
+                    VStack(alignment: .leading, spacing: 4) {
+                        Picker("Väritys", selection: $colorMode) {
+                            ForEach(SessionTrackMap.ColorMode.allCases) { mode in
+                                Text(mode.displayName).tag(mode)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        Text(colorMode == .speed
+                             ? "Vaalea = hidas, tumma = nopea. Pumppuiskut näkyvät valitulla suorituksella."
+                             : "Vihreä = foililla. Pumppuiskut näkyvät valitulla suorituksella.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             Section {
@@ -285,27 +376,114 @@ private struct FlightRow: View {
     }
 }
 
-/// Reitti kartalla: foilijaksot vihreällä, valittu suoritus oranssilla.
+/// Reitti kartalla. Foili-tilassa foilijaksot vihreällä; nopeus-tilassa jälki
+/// väritetään yhden sävyn asteikolla (vaalea = hidas, tumma = nopea). Valittu
+/// suoritus korostuu oranssilla ja sen pumppuiskut piirretään pisteinä reitille.
 struct SessionTrackMap: View {
+    enum ColorMode: String, CaseIterable, Identifiable {
+        case foil
+        case speed
+
+        var id: String { rawValue }
+        var displayName: String {
+            switch self {
+            case .foil: return "Foili"
+            case .speed: return "Nopeus"
+            }
+        }
+    }
+
     let track: [TrackPoint]
     let rides: [RideSegment]
     var selectedStart: TimeInterval?
+    var mode: ColorMode = .foil
+    var strokeTimes: [TimeInterval] = []
+    var maxSpeed: Double = 10
+
+    /// Sekventiaalinen yhden sävyn asteikko (vaalea → tumma).
+    private static let speedColors: [Color] = [
+        Color(red: 0.70, green: 0.93, blue: 1.00),
+        Color(red: 0.39, green: 0.82, blue: 1.00),
+        Color(red: 0.04, green: 0.52, blue: 1.00),
+        Color(red: 0.00, green: 0.25, blue: 0.87)
+    ]
 
     var body: some View {
         Map {
-            MapPolyline(coordinates: track.map {
-                CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
-            })
-            .stroke(.gray, lineWidth: 3)
+            switch mode {
+            case .foil:
+                MapPolyline(coordinates: coordinates(of: track))
+                    .stroke(.gray, lineWidth: 3)
+                ForEach(Array(rides.enumerated()), id: \.offset) { _, ride in
+                    let points = track.filter { $0.t >= ride.start && $0.t <= ride.end }
+                    let selected = selectedStart == ride.start
+                    MapPolyline(coordinates: coordinates(of: points))
+                        .stroke(selected ? Color.orange : Color.green, lineWidth: selected ? 6 : 4)
+                }
+            case .speed:
+                ForEach(speedChunks(), id: \.id) { chunk in
+                    MapPolyline(coordinates: coordinates(of: chunk.points))
+                        .stroke(Self.speedColors[chunk.bucket], lineWidth: 4)
+                }
+                if let selectedStart, let ride = rides.first(where: { $0.start == selectedStart }) {
+                    let points = track.filter { $0.t >= ride.start && $0.t <= ride.end }
+                    MapPolyline(coordinates: coordinates(of: points))
+                        .stroke(.orange, lineWidth: 2)
+                }
+            }
 
-            ForEach(Array(rides.enumerated()), id: \.offset) { _, ride in
-                let points = track.filter { $0.t >= ride.start && $0.t <= ride.end }
-                let selected = selectedStart == ride.start
-                MapPolyline(coordinates: points.map {
-                    CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
-                })
-                .stroke(selected ? Color.orange : Color.green, lineWidth: selected ? 6 : 4)
+            // Valitun suorituksen pumppuiskut reitillä.
+            if let selectedStart, let ride = rides.first(where: { $0.start == selectedStart }) {
+                ForEach(strokePositions(in: ride), id: \.t) { stroke in
+                    Annotation("", coordinate: stroke.coordinate) {
+                        Circle()
+                            .fill(.cyan)
+                            .frame(width: 7, height: 7)
+                            .overlay(Circle().stroke(.white, lineWidth: 1))
+                    }
+                }
             }
         }
+    }
+
+    private func coordinates(of points: [TrackPoint]) -> [CLLocationCoordinate2D] {
+        points.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+    }
+
+    /// Peräkkäiset samaan nopeusluokkaan kuuluvat pisteet yhdeksi viivaksi.
+    private func speedChunks() -> [(id: Int, points: [TrackPoint], bucket: Int)] {
+        var chunks: [(id: Int, points: [TrackPoint], bucket: Int)] = []
+        var current: [TrackPoint] = []
+        var currentBucket = -1
+        for point in track {
+            let speed = max(0, min(point.speed, maxSpeed))
+            let bucket = min(Self.speedColors.count - 1, Int(speed / maxSpeed * Double(Self.speedColors.count)))
+            if bucket != currentBucket {
+                if current.count > 1 {
+                    chunks.append((chunks.count, current, currentBucket))
+                }
+                current = current.isEmpty ? [point] : [current.last!, point]
+                currentBucket = bucket
+            } else {
+                current.append(point)
+            }
+        }
+        if current.count > 1 {
+            chunks.append((chunks.count, current, currentBucket))
+        }
+        return chunks
+    }
+
+    /// Pumppuiskujen sijainnit suorituksen sisällä (lähin jälkipiste).
+    private func strokePositions(in ride: RideSegment) -> [(t: TimeInterval, coordinate: CLLocationCoordinate2D)] {
+        let points = track.filter { $0.t >= ride.start && $0.t <= ride.end }
+        guard !points.isEmpty else { return [] }
+        return strokeTimes
+            .filter { $0 >= ride.start && $0 <= ride.end }
+            .prefix(200)
+            .compactMap { t in
+                guard let nearest = points.min(by: { abs($0.t - t) < abs($1.t - t) }) else { return nil }
+                return (t, CLLocationCoordinate2D(latitude: nearest.latitude, longitude: nearest.longitude))
+            }
     }
 }

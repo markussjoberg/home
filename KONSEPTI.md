@@ -187,7 +187,13 @@ kevyt versio).
   rannassa näkee kellosta "nouseeko tästä vielä", vaikka puhelin jäi autoon.
 - **Spotit**: spottilista nimineen ja koordinaatteineen kellossa; session voi
   käynnistää spotille, ja kello näyttää suunnan ja etäisyyden spottiin.
-- Vaihe 2: karttatiilet kelloon, komplikaatio (tuuli nyt @ kotispotti).
+- **Offline-kartta lähtöpaikasta**: puhelin ompelee suosikkispotin ympäriltä
+  maastokarttatiilet yhdeksi kuvaksi kahdella zoomilla (~2,5 km ja ~5 km
+  katselualue) ja työntää kelloon kalibrointeineen. Kello piirtää kuvan päälle
+  oman sijainnin, spotin ja kuljetun jäljen puhtaalla Web Mercator
+  -geometrialla — ei karttakirjastoa, ei verkkoa. Karttasivu on session
+  kolmas näyttö ja aloitusvalikossa; napautus vaihtaa zoomia.
+- Vaihe 2: komplikaatio (tuuli nyt @ kotispotti).
 
 ## 5. Spotit
 
@@ -245,9 +251,12 @@ vesikosketustunnistus, muokattavat kellonäytöt, käännösanalyysi), Hoolan
   häiriösuodatettuina.
 - *GPX-vienti* (Waterspeed): sessio ulos jakonapista (Strava yms.).
 
-**Roadmapiin (vaihe 2+):** jäljen väritys valitulla suureella (nopeus/syke/
-kadenssi) + pumppuiskut kartalle; trendikäyrät historiasta; hyppytunnistus
-wingiin; jibe/tack-onnistumis-% ja upwind gain; live-jako selainlinkillä;
+**Toteutettu jatkokierroksella:** jäljen väritys nopeudella (yhden sävyn
+asteikko) + pumppuiskut kartalle valitulle suoritukselle; trendikäyrät
+sessiohistoriasta (foiliaika / pisin lento / pumput); offline-kartta kelloon.
+
+**Roadmapiin (vaihe 2+):** hyppytunnistus wingiin; jibe/tack-onnistumis-% ja
+upwind gain; jäljen väritys sykkeellä/kadenssilla; live-jako selainlinkillä;
 .fit/ulkoisten tallenteiden tuonti; spottikohtaiset ennätykset kun jako
 kavereille toteutuu. Nosteen omat valtit joita kellään muulla ei ole:
 spotin oppiva tuuliprofiili + tähtiennuste, maastoanalyysi (avoimuus + fetch),

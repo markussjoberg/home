@@ -19,7 +19,9 @@ struct RootView: View {
         }
         .environmentObject(forecastStore)
         .task {
-            await forecastStore.refreshFavorites(spots: spots.map(\.data))
+            let data = spots.map(\.data)
+            await forecastStore.refreshFavorites(spots: data)
+            await MapSnapshotService.shared.syncFavorites(spots: data)
         }
     }
 }

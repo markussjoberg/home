@@ -28,6 +28,16 @@ struct StartView: View {
                 Text("Aloita sessio")
             }
 
+            if !connectivity.offlineMaps.isEmpty {
+                Section {
+                    NavigationLink {
+                        OfflineMapView()
+                    } label: {
+                        Label("Kartta (offline)", systemImage: "map")
+                    }
+                }
+            }
+
             if let snapshot = connectivity.snapshot {
                 Section {
                     NavigationLink {

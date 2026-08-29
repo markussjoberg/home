@@ -8,12 +8,14 @@ struct SessionPagingView: View {
     enum Tab {
         case controls
         case metrics
+        case map
     }
 
     var body: some View {
         TabView(selection: $selection) {
             ControlsView().tag(Tab.controls)
             MetricsView().tag(Tab.metrics)
+            OfflineMapView().tag(Tab.map)
         }
         .tabViewStyle(.page)
         .navigationBarBackButtonHidden(true)

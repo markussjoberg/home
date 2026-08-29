@@ -30,6 +30,32 @@ public enum WatchSync {
     /// applicationContext-avain snapshotille (arvo = JSON Data).
     public static let snapshotKey = "noste.snapshot"
 
+    /// Puhelin → kello: offline-karttakuva (PNG-tiedosto + metadata).
+    public enum MapImage {
+        public static let typeValue = "mapimage"
+        public static let spotIDKey = "spotID"
+        public static let zoomKey = "zoom"
+        /// JSON-koodattu OfflineMapCalibration merkkijonona.
+        public static let calibrationKey = "calibration"
+
+        public static func metadata(spotID: UUID, calibration: OfflineMapCalibration) -> [String: Any]? {
+            guard let data = try? JSONEncoder().encode(calibration),
+                  let json = String(data: data, encoding: .utf8) else { return nil }
+            return ["type": typeValue, spotIDKey: spotID.uuidString,
+                    zoomKey: calibration.zoom, calibrationKey: json]
+        }
+
+        public static func decode(_ metadata: [String: Any]) -> (spotID: UUID, calibration: OfflineMapCalibration)? {
+            guard metadata["type"] as? String == typeValue,
+                  let idString = metadata[spotIDKey] as? String,
+                  let spotID = UUID(uuidString: idString),
+                  let json = metadata[calibrationKey] as? String,
+                  let calibration = try? JSONDecoder().decode(OfflineMapCalibration.self, from: Data(json.utf8))
+            else { return nil }
+            return (spotID, calibration)
+        }
+    }
+
     /// Kello → puhelin -tuuliarvosana (transferUserInfo-avaimet). Sessio
     /// yksilöidään alkuhetkellä, koska arvosana annetaan siirron jälkeen.
     public enum RatingMessage {

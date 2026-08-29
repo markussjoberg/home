@@ -42,6 +42,10 @@ final class WorkoutManager: NSObject, ObservableObject {
     @Published var isAutoPaused = false
     /// Ilmoitus automaattisesta päättämisestä tai edellisen session palautuksesta.
     @Published var notice: String?
+    /// Viimeisin sijainti offline-karttaa varten.
+    @Published var lastCoordinate: CLLocationCoordinate2D?
+    /// Harvennettu jälki offline-kartan piirtoon (enintään ~600 pistettä).
+    @Published var breadcrumb: [TrackPoint] = []
 
     private let healthStore = HKHealthStore()
     private var session: HKWorkoutSession?
@@ -107,6 +111,7 @@ final class WorkoutManager: NSObject, ObservableObject {
         currentSpeed = 0
         lastGoodLocation = nil
         startAnchor = nil
+        breadcrumb = []
         pausedTotal = 0
         pausedAt = nil
         startDate = Date()
@@ -321,14 +326,21 @@ final class WorkoutManager: NSObject, ObservableObject {
                 startAnchor = location
             }
 
+            lastCoordinate = location.coordinate
             if phase == .running {
-                trackPoints.append(TrackPoint(
+                let point = TrackPoint(
                     t: t,
                     latitude: location.coordinate.latitude,
                     longitude: location.coordinate.longitude,
                     speed: speed,
                     horizontalAccuracy: location.horizontalAccuracy
-                ))
+                )
+                trackPoints.append(point)
+                breadcrumb.append(point)
+                if breadcrumb.count > 600 {
+                    // Harvenna vanhaa päätä: joka toinen pois.
+                    breadcrumb = breadcrumb.enumerated().compactMap { $0.offset % 2 == 0 ? $0.element : nil }
+                }
                 currentSpeed = max(0, speed)
                 motionLock.lock(); gatedSpeed = speed; motionLock.unlock()
                 if accurate {
