@@ -20,6 +20,8 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Sijaintia käytetään kartalla, spottien lisäämiseen ja session GPS-jäljen, nopeuden ja foiliajan mittaamiseen myös näytön ollessa sammuksissa.</string>
 	<key>NSMotionUsageDescription</key>

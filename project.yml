@@ -28,11 +28,14 @@ targets:
         SWIFT_VERSION: "5.9"
         CURRENT_PROJECT_VERSION: "1"
         MARKETING_VERSION: "0.1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
     info:
       path: Noste/Info.plist
       properties:
         CFBundleDisplayName: Noste
+        # Ei omaa salausta → TestFlight-upload ilman vientikysymyksiä.
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -63,10 +66,12 @@ targets:
         SWIFT_VERSION: "5.9"
         CURRENT_PROJECT_VERSION: "1"
         MARKETING_VERSION: "0.1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: NosteWatch/Info.plist
       properties:
         CFBundleDisplayName: Noste
+        ITSAppUsesNonExemptEncryption: false
         WKApplication: true
         WKCompanionAppBundleIdentifier: fi.markussjoberg.noste
         WKRunsIndependentlyOfCompanionApp: true
