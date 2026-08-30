@@ -27,6 +27,8 @@ export interface ShopItem {
   /** Hinta euroina. */
   price: number;
   url: string;
+  /** Tuotekuvan osoite (thumbnail); null jos ei kuvaa. */
+  image: string | null;
 }
 
 export interface ShopCatalog {
@@ -41,6 +43,7 @@ interface StoreProduct {
   permalink: string;
   prices?: { price?: string; currency_minor_unit?: number };
   attributes?: { name?: string; terms?: { name?: string }[] }[];
+  images?: { thumbnail?: string; src?: string }[];
 }
 
 /** Parsii kokotermin: "4.5m" → 4.5, "95L" → 95, "1100cm2" → 1100. */
@@ -60,6 +63,7 @@ export function parseProducts(body: unknown, type: ShopItemType): ShopItem[] {
     const price = Math.round(Number(product.prices?.price ?? 0) / 10 ** minor);
     if (!Number.isFinite(price) || price <= 0) continue;
     const year = Number((product.name.match(/\b(20\d{2})\b/) ?? [])[1]) || null;
+    const image = product.images?.[0]?.thumbnail ?? product.images?.[0]?.src ?? null;
 
     // Kokoattribuutti ("Wingin koko", "Koko", …): yksi rivi per koko, jotta
     // suosittelija voi valita tavoitetta lähimmän. Ilman attribuuttia yksi rivi.
@@ -77,10 +81,11 @@ export function parseProducts(body: unknown, type: ShopItemType): ShopItem[] {
           year,
           price,
           url: product.permalink,
+          image,
         });
       }
     } else {
-      items.push({ id: String(product.id), type, name: product.name, size: null, year, price, url: product.permalink });
+      items.push({ id: String(product.id), type, name: product.name, size: null, year, price, url: product.permalink, image });
     }
   }
   return items;

@@ -61,8 +61,10 @@ public struct GearCatalogItem: Sendable, Equatable, Identifiable {
     /// Hinta euroina (näyttöä varten).
     public var price: Int
     public var url: String
+    /// Tuotekuvan osoite; nil jos ei kuvaa.
+    public var imageURL: String?
 
-    public init(id: String, type: GearType, name: String, size: Double? = nil, year: Int, price: Int, url: String) {
+    public init(id: String, type: GearType, name: String, size: Double? = nil, year: Int, price: Int, url: String, imageURL: String? = nil) {
         self.id = id
         self.type = type
         self.name = name
@@ -70,6 +72,7 @@ public struct GearCatalogItem: Sendable, Equatable, Identifiable {
         self.year = year
         self.price = price
         self.url = url
+        self.imageURL = imageURL
     }
 }
 

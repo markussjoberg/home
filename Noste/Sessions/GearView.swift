@@ -144,9 +144,20 @@ struct LappisSuggestionCard: View {
                 Text(suggestion.reason)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                HStack {
-                    Image(systemName: suggestion.item.type.symbolName)
-                        .foregroundStyle(.orange)
+                HStack(spacing: 10) {
+                    if let imageURL = suggestion.item.imageURL, let url = URL(string: imageURL) {
+                        AsyncImage(url: url) { image in
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Image(systemName: suggestion.item.type.symbolName)
+                                .foregroundStyle(.orange)
+                        }
+                        .frame(width: 52, height: 52)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    } else {
+                        Image(systemName: suggestion.item.type.symbolName)
+                            .foregroundStyle(.orange)
+                    }
                     Text(suggestion.item.name)
                         .font(.subheadline.weight(.semibold))
                     Spacer()

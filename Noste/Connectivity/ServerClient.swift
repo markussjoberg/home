@@ -137,6 +137,7 @@ struct ServerClient {
             var year: Int?
             var price: Int
             var url: String
+            var image: String?
         }
         struct CatalogResponse: Codable { var store: String; var items: [Item] }
         guard let request = request(path: "api/shop/catalog") else { return nil }
@@ -148,7 +149,8 @@ struct ServerClient {
             guard let type = GearType(rawValue: item.type) else { return nil }
             return GearCatalogItem(
                 id: item.id, type: type, name: item.name, size: item.size,
-                year: item.year ?? 0, price: item.price, url: item.url
+                year: item.year ?? 0, price: item.price, url: item.url,
+                imageURL: item.image
             )
         }
     }
