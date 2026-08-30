@@ -66,7 +66,10 @@ struct ServerClient {
     static let shared = ServerClient()
 
     private func request(path: String, query: [URLQueryItem] = [], method: String = "GET", body: Data? = nil) -> URLRequest? {
-        guard let server = ServerSettings.current else { return nil }
+        // Lukureitit toimivat sisäänrakennetulla palvelimella; synkka vaatii
+        // käyttäjän oman palvelimen (täysi token) — muuten ei yritetä turhaan.
+        let server = method == "GET" ? ServerSettings.current : ServerSettings.userConfigured
+        guard let server else { return nil }
         var components = URLComponents(
             url: server.baseURL.appendingPathComponent(path),
             resolvingAgainstBaseURL: false

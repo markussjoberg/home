@@ -73,12 +73,20 @@ struct MetricsView: View {
                     .font(.system(size: 26, weight: .semibold, design: .rounded))
                     .foregroundStyle(.yellow)
                 if workout.phase == .paused {
-                    Text(workout.isAutoPaused ? "AUTOPAUSSI" : "TAUKO")
+                    Text("TAUKO")
                         .font(.caption2.bold())
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(.orange, in: Capsule())
                         .foregroundStyle(.black)
+                } else if workout.segmentKind != .water {
+                    // Info, ei tauko: tallennus jatkuu, tilastot vain vesiltä.
+                    Text(workout.segmentKind == .land ? "MAISSA" : "SIIRTYMÄ")
+                        .font(.caption2.bold())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.gray.opacity(0.5), in: Capsule())
+                        .foregroundStyle(.white)
                 }
                 Spacer()
                 HStack(spacing: 2) {

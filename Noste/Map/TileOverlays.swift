@@ -31,7 +31,7 @@ enum TileOverlays {
     /// Traficomin avoin rasterimerikartta suoraan (WMTS). Osoitteen voi vaihtaa
     /// asetuksista, jos endpoint muuttuu.
     static let defaultMarineTemplate =
-        "https://julkinen.traficom.fi/rasteripalvelu/wmts?service=WMTS&request=GetTile&version=1.0.0&layer=Traficom:Merikarttasarja%20C&style=default&tilematrixset=WGS84_Pseudo-Mercator&format=image/png&TileMatrix={z}&TileRow={y}&TileCol={x}"
+        "https://julkinen.traficom.fi/rasteripalvelu/wmts?service=WMTS&request=GetTile&version=1.0.0&layer=Traficom:Merikarttasarjat%20public&style=default&tilematrixset=WGS84_Pseudo-Mercator&format=image/png&TileMatrix=WGS84_Pseudo-Mercator:{z}&TileRow={y}&TileCol={x}"
 
     static func overlay(template: String, replacesContent: Bool) -> MKTileOverlay {
         let overlay = MKTileOverlay(urlTemplate: template)

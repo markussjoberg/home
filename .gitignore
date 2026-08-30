@@ -16,3 +16,6 @@ server/.env
 
 # macOS
 .DS_Store
+build/
+build-device/
+Noste.xcodeproj/

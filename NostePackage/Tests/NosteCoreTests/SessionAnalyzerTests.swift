@@ -90,4 +90,81 @@ final class SessionAnalyzerTests: XCTestCase {
         let decoded = try JSONDecoder().decode(SessionSummary.self, from: data)
         XCTAssertEqual(decoded, summary)
     }
+
+    func testSummaryDecodesWithoutSegmentsField() throws {
+        // Vanha talletettu yhteenveto ilman segments-kenttää dekoodautuu yhä.
+        let summary = SessionAnalyzer.summarize(
+            sport: .wingFoil, startDate: .now, points: makeTrack(speeds: [1, 3, 3, 1])
+        )
+        var json = try JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(summary)) as! [String: Any]
+        json.removeValue(forKey: "segments")
+        let decoded = try JSONDecoder().decode(
+            SessionSummary.self,
+            from: JSONSerialization.data(withJSONObject: json)
+        )
+        XCTAssertNil(decoded.segments)
+        XCTAssertEqual(decoded.duration, summary.duration, accuracy: 0.001)
+    }
+
+    // MARK: - Segmentoitu analyysi
+
+    /// Sessio, jonka lopussa ajetaan autolla: koko jälki tallentuu (kesto),
+    /// mutta matka, maksiminopeus ja ennätykset tulevat vain vesijaksosta.
+    func testTransitTailExcludedFromMetricsButNotDuration() {
+        // 60 s purjehdusta 6 m/s + 60 s autoilua 25 m/s.
+        let speeds = [Double](repeating: 6.0, count: 60) + [Double](repeating: 25.0, count: 60)
+        let points = makeTrack(speeds: speeds)
+        let segments = [
+            SessionSegment(start: 0, end: 60, kind: .water),
+            SessionSegment(start: 60, end: 119, kind: .transit)
+        ]
+        let summary = SessionAnalyzer.summarize(
+            sport: .wingFoil, startDate: .now, points: points, segments: segments
+        )
+        XCTAssertEqual(summary.duration, 119, accuracy: 0.01, "kesto = koko tallenne")
+        XCTAssertEqual(summary.waterDuration, 60, accuracy: 0.01)
+        XCTAssertEqual(summary.maxSpeed, 6.0, accuracy: 0.01, "autoilu ei ole maksiminopeus")
+        // Matka vain vesijaksosta (~6 m/s * 60 s), ei autoilun ~1500 m.
+        XCTAssertEqual(summary.distance, 360, accuracy: 20)
+        if let records = summary.speedRecords {
+            XCTAssertEqual(records.best2s, 6.0, accuracy: 0.1, "ennätys ei synny autossa")
+        }
+        XCTAssertEqual(summary.segments, segments)
+    }
+
+    /// Maissa-jakso keskellä (tauko rannalla) ei katkaise mitään eikä kadota
+    /// dataa — molempien vesijaksojen suoritukset lasketaan.
+    func testLandBreakBetweenWaterWindows() {
+        let speeds = [Double](repeating: 6.0, count: 30)   // vesi: lento
+            + [Double](repeating: 0.2, count: 120)          // rannalla
+            + [Double](repeating: 6.0, count: 30)           // vesi: toinen lento
+        let points = makeTrack(speeds: speeds)
+        let segments = [
+            SessionSegment(start: 0, end: 30, kind: .water),
+            SessionSegment(start: 30, end: 150, kind: .land),
+            SessionSegment(start: 150, end: 179, kind: .water)
+        ]
+        let summary = SessionAnalyzer.summarize(
+            sport: .wingFoil, startDate: .now, points: points, segments: segments
+        )
+        XCTAssertEqual(summary.rides.count, 2, "molemmat lennot löytyvät")
+        XCTAssertEqual(summary.duration, 179, accuracy: 0.01)
+        XCTAssertEqual(summary.waterDuration, 59, accuracy: 0.01)
+    }
+
+    /// Pelkkiä vesisegmenttejä sisältävä analyysi = sama tulos kuin ilman
+    /// segmenttejä (nopea polku, ei jakoa ikkunoihin).
+    func testAllWaterSegmentsMatchesPlainAnalysis() {
+        let speeds = [Double](repeating: 1.0, count: 10) + [Double](repeating: 6.0, count: 30)
+        let points = makeTrack(speeds: speeds)
+        let plain = SessionAnalyzer.summarize(sport: .wingFoil, startDate: .now, points: points)
+        let segmented = SessionAnalyzer.summarize(
+            sport: .wingFoil, startDate: .now, points: points,
+            segments: [SessionSegment(start: 0, end: 39, kind: .water)]
+        )
+        XCTAssertEqual(segmented.distance, plain.distance, accuracy: 0.001)
+        XCTAssertEqual(segmented.maxSpeed, plain.maxSpeed, accuracy: 0.001)
+        XCTAssertEqual(segmented.rides.count, plain.rides.count)
+    }
 }

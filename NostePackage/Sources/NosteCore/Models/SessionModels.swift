@@ -149,6 +149,31 @@ public struct RideAnalysis: Codable, Sendable, Equatable {
     }
 }
 
+/// Session ajanjakso ympäristön mukaan. Tallennus EI koskaan pysähdy itsestään —
+/// segmentit vain luokittelevat tallennetun ajan, ja analyysi käyttää vesijaksoja.
+public struct SessionSegment: Codable, Sendable, Equatable {
+    public enum Kind: String, Codable, Sendable {
+        /// Vesialueella (tai ei tietoa — tuntematon tulkitaan vedeksi).
+        case water
+        /// Maissa vesialuetiedon perusteella.
+        case land
+        /// Lajille epäuskottava vauhti (autoilu tms.).
+        case transit
+    }
+
+    public var start: TimeInterval
+    public var end: TimeInterval
+    public var kind: Kind
+
+    public init(start: TimeInterval, end: TimeInterval, kind: Kind) {
+        self.start = start
+        self.end = end
+        self.kind = kind
+    }
+
+    public var duration: TimeInterval { end - start }
+}
+
 /// Koko session yhteenveto — se mitä kello näyttää lopuksi ja mitä puhelin tallettaa.
 public struct SessionSummary: Codable, Sendable, Equatable {
     public var sport: Sport
@@ -167,8 +192,11 @@ public struct SessionSummary: Codable, Sendable, Equatable {
     public var flights: [FlightDetail]?
     /// Huippunopeudet: paras 2 s / 10 s / 100 m.
     public var speedRecords: SpeedRecords?
+    /// Ympäristösegmentit (vesi/maa/siirtymä). Koko jälki tallentuu aina;
+    /// mittarit lasketaan vain vesisegmenteistä. nil = vanha data (kaikki vettä).
+    public var segments: [SessionSegment]?
 
-    public init(sport: Sport, startDate: Date, duration: TimeInterval, distance: Double, maxSpeed: Double, averageMovingSpeed: Double, rides: RideAnalysis, pumps: PumpAnalysis?, heartRate: HeartRateStats? = nil, flights: [FlightDetail]? = nil, speedRecords: SpeedRecords? = nil) {
+    public init(sport: Sport, startDate: Date, duration: TimeInterval, distance: Double, maxSpeed: Double, averageMovingSpeed: Double, rides: RideAnalysis, pumps: PumpAnalysis?, heartRate: HeartRateStats? = nil, flights: [FlightDetail]? = nil, speedRecords: SpeedRecords? = nil, segments: [SessionSegment]? = nil) {
         self.sport = sport
         self.startDate = startDate
         self.duration = duration
@@ -180,11 +208,18 @@ public struct SessionSummary: Codable, Sendable, Equatable {
         self.heartRate = heartRate
         self.flights = flights
         self.speedRecords = speedRecords
+        self.segments = segments
     }
 
     /// Foiliajan osuus koko sessiosta (0–1).
     public var rideFraction: Double {
         guard duration > 0 else { return 0 }
         return min(1, rides.totalDuration / duration)
+    }
+
+    /// Vesillä vietetty aika (s). Ilman segmenttejä = koko kesto.
+    public var waterDuration: TimeInterval {
+        guard let segments, !segments.isEmpty else { return duration }
+        return segments.filter { $0.kind == .water }.reduce(0) { $0 + $1.duration }
     }
 }

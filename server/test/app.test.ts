@@ -61,6 +61,7 @@ describe("app", () => {
     ntfyLog = [];
     const config = loadConfig({
       NOSTE_TOKEN: "secret",
+      CLIENT_TOKEN: "client",
       MML_API_KEY: "mml-key",
       NTFY_URL: "https://ntfy.example/noste",
       DATA_DIR: join(dir, "data"),
@@ -86,6 +87,23 @@ describe("app", () => {
     expect((await app.request("/api/spots")).status).toBe(401);
     expect((await app.request("/api/spots", auth)).status).toBe(200);
     expect((await app.request("/api/spots?token=secret")).status).toBe(200);
+  });
+
+  it("client-token kelpaa lukureiteille muttei synkkaan", async () => {
+    const client = { headers: { authorization: "Bearer client" } };
+    expect((await app.request("/api/forecast?lat=60.1&lon=24.9", client)).status).toBe(200);
+    expect((await app.request("/api/tiles/terrain/12/2331/1186.png?token=client")).status).toBe(200);
+    expect((await app.request("/api/observation?lat=60.1&lon=24.9", client)).status).not.toBe(401);
+    // Yksityiset reitit (synkka, kelivahti) vaativat täyden tokenin.
+    expect((await app.request("/api/spots", client)).status).toBe(401);
+    expect((await app.request("/api/sessions", client)).status).toBe(401);
+    expect((await app.request("/api/alerts", client)).status).toBe(401);
+  });
+
+  it("väärä token ei kelpaa mihinkään", async () => {
+    const bad = { headers: { authorization: "Bearer väärä" } };
+    expect((await app.request("/api/forecast?lat=60&lon=24", bad)).status).toBe(401);
+    expect((await app.request("/api/spots", bad)).status).toBe(401);
   });
 
   it("openmeteo-läpisyöttö palauttaa lähteen rungon", async () => {

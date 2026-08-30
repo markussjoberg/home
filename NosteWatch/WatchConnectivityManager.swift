@@ -18,11 +18,14 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
     @Published var snapshot: WatchSync.Snapshot?
     /// Offline-kartat spoteittain, zoomi → kuva.
     @Published var offlineMaps: [UUID: [Int: OfflineMap]] = [:]
+    /// Vesialuemaskit (kaikki spotit ja zoomit) session segmentointiin.
+    @Published var waterMasks: [WaterMask] = []
 
     private override init() {
         super.init()
         snapshot = Self.loadCachedSnapshot()
         offlineMaps = Self.loadMapIndex()
+        waterMasks = Self.loadWaterMasks()
         guard WCSession.isSupported() else { return }
         WCSession.default.delegate = self
         WCSession.default.activate()
@@ -124,7 +127,45 @@ extension WatchConnectivityManager: WCSessionDelegate {
     }
 
     func session(_ session: WCSession, didReceive file: WCSessionFile) {
-        guard let (spotID, calibration) = WatchSync.MapImage.decode(file.metadata ?? [:]) else { return }
-        registerMap(spotID: spotID, calibration: calibration, from: file.fileURL)
+        let metadata = file.metadata ?? [:]
+        if let (spotID, calibration) = WatchSync.MapImage.decode(metadata) {
+            registerMap(spotID: spotID, calibration: calibration, from: file.fileURL)
+        } else if let (spotID, zoom) = WatchSync.WaterMaskFile.decode(metadata) {
+            registerWaterMask(spotID: spotID, zoom: zoom, from: file.fileURL)
+        }
+    }
+}
+
+// MARK: - Vesialuemaskit
+
+extension WatchConnectivityManager {
+
+    /// Documents (ei caches): maski on session tallennuksen luotettavuudelle
+    /// tärkeä eikä saa kadota levysiivouksessa.
+    private static var masksDirectory: URL {
+        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("watermasks", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    private static func loadWaterMasks() -> [WaterMask] {
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: masksDirectory, includingPropertiesForKeys: nil) else { return [] }
+        return files.compactMap { url in
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return try? JSONDecoder().decode(WaterMask.self, from: data)
+        }
+    }
+
+    private func registerWaterMask(spotID: UUID, zoom: Int, from fileURL: URL) {
+        guard let data = try? Data(contentsOf: fileURL),
+              (try? JSONDecoder().decode(WaterMask.self, from: data)) != nil else { return }
+        let destination = Self.masksDirectory.appendingPathComponent("\(spotID.uuidString)-z\(zoom).json")
+        try? data.write(to: destination, options: .atomic)
+        let masks = Self.loadWaterMasks()
+        DispatchQueue.main.async {
+            self.waterMasks = masks
+        }
     }
 }

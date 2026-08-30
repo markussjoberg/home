@@ -1,0 +1,36 @@
+# Tuotanto (palvelin, Traefik wp_web-verkossa):
+#   docker compose -f docker-compose.prod.yml up -d --build
+# Reitit: https://noste.aihiolabs.com (vaatii DNS A-tietueen) ja
+#         https://aihiolabs.com/noste (toimii ilman uutta tietuetta).
+services:
+  noste:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    networks:
+      - wp_web
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: wp_web
+      traefik.http.services.noste.loadbalancer.server.port: "8080"
+      # Alidomain
+      traefik.http.routers.noste.rule: Host(`noste.aihiolabs.com`)
+      traefik.http.routers.noste.entrypoints: websecure
+      traefik.http.routers.noste.tls: "true"
+      traefik.http.routers.noste.tls.certresolver: le
+      traefik.http.routers.noste.service: noste
+      # Polkureitti aihiolabs.comin alla
+      traefik.http.middlewares.noste-strip.stripprefix.prefixes: /noste
+      traefik.http.routers.noste-path.rule: Host(`aihiolabs.com`) && PathPrefix(`/noste`)
+      traefik.http.routers.noste-path.priority: "1000"
+      traefik.http.routers.noste-path.entrypoints: websecure
+      traefik.http.routers.noste-path.tls: "true"
+      traefik.http.routers.noste-path.tls.certresolver: le
+      traefik.http.routers.noste-path.middlewares: noste-strip
+      traefik.http.routers.noste-path.service: noste
+
+networks:
+  wp_web:
+    external: true

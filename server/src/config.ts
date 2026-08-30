@@ -7,6 +7,9 @@ export interface Config {
   marineTileTemplate: string;
   /** Bearer-token, jolla appi tunnistautuu (synkka, kelivahti). */
   apiToken: string;
+  /** Appiin sisäänrakennettu token: pelkät lukureitit (tiilet, ennusteet).
+   *  Tyhjä = ei käytössä. Mahdollinen premium-portti rakennetaan tähän. */
+  clientToken: string;
   /** ntfy-aiheen osoite kelivahti-ilmoituksille (esim. https://ntfy.sh/oma-salainen-aihe). Tyhjä = ei ilmoituksia. */
   ntfyUrl: string;
   /** Lipas-rajapinnan juuri (liikuntapaikat, mm. uimarannat). */
@@ -19,10 +22,13 @@ export interface Config {
   forecastCacheTtl: number;
 }
 
+// Layer-nimi ja TileMatrix-muoto tarkistettu GetCapabilitiesista 2026-08:
+// "Merikarttasarjat public" = kaikki sarjat, myös sisävesien veneilykartat;
+// TileMatrix vaatii "WGS84_Pseudo-Mercator:"-etuliitteen.
 export const DEFAULT_MARINE_TEMPLATE =
   "https://julkinen.traficom.fi/rasteripalvelu/wmts?service=WMTS&request=GetTile&version=1.0.0" +
-  "&layer=Traficom:Merikarttasarja%20C&style=default&tilematrixset=WGS84_Pseudo-Mercator" +
-  "&format=image/png&TileMatrix={z}&TileRow={y}&TileCol={x}";
+  "&layer=Traficom:Merikarttasarjat%20public&style=default&tilematrixset=WGS84_Pseudo-Mercator" +
+  "&format=image/png&TileMatrix=WGS84_Pseudo-Mercator:{z}&TileRow={y}&TileCol={x}";
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
@@ -30,6 +36,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     mmlApiKey: env.MML_API_KEY ?? "",
     marineTileTemplate: env.MARINE_TILE_TEMPLATE ?? DEFAULT_MARINE_TEMPLATE,
     apiToken: env.NOSTE_TOKEN ?? "",
+    clientToken: env.CLIENT_TOKEN ?? "",
     ntfyUrl: env.NTFY_URL ?? "",
     lipasBase: env.LIPAS_BASE ?? "https://lipas.cc.jyu.fi/api",
     dataDir: env.DATA_DIR ?? "./data",

@@ -1,13 +1,29 @@
 import Foundation
 import NosteCore
 
-/// Oman palvelimen asetukset (Asetukset-välilehti kirjoittaa, muut lukevat).
+/// Palvelinasetukset. Appiin on sisäänrakennettu noste-server, joten kartat ja
+/// ennusteet toimivat suoraan ilman mitään asetuksia — Asetukset-välilehden
+/// kentät ovat vain ylikirjoitus (kehitys / oma palvelin).
 enum ServerSettings {
     static let baseURLKey = "serverBaseURL"
     static let tokenKey = "serverToken"
 
-    /// Määritetty palvelin, tai nil jos osoite/token puuttuu.
+    /// Sisäänrakennettu palvelin: lukureitit (tiilet, ennusteet, havainnot,
+    /// spotmeta, rannat) client-tokenilla. Synkka ja kelivahti vaativat oman
+    /// NOSTE_TOKENin (asetuksista). Mahdollinen premium-rajaus tehdään tähän.
+    static let builtIn = ServerConfig(
+        baseURL: URL(string: "https://aihiolabs.com/noste")!,
+        token: "4efb3362d837279535557a81dd7e6b3f"
+    )
+
+    /// Käytettävä palvelin: käyttäjän oma jos asetettu, muuten sisäänrakennettu.
     static var current: ServerConfig? {
+        userConfigured ?? builtIn
+    }
+
+    /// Vain käyttäjän itse asettama palvelin (täysi NOSTE_TOKEN). Synkka ja
+    /// kelivahti käyttävät tätä — sisäänrakennettu client-token ei niihin riitä.
+    static var userConfigured: ServerConfig? {
         let defaults = UserDefaults.standard
         return config(
             base: defaults.string(forKey: baseURLKey) ?? "",

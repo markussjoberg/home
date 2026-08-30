@@ -22,7 +22,8 @@ final class MapSnapshotService {
 
         for spot in spots where spot.isFavorite {
             for zoom in zooms {
-                let sentKey = "mapSent-\(spot.id.uuidString)-z\(zoom)"
+                // v2: kuvan mukana lähtee vesialuemaski (segmentointi kellossa).
+                let sentKey = "mapSent2-\(spot.id.uuidString)-z\(zoom)"
                 guard !UserDefaults.standard.bool(forKey: sentKey),
                       !inFlight.contains(sentKey) else { continue }
                 inFlight.insert(sentKey)
@@ -31,7 +32,8 @@ final class MapSnapshotService {
                 let calibration = OfflineMapCalibration.centered(
                     latitude: spot.latitude, longitude: spot.longitude, zoom: zoom, tileCount: 3
                 )
-                guard let png = await stitch(calibration: calibration, template: template),
+                guard let stitched = await stitch(calibration: calibration, template: template),
+                      let png = stitched.pngData(),
                       let metadata = WatchSync.MapImage.metadata(spotID: spot.id, calibration: calibration)
                 else { continue }
 
@@ -43,6 +45,20 @@ final class MapSnapshotService {
                     UserDefaults.standard.set(true, forKey: sentKey)
                 } catch {
                     // Siirto yritetään seuraavalla synkalla uudelleen.
+                    continue
+                }
+
+                if let mask = WaterMaskBuilder.build(from: stitched, calibration: calibration) {
+                    PhoneWaterMasks.save(mask, spotID: spot.id)
+                    if let maskData = try? JSONEncoder().encode(mask) {
+                        let maskURL = FileManager.default.temporaryDirectory
+                            .appendingPathComponent("watermask-\(spot.id.uuidString)-z\(zoom).json")
+                        try? maskData.write(to: maskURL)
+                        WCSession.default.transferFile(
+                            maskURL,
+                            metadata: WatchSync.WaterMaskFile.metadata(spotID: spot.id, zoom: zoom)
+                        )
+                    }
                 }
             }
         }
@@ -58,7 +74,7 @@ final class MapSnapshotService {
     }
 
     /// Hakee ruudukon tiilet ja piirtää ne yhdeksi kuvaksi. nil jos yksikin puuttuu.
-    private func stitch(calibration: OfflineMapCalibration, template: String) async -> Data? {
+    private func stitch(calibration: OfflineMapCalibration, template: String) async -> UIImage? {
         var tiles: [(index: Int, image: UIImage)] = []
         let count = calibration.tileCount
         for row in 0..<count {
@@ -80,7 +96,7 @@ final class MapSnapshotService {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size), format: format)
-        let stitched = renderer.image { _ in
+        return renderer.image { _ in
             let tileSize = CGFloat(calibration.tileSize)
             for (index, image) in tiles {
                 let row = index / count
@@ -89,6 +105,76 @@ final class MapSnapshotService {
                                       width: tileSize, height: tileSize))
             }
         }
-        return stitched.pngData()
+    }
+}
+
+/// Rakentaa vesialuemaskin ommellusta maastokarttakuvasta: MML-rasterin
+/// vesialueet ovat vaaleansinisiä, ja 4×4 pikselin lohkon enemmistöäänestys
+/// sietää syvyyskäyrät, tekstit ja rantaviivan.
+enum WaterMaskBuilder {
+
+    static let factor = 4
+
+    static func build(from image: UIImage, calibration: OfflineMapCalibration) -> WaterMask? {
+        guard let cgImage = image.cgImage else { return nil }
+        let size = calibration.imageSize
+        var pixels = [UInt8](repeating: 0, count: size * size * 4)
+        guard let context = CGContext(
+            data: &pixels, width: size, height: size, bitsPerComponent: 8,
+            bytesPerRow: size * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: size, height: size))
+
+        let grid = size / factor
+        var cells = [Bool](repeating: false, count: grid * grid)
+        for row in 0..<grid {
+            for column in 0..<grid {
+                var waterVotes = 0
+                for dy in 0..<factor {
+                    for dx in 0..<factor {
+                        let x = column * factor + dx
+                        let y = row * factor + dy
+                        let offset = (y * size + x) * 4
+                        let r = Int(pixels[offset])
+                        let g = Int(pixels[offset + 1])
+                        let b = Int(pixels[offset + 2])
+                        // Vaaleansininen vesi: sininen hallitsee, vihreä välissä.
+                        if b >= 190, b - r >= 20, g >= r, g <= b + 10 {
+                            waterVotes += 1
+                        }
+                    }
+                }
+                cells[row * grid + column] = waterVotes * 2 >= factor * factor
+            }
+        }
+        return WaterMask(calibration: calibration, factor: factor, waterCells: cells)
+    }
+}
+
+/// Puhelimen paikallinen maskivarasto — puhelimella tallennettu sessio käyttää
+/// samaa segmentointia kuin kello.
+enum PhoneWaterMasks {
+
+    private static var directory: URL {
+        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("watermasks", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    static func save(_ mask: WaterMask, spotID: UUID) {
+        guard let data = try? JSONEncoder().encode(mask) else { return }
+        let url = directory.appendingPathComponent("\(spotID.uuidString)-z\(mask.calibration.zoom).json")
+        try? data.write(to: url, options: .atomic)
+    }
+
+    static func loadAll() -> [WaterMask] {
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil) else { return [] }
+        return files.compactMap { url in
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return try? JSONDecoder().decode(WaterMask.self, from: data)
+        }
     }
 }

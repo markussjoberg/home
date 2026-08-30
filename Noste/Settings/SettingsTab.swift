@@ -15,20 +15,30 @@ struct SettingsTab: View {
         NavigationStack {
             Form {
                 Section {
+                    LabeledContent("Kartat ja ennusteet", value: "Nosten palvelin")
+                    LabeledContent("Ennustemalli", value: "Open-Meteo")
+                    LabeledContent("Versio", value: "0.1")
+                } header: {
+                    Text("Tietoa")
+                } footer: {
+                    Text("Maastokartta (MML), merikartta (Traficom — ei navigointikäyttöön), tuuli- ja aaltoennusteet (Open-Meteo, CC BY 4.0) ja FMI-havainnot tulevat suoraan Nosten palvelimelta ilman asetuksia. Ennuste on malli — vesille lähdetään omalla harkinnalla.")
+                }
+
+                Section {
                     TextField("https://noste.esimerkki.fi", text: $serverBase)
                         .keyboardType(.URL)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                     SecureField("Token (NOSTE_TOKEN)", text: $serverToken)
                     if serverConfigured {
-                        Label("Palvelin käytössä — kartat ja ennusteet kulkevat sen kautta", systemImage: "checkmark.circle.fill")
+                        Label("Oma palvelin käytössä — myös synkka ja kelivahti toimivat", systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                             .font(.footnote)
                     }
                 } header: {
-                    Text("Oma palvelin")
+                    Text("Oma palvelin (valinnainen)")
                 } footer: {
-                    Text("noste-server (ks. repo: server/) välimuistittaa ennusteet, proxyttää karttatiilet (MML-avain palvelimella) ja ajaa kelivahtia. Ilman palvelinta appi hakee suoraan lähteistä.")
+                    Text("Kehitykseen tai omalle noste-serverille (ks. repo: server/). Täysi token avaa myös spottien ja sessioiden varmuuskopioinnin sekä kelivahdin.")
                 }
 
                 if !serverConfigured {
@@ -37,9 +47,9 @@ struct SettingsTab: View {
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                     } header: {
-                        Text("Maastokartta (MML)")
+                        Text("Oma MML-avain (valinnainen)")
                     } footer: {
-                        Text("Tarvitaan vain ilman omaa palvelinta. Maanmittauslaitoksen ilmainen API-avain: maanmittauslaitos.fi → Rajapinnat → API-avain.")
+                        Text("Maastokarttatiilet suoraan MML:ltä ohi Nosten palvelimen. Ilmainen API-avain: maanmittauslaitos.fi → Rajapinnat → API-avain.")
                     }
 
                     Section {
@@ -51,19 +61,10 @@ struct SettingsTab: View {
                             marineTemplate = TileOverlays.defaultMarineTemplate
                         }
                     } header: {
-                        Text("Merikartta")
+                        Text("Merikartan tiiliosoite (valinnainen)")
                     } footer: {
-                        Text("Traficomin avoin rasterimerikartta. Osoitteessa {z}/{y}/{x} korvataan tiilikoordinaateilla. Huom: ei navigointikäyttöön.")
+                        Text("Oletuksena merikartta tulee Nosten palvelimelta. Osoitteessa {z}/{y}/{x} korvataan tiilikoordinaateilla. Huom: ei navigointikäyttöön.")
                     }
-                }
-
-                Section {
-                    LabeledContent("Ennusteet", value: "Open-Meteo" + (serverConfigured ? " (oma palvelin)" : ""))
-                    LabeledContent("Versio", value: "0.1")
-                } header: {
-                    Text("Tietoa")
-                } footer: {
-                    Text("Sääennusteet: Open-Meteo (CC BY 4.0). Ennuste on malli — vesille lähdetään omalla harkinnalla.")
                 }
             }
             .navigationTitle("Asetukset")

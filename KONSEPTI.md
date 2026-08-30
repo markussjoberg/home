@@ -75,27 +75,32 @@ yhteenvedossa, koko sarja talteen), kalorit, GPS-jälki. Analytiikka on
 `NosteCore`-paketissa puhtaana Swiftinä → sama koodi kellossa, puhelimessa ja
 yksikkötesteissä.
 
-### Autopaussi (unohtunut mittari ei pilaa dataa)
+### Segmentointi — ei autopaussia, ei autostoppia
 
-Trackerit jäävät päälle, ja autoilu sotkee sitten nopeudet ja matkat. Ilman
-karttadataa maissa olo tunnistetaan kolmella säännöllä:
+**Tallennus ei koskaan pysähdy itsestään.** Vesilajeissa paikallaan olo
+(tuulen odotus, kellunta) on lajin ydintä, ei tauko — joten nopeus tai
+paikallaanolo ei kelpaa taukoperusteeksi, eikä appi vaadi käyttäjältä mitään
+kesken session. Sen sijaan `SegmentTracker` luokittelee tallennetun ajan
+**vesialuetiedon** perusteella jaksoihin, ja analyysi laskee mittarit vain
+vesijaksoista:
 
-1. **Paikallaan 90 s → autopaussi.** Lähtöpaikan lähellä (< 120 m) jo 45 s:ssa,
-   koska lähtöpaikka on yleensä myös lopetuspaikka.
-2. **Lähtöpaikalla tullut paussi ei jatku automaattisesti** — sessio on
-   todennäköisesti ohi, ja juuri tässä tilanteessa autolla lähtö (esim. 50 km/h
-   = wingille "uskottava" 13,9 m/s) sotkisi datan. Vesillä (lepopaussi muualla)
-   liikkeelle lähtö jatkaa session automaattisesti 5 s:ssa.
-3. **Lajille epäuskottava nopeus paussin aikana** (pumppi > 9 m/s, wing > 20 m/s,
-   30 s yhtäjaksoisesti) **tai yli 20 min paussi → sessio päätetään
-   automaattisesti** ja yhteenveto talletetaan.
+1. **Vesi** (oletus): kaikki mittarit käytössä. Tuntematon sijainti (ei maskia,
+   maskin ulkopuolella, epätarkka GPS) tulkitaan aina vedeksi — fail-safe.
+2. **Maissa**: vesialuemaski sanoo yhtäjaksoisesti ≥ 60 s "maalla".
+   GPS-heitot rannassa eivät riitä. Tallennus jatkuu normaalisti.
+3. **Siirtymä**: lajille epäuskottava vauhti ≥ 30 s (autoilu). Tallentuu
+   sekin — mutta matka, nopeudet, ennätykset ja pumput eivät koskaan tule
+   siirtymästä. Näin unohtunut mittari ei pilaa dataa *eikä* datan ongelmat
+   koskaan hävitä dataa.
 
-Varmistuksena analyysi suodattaa lajikohtaisen nopeuskaton ylittävät lukemat,
-eli maksiminopeudeksi ei koskaan päädy autoilua.
+Vesialuemaski: puhelin luokittelee MML-maastokarttatiilien vesipikselit
+offline-karttojen ompeluvaiheessa ja lähettää bittikartan kelloon — kello
+vastaa kysymykseen "olenko vesialueella" täysin offline. Varmistuksena
+analyysi suodattaa lisäksi lajikohtaisen nopeuskaton ylittävät lukemat.
 
 ### Mittaus puhelimella (ilman kelloa)
 
-Sessio + -napista Sessiot-välilehdellä: sama analytiikka, autopaussi ja
+Sessio + -napista Sessiot-välilehdellä: sama analytiikka, segmentointi ja
 kaatumissuoja kuin kellossa — GPS ja liikeanturi puhelimesta (pumpputunnistus
 toimii parhaiten liivin/vyötärön taskussa), syke ja HealthKit-treeni jäävät
 pois. Tämä avaa appin myös kaverille, jolla ei ole kelloa mutta kännykkä kulkee

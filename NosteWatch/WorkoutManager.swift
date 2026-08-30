@@ -14,10 +14,12 @@ import NosteCore
 /// Kaatumissuoja: sessio talletetaan levylle 30 s välein — appin kuollessa
 /// seuraava käynnistys rakentaa yhteenvedon ja siirtää sen puhelimeen.
 ///
-/// Autopaussi: paikallaanolo pausettaa (lähtöpaikan lähellä nopeammin), liike
-/// vesillä jatkaa automaattisesti, mutta lähtöpaikalla tullut paussi ei jatku
-/// itsekseen — ja lajille epäuskottava nopeus (autoilu) päättää session, ettei
-/// unohtunut mittari pilaa dataa.
+/// EI AUTOPAUSSIA EIKÄ AUTOSTOPPIA: tallennus ei koskaan pysähdy itsestään.
+/// Vesilajeissa paikallaan olo (tuulen odotus, kellunta) on lajin ydintä, joten
+/// laite ei saa tulkita sitä tauoksi. SegmentTracker luokittelee ajan
+/// vesialuetiedon (offline-maski) perusteella vesi-/maissa-/siirtymäjaksoihin,
+/// ja analyysi laskee mittarit vain vesijaksoista — autolla ajo tallentuu
+/// sekin, mutta ei sotke tilastoja. Vain käyttäjä pysäyttää session.
 @MainActor
 final class WorkoutManager: NSObject, ObservableObject {
 
@@ -38,9 +40,9 @@ final class WorkoutManager: NSObject, ObservableObject {
     @Published var rideState = LiveRideTracker.State()
     @Published var summary: SessionSummary?
     @Published var errorMessage: String?
-    /// Onko käynnissä oleva paussi automaattinen (autopaussi näyttää oman banderollin).
-    @Published var isAutoPaused = false
-    /// Ilmoitus automaattisesta päättämisestä tai edellisen session palautuksesta.
+    /// Senhetkinen ympäristö (vesi/maissa/siirtymä) — vain infoa, ei pysäytä mitään.
+    @Published var segmentKind: SessionSegment.Kind = .water
+    /// Ilmoitus edellisen session palautuksesta tms.
     @Published var notice: String?
     /// Viimeisin sijainti offline-karttaa varten.
     @Published var lastCoordinate: CLLocationCoordinate2D?
@@ -70,10 +72,9 @@ final class WorkoutManager: NSObject, ObservableObject {
     /// pumppu lasketaan vain vauhdissa — uinnin käsivedot eivät ole pumppuja.
     private var gatedSpeed: Double = -1
     private var rideTracker = LiveRideTracker(sport: .wingFoil)
-    private var autoPause = AutoPauseController(sport: .wingFoil)
+    private var segmentTracker = SegmentTracker(sport: .wingFoil)
+    private var waterMasks = WaterMaskIndex(masks: [])
     private var lastGoodLocation: CLLocation?
-    /// Session lähtöpiste (ensimmäinen tarkka sijainti) — autopaussin "kotipiste".
-    private var startAnchor: CLLocation?
 
     override init() {
         super.init()
@@ -104,13 +105,13 @@ final class WorkoutManager: NSObject, ObservableObject {
         motionLock.lock(); motionSamples = []; pumpDetector = PumpDetector(); motionLock.unlock()
         rideTracker = LiveRideTracker(sport: sport)
         rideState = rideTracker.current
-        autoPause = AutoPauseController(sport: sport)
-        isAutoPaused = false
+        segmentTracker = SegmentTracker(sport: sport)
+        waterMasks = WaterMaskIndex(masks: WatchConnectivityManager.shared.waterMasks)
+        segmentKind = .water
         livePumpCount = 0
         liveDistance = 0
         currentSpeed = 0
         lastGoodLocation = nil
-        startAnchor = nil
         breadcrumb = []
         pausedTotal = 0
         pausedAt = nil
@@ -126,17 +127,16 @@ final class WorkoutManager: NSObject, ObservableObject {
         WKInterfaceDevice.current().enableWaterLock()
     }
 
-    /// Käyttäjän oma paussi: kaikki anturit seis (akku), ei automaattista jatkoa.
+    /// Käyttäjän oma paussi: kaikki anturit seis (akku). Ainoa taukotapa —
+    /// laite ei koskaan pauseta itse.
     func pause() {
         guard phase == .running else { return }
-        beginPause(automatic: false)
+        beginPause()
         locationManager.stopUpdatingLocation()
-        autoPause.manualPause(t: sessionTime(Date()))
     }
 
     func resume() {
         guard phase == .paused else { return }
-        autoPause.manualResume()
         endPause()
         startLocation()
     }
@@ -147,7 +147,6 @@ final class WorkoutManager: NSObject, ObservableObject {
             pausedTotal += Date().timeIntervalSince(pausedAt)
         }
         phase = .ended
-        isAutoPaused = false
         timer?.cancel()
         locationManager.stopUpdatingLocation()
         motionManager.stopDeviceMotionUpdates()
@@ -156,12 +155,14 @@ final class WorkoutManager: NSObject, ObservableObject {
         let motion = motionSamples
         motionLock.unlock()
 
+        let segments = segmentTracker.snapshot(at: trackPoints.last?.t ?? 0)
         let result = SessionAnalyzer.summarize(
             sport: sport,
             startDate: startDate,
             points: trackPoints,
             motion: motion,
-            heartRate: heartRateSamples
+            heartRate: heartRateSamples,
+            segments: segments.isEmpty ? nil : segments
         )
         summary = result
 
@@ -184,11 +185,10 @@ final class WorkoutManager: NSObject, ObservableObject {
         notice = nil
     }
 
-    // MARK: - Paussit
+    // MARK: - Paussit (vain käyttäjän omat)
 
-    private func beginPause(automatic: Bool) {
+    private func beginPause() {
         phase = .paused
-        isAutoPaused = automatic
         pausedAt = Date()
         currentSpeed = 0
         session?.pause()
@@ -200,7 +200,6 @@ final class WorkoutManager: NSObject, ObservableObject {
             pausedTotal += Date().timeIntervalSince(pausedAt)
         }
         pausedAt = nil
-        isAutoPaused = false
         session?.resume()
         startMotion()
         phase = .running
@@ -209,33 +208,6 @@ final class WorkoutManager: NSObject, ObservableObject {
 
     private func sessionTime(_ date: Date) -> TimeInterval {
         date.timeIntervalSince(startDate)
-    }
-
-    private func handleAutoPauseEvent(_ event: AutoPauseController.Event) {
-        switch event {
-        case .none:
-            break
-        case .pause(let nearStart):
-            guard phase == .running else { break }
-            beginPause(automatic: true)
-            // GPS jää päälle: automaattinen jatko ja ajontunnistus tarvitsevat sen.
-            notice = nearStart
-                ? "Autopaussi lähtöpaikalla — jatka kellosta, jos sessio jatkuu."
-                : "Autopaussi — liike jatkaa automaattisesti."
-            WKInterfaceDevice.current().play(.stop)
-        case .resume:
-            guard phase == .paused, isAutoPaused else { break }
-            endPause()
-            notice = nil
-            WKInterfaceDevice.current().play(.start)
-        case .endSession(let reason):
-            guard phase == .paused || phase == .running else { break }
-            notice = reason == .drivingDetected
-                ? "Sessio päätettiin: liikkumisnopeus ei ollut enää lajille mahdollinen (autoilu?)."
-                : "Sessio päätettiin: paussi kesti yli 20 minuuttia."
-            WKInterfaceDevice.current().play(.stop)
-            end()
-        }
     }
 
     private func startTimer() {
@@ -260,12 +232,14 @@ final class WorkoutManager: NSObject, ObservableObject {
         motionLock.lock()
         let strokes = pumpDetector.currentStrokeTimes
         motionLock.unlock()
+        let segments = segmentTracker.snapshot(at: trackPoints.last?.t ?? 0)
         SessionRecovery.save(SessionRecovery.State(
             sport: sport,
             startDate: startDate,
             points: trackPoints,
             strokeTimes: strokes,
-            heartRate: heartRateSamples
+            heartRate: heartRateSamples,
+            segments: segments.isEmpty ? nil : segments
         ))
     }
 
@@ -316,45 +290,47 @@ final class WorkoutManager: NSObject, ObservableObject {
     }
 
     fileprivate func handle(locations: [CLLocation]) {
-        guard phase == .running || (phase == .paused && isAutoPaused) else { return }
+        // Käynnissä oleva sessio tallentaa AINA — mikään automatiikka ei
+        // pysäytä eikä suodata keruuta. Vain käyttäjän oma paussi (GPS pois)
+        // keskeyttää.
+        guard phase == .running else { return }
         for location in locations {
             let t = location.timestamp.timeIntervalSince(startDate)
             guard t >= 0 else { continue }
             let speed = location.speed
             let accurate = location.horizontalAccuracy >= 0 && location.horizontalAccuracy <= 30
-            if accurate && startAnchor == nil {
-                startAnchor = location
-            }
 
             lastCoordinate = location.coordinate
-            if phase == .running {
-                let point = TrackPoint(
-                    t: t,
-                    latitude: location.coordinate.latitude,
-                    longitude: location.coordinate.longitude,
-                    speed: speed,
-                    horizontalAccuracy: location.horizontalAccuracy
-                )
-                trackPoints.append(point)
-                breadcrumb.append(point)
-                if breadcrumb.count > 600 {
-                    // Harvenna vanhaa päätä: joka toinen pois.
-                    breadcrumb = breadcrumb.enumerated().compactMap { $0.offset % 2 == 0 ? $0.element : nil }
-                }
-                currentSpeed = max(0, speed)
-                motionLock.lock(); gatedSpeed = speed; motionLock.unlock()
-                if accurate {
-                    if let previous = lastGoodLocation, max(0, speed) >= 1.0 {
-                        liveDistance += location.distance(from: previous)
-                    }
-                    lastGoodLocation = location
-                }
-                rideState = rideTracker.add(t: t, speed: speed)
+            let point = TrackPoint(
+                t: t,
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude,
+                speed: speed,
+                horizontalAccuracy: location.horizontalAccuracy
+            )
+            trackPoints.append(point)
+            breadcrumb.append(point)
+            if breadcrumb.count > 600 {
+                // Harvenna vanhaa päätä: joka toinen pois.
+                breadcrumb = breadcrumb.enumerated().compactMap { $0.offset % 2 == 0 ? $0.element : nil }
             }
+            currentSpeed = max(0, speed)
+            motionLock.lock(); gatedSpeed = speed; motionLock.unlock()
+            if accurate {
+                if let previous = lastGoodLocation, max(0, speed) >= 1.0 {
+                    liveDistance += location.distance(from: previous)
+                }
+                lastGoodLocation = location
+            }
+            rideState = rideTracker.add(t: t, speed: speed)
 
-            let distanceFromStart = startAnchor.map { location.distance(from: $0) } ?? -1
-            handleAutoPauseEvent(autoPause.add(t: t, speed: speed, distanceFromStart: distanceFromStart))
-            if phase == .ended { return }
+            // Segmentointi: vesialuemaski vastaa "olenko vesillä" (epätarkka
+            // GPS tai maskin puute = ei tietoa = vettä). Ei koskaan pysäytä.
+            let isWater = accurate ? waterMasks.isWater(
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude
+            ) : nil
+            segmentKind = segmentTracker.add(t: t, speed: max(0, speed), isWater: isWater)
         }
     }
 

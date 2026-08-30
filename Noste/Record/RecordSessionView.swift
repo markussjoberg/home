@@ -61,7 +61,7 @@ struct RecordSessionView: View {
             } header: {
                 Text("Aloita sessio")
             } footer: {
-                Text("Puhelin mittaa GPS:llä ja liikeanturilla — pidä se mukana (liivi/vyötärötaskussa pumpputunnistus toimii parhaiten). Sykettä ei mitata ilman kelloa. Autopaussi pysäyttää mittauksen maissa.")
+                Text("Puhelin mittaa GPS:llä ja liikeanturilla — pidä se mukana (liivi/vyötärötaskussa pumpputunnistus toimii parhaiten). Sykettä ei mitata ilman kelloa. Tallennus ei pysähdy itsestään: maissa ja siirtymissä kerätty aika merkitään erikseen, eikä se sotke tilastoja.")
             }
         }
     }
@@ -73,12 +73,20 @@ struct RecordSessionView: View {
                     .font(.system(size: 54, weight: .semibold, design: .rounded))
                     .foregroundStyle(.yellow)
                 if workout.phase == .paused {
-                    Text(workout.isAutoPaused ? "AUTOPAUSSI" : "TAUKO")
+                    Text("TAUKO")
                         .font(.caption.bold())
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(.orange, in: Capsule())
                         .foregroundStyle(.black)
+                } else if workout.segmentKind != .water {
+                    // Info, ei tauko: tallennus jatkuu, tilastot vain vesiltä.
+                    Text(workout.segmentKind == .land ? "MAISSA" : "SIIRTYMÄ")
+                        .font(.caption.bold())
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.gray.opacity(0.4), in: Capsule())
+                        .foregroundStyle(.primary)
                 }
             }
 

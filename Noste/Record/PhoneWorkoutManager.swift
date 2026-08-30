@@ -6,8 +6,9 @@ import UIKit
 import NosteCore
 
 /// Session tallennus puhelimella — kaverit ilman kelloa (tai kännykkä liivissä)
-/// saavat samat mittarit. Sama analytiikka, autopaussi ja kaatumissuoja kuin
-/// kellossa; syke ja HealthKit-treeni puuttuvat (ei anturia).
+/// saavat samat mittarit. Sama analytiikka, segmentointi ja kaatumissuoja kuin
+/// kellossa; syke ja HealthKit-treeni puuttuvat (ei anturia). Tallennus ei
+/// koskaan pysähdy itsestään — vain käyttäjä pysäyttää.
 @MainActor
 final class PhoneWorkoutManager: NSObject, ObservableObject {
 
@@ -27,7 +28,8 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
     @Published var rideState = LiveRideTracker.State()
     @Published var summary: SessionSummary?
     @Published var trackForSummary: [TrackPoint] = []
-    @Published var isAutoPaused = false
+    /// Senhetkinen ympäristö (vesi/maissa/siirtymä) — vain infoa, ei pysäytä mitään.
+    @Published var segmentKind: SessionSegment.Kind = .water
     @Published var notice: String?
 
     private let locationManager = CLLocationManager()
@@ -48,9 +50,9 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
     /// pumppu lasketaan vain vauhdissa — uinnin käsivedot eivät ole pumppuja.
     private var gatedSpeed: Double = -1
     private var rideTracker = LiveRideTracker(sport: .wingFoil)
-    private var autoPause = AutoPauseController(sport: .wingFoil)
+    private var segmentTracker = SegmentTracker(sport: .wingFoil)
+    private var waterMasks = WaterMaskIndex(masks: [])
     private var lastGoodLocation: CLLocation?
-    private var startAnchor: CLLocation?
 
     /// Kesken jäänyt sessio edellisestä käynnistyksestä (näytetään talletettavaksi).
     @Published var recoveredPayload: WatchSync.SessionPayload?
@@ -77,13 +79,13 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
         motionLock.lock(); motionSamples = []; pumpDetector = PumpDetector(); motionLock.unlock()
         rideTracker = LiveRideTracker(sport: sport)
         rideState = rideTracker.current
-        autoPause = AutoPauseController(sport: sport)
-        isAutoPaused = false
+        segmentTracker = SegmentTracker(sport: sport)
+        waterMasks = WaterMaskIndex(masks: PhoneWaterMasks.loadAll())
+        segmentKind = .water
         livePumpCount = 0
         liveDistance = 0
         currentSpeed = 0
         lastGoodLocation = nil
-        startAnchor = nil
         pausedTotal = 0
         pausedAt = nil
         startDate = Date()
@@ -106,14 +108,12 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
 
     func pause() {
         guard phase == .running else { return }
-        beginPause(automatic: false)
+        beginPause()
         locationManager.stopUpdatingLocation()
-        autoPause.manualPause(t: Date().timeIntervalSince(startDate))
     }
 
     func resume() {
         guard phase == .paused else { return }
-        autoPause.manualResume()
         endPause()
         locationManager.startUpdatingLocation()
     }
@@ -124,7 +124,6 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
             pausedTotal += Date().timeIntervalSince(pausedAt)
         }
         phase = .ended
-        isAutoPaused = false
         timer?.cancel()
         locationManager.stopUpdatingLocation()
         motionManager.stopDeviceMotionUpdates()
@@ -134,7 +133,11 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
         let motion = motionSamples
         motionLock.unlock()
 
-        summary = SessionAnalyzer.summarize(sport: sport, startDate: startDate, points: trackPoints, motion: motion)
+        let segments = segmentTracker.snapshot(at: trackPoints.last?.t ?? 0)
+        summary = SessionAnalyzer.summarize(
+            sport: sport, startDate: startDate, points: trackPoints, motion: motion,
+            segments: segments.isEmpty ? nil : segments
+        )
         trackForSummary = trackPoints
         SessionRecovery.clear()
     }
@@ -147,11 +150,10 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
         notice = nil
     }
 
-    // MARK: - Paussit (sama malli kuin kellossa)
+    // MARK: - Paussit (vain käyttäjän omat — sama malli kuin kellossa)
 
-    private func beginPause(automatic: Bool) {
+    private func beginPause() {
         phase = .paused
-        isAutoPaused = automatic
         pausedAt = Date()
         currentSpeed = 0
         motionManager.stopDeviceMotionUpdates()
@@ -162,32 +164,8 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
             pausedTotal += Date().timeIntervalSince(pausedAt)
         }
         pausedAt = nil
-        isAutoPaused = false
         startMotion()
         phase = .running
-    }
-
-    private func handleAutoPauseEvent(_ event: AutoPauseController.Event) {
-        switch event {
-        case .none:
-            break
-        case .pause(let nearStart):
-            guard phase == .running else { break }
-            beginPause(automatic: true)
-            notice = nearStart
-                ? "Autopaussi lähtöpaikalla — jatka, jos sessio jatkuu."
-                : "Autopaussi — liike jatkaa automaattisesti."
-        case .resume:
-            guard phase == .paused, isAutoPaused else { break }
-            endPause()
-            notice = nil
-        case .endSession(let reason):
-            guard phase == .paused || phase == .running else { break }
-            notice = reason == .drivingDetected
-                ? "Sessio päätettiin: liikkumisnopeus ei ollut enää lajille mahdollinen (autoilu?)."
-                : "Sessio päätettiin: paussi kesti yli 20 minuuttia."
-            end()
-        }
     }
 
     private func startTimer() {
@@ -204,49 +182,50 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
                 self.motionLock.lock()
                 let strokes = self.pumpDetector.currentStrokeTimes
                 self.motionLock.unlock()
+                let segments = self.segmentTracker.snapshot(at: self.trackPoints.last?.t ?? 0)
                 SessionRecovery.save(SessionRecovery.State(
                     sport: self.sport,
                     startDate: self.startDate,
                     points: self.trackPoints,
-                    strokeTimes: strokes
+                    strokeTimes: strokes,
+                    segments: segments.isEmpty ? nil : segments
                 ))
             }
         }
     }
 
     fileprivate func handle(locations: [CLLocation]) {
-        guard phase == .running || (phase == .paused && isAutoPaused) else { return }
+        // Käynnissä oleva sessio tallentaa AINA — vain käyttäjän oma paussi
+        // (GPS pois) keskeyttää keruun.
+        guard phase == .running else { return }
         for location in locations {
             let t = location.timestamp.timeIntervalSince(startDate)
             guard t >= 0 else { continue }
             let speed = location.speed
             let accurate = location.horizontalAccuracy >= 0 && location.horizontalAccuracy <= 30
-            if accurate && startAnchor == nil {
-                startAnchor = location
-            }
 
-            if phase == .running {
-                trackPoints.append(TrackPoint(
-                    t: t,
-                    latitude: location.coordinate.latitude,
-                    longitude: location.coordinate.longitude,
-                    speed: speed,
-                    horizontalAccuracy: location.horizontalAccuracy
-                ))
-                currentSpeed = max(0, speed)
-                motionLock.lock(); gatedSpeed = speed; motionLock.unlock()
-                if accurate {
-                    if let previous = lastGoodLocation, max(0, speed) >= 1.0 {
-                        liveDistance += location.distance(from: previous)
-                    }
-                    lastGoodLocation = location
+            trackPoints.append(TrackPoint(
+                t: t,
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude,
+                speed: speed,
+                horizontalAccuracy: location.horizontalAccuracy
+            ))
+            currentSpeed = max(0, speed)
+            motionLock.lock(); gatedSpeed = speed; motionLock.unlock()
+            if accurate {
+                if let previous = lastGoodLocation, max(0, speed) >= 1.0 {
+                    liveDistance += location.distance(from: previous)
                 }
-                rideState = rideTracker.add(t: t, speed: speed)
+                lastGoodLocation = location
             }
+            rideState = rideTracker.add(t: t, speed: speed)
 
-            let distanceFromStart = startAnchor.map { location.distance(from: $0) } ?? -1
-            handleAutoPauseEvent(autoPause.add(t: t, speed: speed, distanceFromStart: distanceFromStart))
-            if phase == .ended { return }
+            let isWater = accurate ? waterMasks.isWater(
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude
+            ) : nil
+            segmentKind = segmentTracker.add(t: t, speed: max(0, speed), isWater: isWater)
         }
     }
 

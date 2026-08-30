@@ -18,19 +18,26 @@ struct MapTab: View {
 
     private var layer: MapLayer { MapLayer(rawValue: layerRaw) ?? .standard }
 
-    /// Maastotiilien lähde: oma palvelin > suora MML > ei saatavilla.
+    /// Maastotiilet: oma palvelin > suora MML-avain > sisäänrakennettu palvelin.
+    /// Karttatasot toimivat siis ilman mitään asetuksia.
     private var terrainTemplate: String? {
         if let server = ServerSettings.config(base: serverBase, token: serverToken) {
             return ServerSettings.tileTemplate(layer: "terrain", server: server)
         }
-        return mmlApiKey.isEmpty ? nil : TileOverlays.terrainTemplate(apiKey: mmlApiKey)
+        if !mmlApiKey.isEmpty {
+            return TileOverlays.terrainTemplate(apiKey: mmlApiKey)
+        }
+        return ServerSettings.tileTemplate(layer: "terrain", server: ServerSettings.builtIn)
     }
 
     private var marineTemplateResolved: String {
         if let server = ServerSettings.config(base: serverBase, token: serverToken) {
             return ServerSettings.tileTemplate(layer: "marine", server: server)
         }
-        return marineTemplate
+        if marineTemplate != TileOverlays.defaultMarineTemplate {
+            return marineTemplate
+        }
+        return ServerSettings.tileTemplate(layer: "marine", server: ServerSettings.builtIn)
     }
 
     var body: some View {

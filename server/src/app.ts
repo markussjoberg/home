@@ -72,14 +72,21 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
 
   app.get("/healthz", (c) => c.json({ ok: true }));
 
-  // Kaikki /api-reitit vaativat tokenin (headerissa tai ?token=, tiiliosoitteita varten).
+  // Kaikki /api-reitit vaativat tokenin (headerissa tai ?token=, tiiliosoitteita
+  // varten). Kaksi tasoa: NOSTE_TOKEN = kaikki reitit; CLIENT_TOKEN (appiin
+  // sisäänrakennettu) = vain lukureitit — synkka ja kelivahti pysyvät yksityisinä.
+  // Mahdollinen premium-rajaus tehdään myöhemmin tähän väliin.
+  const readOnlyPaths = /^\/api\/(tiles|forecast|observation|openmeteo|spotmeta|places)\b/;
   app.use("/api/*", async (c, next) => {
     if (!config.apiToken) {
       return c.json({ error: "NOSTE_TOKEN puuttuu palvelimen ympäristöstä" }, 503);
     }
     const header = c.req.header("authorization");
     const token = header ? header.replace(/^Bearer\s+/i, "") : c.req.query("token");
-    if (token !== config.apiToken) {
+    const readOnly = readOnlyPaths.test(c.req.path);
+    const allowed = token === config.apiToken
+      || (readOnly && !!config.clientToken && token === config.clientToken);
+    if (!allowed) {
       return c.json({ error: "unauthorized" }, 401);
     }
     await next();

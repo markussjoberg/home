@@ -56,6 +56,27 @@ public enum WatchSync {
         }
     }
 
+    /// Puhelin → kello: vesialuemaski (JSON-tiedosto + metadata). Kello käyttää
+    /// maskia session segmentointiin ("olenko vesialueella") täysin offline.
+    public enum WaterMaskFile {
+        public static let typeValue = "watermask"
+        public static let spotIDKey = "spotID"
+        public static let zoomKey = "zoom"
+
+        public static func metadata(spotID: UUID, zoom: Int) -> [String: Any] {
+            ["type": typeValue, spotIDKey: spotID.uuidString, zoomKey: zoom]
+        }
+
+        public static func decode(_ metadata: [String: Any]) -> (spotID: UUID, zoom: Int)? {
+            guard metadata["type"] as? String == typeValue,
+                  let idString = metadata[spotIDKey] as? String,
+                  let spotID = UUID(uuidString: idString),
+                  let zoom = metadata[zoomKey] as? Int
+            else { return nil }
+            return (spotID, zoom)
+        }
+    }
+
     /// Kello → puhelin -tuuliarvosana (transferUserInfo-avaimet). Sessio
     /// yksilöidään alkuhetkellä, koska arvosana annetaan siirron jälkeen.
     public enum RatingMessage {

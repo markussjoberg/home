@@ -30,8 +30,20 @@ public enum SessionAnalyzer {
         heartRate: [HeartRateSample] = [],
         config: Config = Config(),
         rideConfig: RideSegmenter.Config? = nil,
-        pumpConfig: PumpDetector.Config = PumpDetector.Config()
+        pumpConfig: PumpDetector.Config = PumpDetector.Config(),
+        segments: [SessionSegment]? = nil
     ) -> SessionSummary {
+        // Segmentit: mittarit lasketaan vain vesijaksoista, mutta kesto ja
+        // tallennettu jälki kattavat aina koko session. Ilman segmenttejä
+        // (vanha data / ei maskia) kaikki on vettä.
+        if let segments, segments.contains(where: { $0.kind != .water }) {
+            return summarizeSegmented(
+                sport: sport, startDate: startDate, points: points, motion: motion,
+                heartRate: heartRate, config: config, rideConfig: rideConfig,
+                pumpConfig: pumpConfig, segments: segments
+            )
+        }
+
         let duration = points.count >= 2 ? points.last!.t - points.first!.t : 0
         let speedCap = config.maxPlausibleSpeed ?? sport.maxPlausibleSpeed
 
@@ -117,7 +129,127 @@ public enum SessionAnalyzer {
             pumps: pumps,
             heartRate: HeartRateStats.from(heartRate),
             flights: flights,
-            speedRecords: SpeedRecords.compute(points: points, maxPlausibleSpeed: speedCap)
+            speedRecords: SpeedRecords.compute(points: points, maxPlausibleSpeed: speedCap),
+            segments: segments
+        )
+    }
+
+    /// Segmentoitu analyysi: jokainen vesijakso analysoidaan omana kokonaisuutenaan
+    /// (aikaikkunat eivät koskaan ylitä maissa-/siirtymäjaksoa) ja tulokset
+    /// yhdistetään. Näin esim. nopein 100 m ei voi syntyä autolla ajaen.
+    private static func summarizeSegmented(
+        sport: Sport,
+        startDate: Date,
+        points: [TrackPoint],
+        motion: [MotionSample],
+        heartRate: [HeartRateSample],
+        config: Config,
+        rideConfig: RideSegmenter.Config?,
+        pumpConfig: PumpDetector.Config,
+        segments: [SessionSegment]
+    ) -> SessionSummary {
+        let duration = points.count >= 2 ? points.last!.t - points.first!.t : 0
+        let windows = segments.filter { $0.kind == .water }
+
+        var distance = 0.0
+        var maxSpeed = 0.0
+        var movingSum = 0.0
+        var movingWeight = 0.0
+        var rideSegments: [RideSegment] = []
+        var attemptTotal = 0
+        var hasAttempts = false
+        var strokeTimes: [TimeInterval] = []
+        var bouts: [RideSegment] = []
+        var swimTotal: TimeInterval = 0
+        var hasSwim = false
+        var records: SpeedRecords?
+        var waterPoints: [TrackPoint] = []
+        let speedCap = config.maxPlausibleSpeed ?? sport.maxPlausibleSpeed
+
+        for window in windows {
+            let windowPoints = points.filter { $0.t >= window.start && $0.t <= window.end }
+            let windowMotion = motion.filter { $0.t >= window.start && $0.t <= window.end }
+            guard windowPoints.count >= 2 else { continue }
+            let part = summarize(
+                sport: sport, startDate: startDate, points: windowPoints,
+                motion: windowMotion, heartRate: [], config: config,
+                rideConfig: rideConfig, pumpConfig: pumpConfig
+            )
+            distance += part.distance
+            maxSpeed = max(maxSpeed, part.maxSpeed)
+            if part.averageMovingSpeed > 0 {
+                // Painotus jakson kestolla — riittävä approksimaatio liikeajalle.
+                movingSum += part.averageMovingSpeed * part.duration
+                movingWeight += part.duration
+            }
+            rideSegments.append(contentsOf: part.rides.segments)
+            if let attempts = part.rides.attemptCount {
+                attemptTotal += attempts
+                hasAttempts = true
+            }
+            if let pumps = part.pumps {
+                strokeTimes.append(contentsOf: pumps.strokeTimes)
+                bouts.append(contentsOf: pumps.bouts)
+                if let swim = pumps.swimTime {
+                    swimTotal += swim
+                    hasSwim = true
+                }
+            }
+            if let partRecords = part.speedRecords {
+                records = SpeedRecords(
+                    best2s: max(records?.best2s ?? 0, partRecords.best2s),
+                    best10s: max(records?.best10s ?? 0, partRecords.best10s),
+                    best100m: max(records?.best100m ?? 0, partRecords.best100m)
+                )
+            }
+            waterPoints.append(contentsOf: windowPoints)
+        }
+
+        let totalRideDuration = rideSegments.reduce(0) { $0 + $1.duration }
+        let totalRideDistance = rideSegments.reduce(0) { $0 + $1.distance }
+        let rides = RideAnalysis(
+            segments: rideSegments,
+            totalDuration: totalRideDuration,
+            totalDistance: totalRideDistance,
+            longestByDuration: rideSegments.max { $0.duration < $1.duration },
+            averageSpeed: totalRideDuration > 0 ? totalRideDistance / totalRideDuration : 0,
+            attemptCount: hasAttempts ? attemptTotal : nil
+        )
+
+        var pumps: PumpAnalysis?
+        if sport.countsPumps {
+            var merged = PumpDetector.analysis(fromStrokeTimes: strokeTimes.sorted(), config: pumpConfig)
+            merged.swimTime = hasSwim ? swimTotal : nil
+            pumps = merged
+        }
+
+        // Syke: vesi- ja maissajaksot kuuluvat sessioon, siirtymä (autoilu) ei.
+        let transitWindows = segments.filter { $0.kind == .transit }
+        let sessionHeartRate = heartRate.filter { sample in
+            !transitWindows.contains { sample.t >= $0.start && sample.t <= $0.end }
+        }
+
+        let flights = rides.segments.isEmpty ? nil : FlightDetail.compute(
+            segments: rides.segments,
+            points: waterPoints,
+            strokeTimes: pumps?.strokeTimes ?? [],
+            maxPlausibleSpeed: speedCap,
+            bouts: pumps?.bouts ?? []
+        )
+
+        return SessionSummary(
+            sport: sport,
+            startDate: startDate,
+            duration: duration,
+            distance: distance,
+            maxSpeed: maxSpeed,
+            averageMovingSpeed: movingWeight > 0 ? movingSum / movingWeight : 0,
+            rides: rides,
+            pumps: pumps,
+            heartRate: HeartRateStats.from(sessionHeartRate),
+            flights: flights,
+            speedRecords: records,
+            segments: segments
         )
     }
 

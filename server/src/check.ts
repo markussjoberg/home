@@ -30,7 +30,7 @@ function loadDotEnv(path = ".env"): void {
 const LAT = 60.15;
 const LON = 24.95;
 // Sama piste tiilikoordinaatteina, zoom 12 (EPSG:3857).
-const TILE = { z: 12, x: 2331, y: 1185 };
+const TILE = { z: 12, x: 2331, y: 1186 };
 
 let failures = 0;
 

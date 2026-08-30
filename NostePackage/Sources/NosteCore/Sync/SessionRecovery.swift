@@ -11,14 +11,18 @@ public enum SessionRecovery {
         public var points: [TrackPoint]
         public var strokeTimes: [TimeInterval]
         public var heartRate: [HeartRateSample]?
+        /// Segmentit autosaven hetkeen asti (vanha talletus: nil = kaikki vettä).
+        public var segments: [SessionSegment]?
 
         public init(sport: Sport, startDate: Date, points: [TrackPoint],
-                    strokeTimes: [TimeInterval], heartRate: [HeartRateSample]? = nil) {
+                    strokeTimes: [TimeInterval], heartRate: [HeartRateSample]? = nil,
+                    segments: [SessionSegment]? = nil) {
             self.sport = sport
             self.startDate = startDate
             self.points = points
             self.strokeTimes = strokeTimes
             self.heartRate = heartRate
+            self.segments = segments
         }
     }
 
@@ -49,17 +53,28 @@ public enum SessionRecovery {
             sport: state.sport,
             startDate: state.startDate,
             points: state.points,
-            heartRate: state.heartRate ?? []
+            heartRate: state.heartRate ?? [],
+            segments: state.segments
         )
         if state.sport.countsPumps {
-            let pumps = PumpDetector.analysis(fromStrokeTimes: state.strokeTimes)
+            // Vain vesijaksojen pumput (siirtymän tärinä ei ole pumppausta).
+            let strokes: [TimeInterval]
+            if let segments = state.segments, segments.contains(where: { $0.kind != .water }) {
+                let windows = segments.filter { $0.kind == .water }
+                strokes = state.strokeTimes.filter { t in
+                    windows.contains { t >= $0.start && t <= $0.end }
+                }
+            } else {
+                strokes = state.strokeTimes
+            }
+            let pumps = PumpDetector.analysis(fromStrokeTimes: strokes)
             summary.pumps = pumps
             // Suorituskohtaiset pumppumäärät talletetuista pumppuhetkistä.
             if !summary.rides.segments.isEmpty {
                 summary.flights = FlightDetail.compute(
                     segments: summary.rides.segments,
                     points: state.points,
-                    strokeTimes: state.strokeTimes,
+                    strokeTimes: strokes,
                     maxPlausibleSpeed: state.sport.maxPlausibleSpeed,
                     bouts: pumps.bouts
                 )

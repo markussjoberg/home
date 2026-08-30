@@ -7,7 +7,7 @@ final class WebMercatorTests: XCTestCase {
         // Helsingin edusta z12 — sama ankkuri kuin palvelimen tiilitesteissä.
         let tile = WebMercator.tileXY(latitude: 60.15, longitude: 24.95, zoom: 12)
         XCTAssertEqual(Int(floor(tile.x)), 2331)
-        XCTAssertEqual(Int(floor(tile.y)), 1185)
+        XCTAssertEqual(Int(floor(tile.y)), 1186)
     }
 
     func testMetersPerPixel() {
