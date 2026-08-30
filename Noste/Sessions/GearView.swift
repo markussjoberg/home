@@ -77,10 +77,10 @@ struct GearView: View {
             }
         }
         .sheet(isPresented: $showAdd) {
-            GearEditorView(record: nil)
+            GearEditorView(record: nil, catalog: catalog)
         }
         .sheet(item: $editing) { record in
-            GearEditorView(record: record)
+            GearEditorView(record: record, catalog: catalog)
         }
     }
 }
@@ -174,9 +174,12 @@ struct LappisSuggestionCard: View {
     }
 }
 
-/// Kalustoyksilön lisäys/muokkaus.
+/// Kalustoyksilön lisäys/muokkaus. Kentät voi esitäyttää Lappiksen
+/// valikoimasta — tiedot kopioidaan aina recordiin (ei viittausta katalogiin),
+/// joten kalusto säilyy vaikka malli poistuisi myynnistä.
 struct GearEditorView: View {
     let record: GearRecord?
+    var catalog: [GearCatalogItem] = []
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
@@ -188,6 +191,17 @@ struct GearEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if !catalog.isEmpty {
+                    Section {
+                        NavigationLink {
+                            CatalogPickerView(catalog: catalog, initialType: type) { item in
+                                apply(item)
+                            }
+                        } label: {
+                            Label("Valitse Lappiksen valikoimasta", systemImage: "sparkle.magnifyingglass")
+                        }
+                    }
+                }
                 Picker("Tyyppi", selection: $type) {
                     ForEach(GearType.allCases) { type in
                         Text(type.displayName).tag(type)
@@ -225,6 +239,15 @@ struct GearEditorView: View {
         .presentationDetents([.medium])
     }
 
+    /// Esitäyttö katalogista: vuosi omaan kenttäänsä, nimi ilman vuosilukua.
+    private func apply(_ item: GearCatalogItem) {
+        type = item.type
+        name = item.name.replacingOccurrences(of: #"\s*\b20\d{2}\b"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        sizeText = item.size.map { $0 == $0.rounded() ? String(Int($0)) : String($0) } ?? ""
+        yearText = item.year > 0 ? String(item.year) : ""
+    }
+
     private func save() {
         let size = Double(sizeText.replacingOccurrences(of: ",", with: "."))
         let year = Int(yearText)
@@ -237,5 +260,75 @@ struct GearEditorView: View {
             modelContext.insert(GearRecord(type: type, name: name, size: size, year: year))
         }
         try? modelContext.save()
+    }
+}
+
+/// Lappiksen valikoiman selaus esitäyttöä varten: tyyppisuodatus + haku.
+struct CatalogPickerView: View {
+    let catalog: [GearCatalogItem]
+    let onPick: (GearCatalogItem) -> Void
+    @State private var type: GearType
+    @State private var query = ""
+    @Environment(\.dismiss) private var dismiss
+
+    init(catalog: [GearCatalogItem], initialType: GearType, onPick: @escaping (GearCatalogItem) -> Void) {
+        self.catalog = catalog
+        self.onPick = onPick
+        _type = State(initialValue: initialType)
+    }
+
+    private var filtered: [GearCatalogItem] {
+        catalog
+            .filter { $0.type == type }
+            .filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }
+    }
+
+    var body: some View {
+        List {
+            Picker("Tyyppi", selection: $type) {
+                ForEach(GearType.allCases) { type in
+                    Text(type.displayName).tag(type)
+                }
+            }
+            .pickerStyle(.segmented)
+            .listRowBackground(Color.clear)
+
+            ForEach(filtered) { item in
+                Button {
+                    onPick(item)
+                    dismiss()
+                } label: {
+                    HStack(spacing: 10) {
+                        if let imageURL = item.imageURL, let url = URL(string: imageURL) {
+                            AsyncImage(url: url) { image in
+                                image.resizable().aspectRatio(contentMode: .fill)
+                            } placeholder: {
+                                Image(systemName: item.type.symbolName).foregroundStyle(.secondary)
+                            }
+                            .frame(width: 44, height: 44)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.name)
+                                .font(.subheadline)
+                                .foregroundStyle(.primary)
+                            if let size = item.size {
+                                let sizeText = size == size.rounded() ? String(Int(size)) : String(format: "%.1f", size).replacingOccurrences(of: ".", with: ",")
+                                Text("\(sizeText) \(item.type.sizeUnit)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer()
+                        Text("\(item.price) €")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .searchable(text: $query, prompt: "Hae mallia")
+        .navigationTitle("Lappiksen valikoima")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

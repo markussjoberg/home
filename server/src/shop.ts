@@ -10,12 +10,13 @@ export const LAPPIS_STORE_API = "https://lappis.fi/wp-json/wc/store/v1";
 
 /** Kategoria → kalustotyyppi. Tarkistettu Store API:sta 2026-08. */
 export const SHOP_CATEGORIES: { id: number; type: ShopItemType }[] = [
-  { id: 1454, type: "wing" },  // Uudet wingit
-  { id: 1594, type: "board" }, // Foil-laudat
-  { id: 1467, type: "foil" },  // Wingfoil hydrofoil etusiivet
+  { id: 1454, type: "wing" },     // Uudet wingit
+  { id: 2810, type: "parawing" }, // Parawingit
+  { id: 1594, type: "board" },    // Foil-laudat
+  { id: 1467, type: "foil" },     // Wingfoil hydrofoil etusiivet
 ];
 
-export type ShopItemType = "wing" | "board" | "foil";
+export type ShopItemType = "wing" | "parawing" | "board" | "foil";
 
 export interface ShopItem {
   id: string;

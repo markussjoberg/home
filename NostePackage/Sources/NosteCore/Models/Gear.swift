@@ -3,6 +3,7 @@ import Foundation
 /// Kalustotyyppi (quiver-kirjanpito ja suositukset).
 public enum GearType: String, Codable, CaseIterable, Sendable, Identifiable {
     case wing
+    case parawing
     case board
     case foil
 
@@ -11,6 +12,7 @@ public enum GearType: String, Codable, CaseIterable, Sendable, Identifiable {
     public var displayName: String {
         switch self {
         case .wing: return "Siipi"
+        case .parawing: return "Parawing"
         case .board: return "Lauta"
         case .foil: return "Foili"
         }
@@ -19,7 +21,7 @@ public enum GearType: String, Codable, CaseIterable, Sendable, Identifiable {
     /// Koon yksikkö (siivet m², laudat litraa, foilit cm²).
     public var sizeUnit: String {
         switch self {
-        case .wing: return "m²"
+        case .wing, .parawing: return "m²"
         case .board: return "l"
         case .foil: return "cm²"
         }
@@ -28,6 +30,7 @@ public enum GearType: String, Codable, CaseIterable, Sendable, Identifiable {
     public var symbolName: String {
         switch self {
         case .wing: return "wind"
+        case .parawing: return "wind.circle"
         case .board: return "surfboard"
         case .foil: return "airplane"
         }
