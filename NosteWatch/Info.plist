@@ -30,6 +30,10 @@
 	<string>Sijaintia käytetään session GPS-jäljen, nopeuden ja foiliajan mittaamiseen.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Liikeanturia käytetään pumppausten ja foiliajan tunnistamiseen.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>WKApplication</key>
 	<true/>
 	<key>WKBackgroundModes</key>
