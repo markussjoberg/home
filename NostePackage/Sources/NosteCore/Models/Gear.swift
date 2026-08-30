@@ -27,6 +27,9 @@ public enum GearType: String, Codable, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// Oman ikonisetin asset-nimi (template-PDF appien asset-katalogeissa).
+    public var assetName: String { "gear.\(rawValue)" }
+
     public var symbolName: String {
         switch self {
         case .wing: return "wind"

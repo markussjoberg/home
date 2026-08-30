@@ -134,10 +134,9 @@ private struct SessionRow: View {
 
     var body: some View {
         HStack {
-            Image(systemName: record.sport.symbolName)
-                .font(.title3)
-                .foregroundStyle(.cyan)
-                .frame(width: 32)
+            SportIcon(sport: record.sport, size: 28)
+                .foregroundStyle(.tint)
+                .frame(width: 36)
             VStack(alignment: .leading) {
                 Text(record.sport.displayName).font(.headline)
                 Text(record.startDate, format: .dateTime.day().month().hour().minute())

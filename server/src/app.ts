@@ -188,8 +188,10 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
       return c.json({ error: "lat ja lon vaaditaan" }, 400);
     }
+    // Kartan selailuun säädettävä säde (spottinäkymä käyttää oletusta).
+    const radius = Math.min(6000, Math.max(300, Number(c.req.query("radius")) || 1500));
     try {
-      const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+      const key = `${lat.toFixed(3)},${lon.toFixed(3)},r${radius}`;
       const cached = placesCache.get(key);
       if (cached) return c.json(cached);
 
@@ -200,7 +202,7 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
         ? entry.places
         : null;
       if (!osm) {
-        osm = await fetchOsmPlaces(lat, lon, fetchImpl);
+        osm = await fetchOsmPlaces(lat, lon, fetchImpl, radius);
         if (osm.length > 0) {
           osmCache[key] = { fetchedAt: now().toISOString(), places: osm };
           await store.write("places-osm", osmCache);
@@ -210,7 +212,7 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
       // Lipas: peilistä; jos peiliä ei ole saatu kertaakaan, suoraan rajapinnasta.
       const mirror = await lipasMirror.current();
       const lipas = mirror
-        ? lipasNearby(mirror, lat, lon)
+        ? lipasNearby(mirror, lat, lon, Math.max(3000, radius))
         : await fetchLipasPlaces(lat, lon, config.lipasBase, fetchImpl);
 
       const all = [...osm, ...lipas].sort((a, b) => a.distanceM - b.distanceM);

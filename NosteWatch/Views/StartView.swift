@@ -20,8 +20,9 @@ struct StartView: View {
                     Button {
                         workout.start(sport: sport)
                     } label: {
-                        Label(sport.displayName, systemImage: sport.symbolName)
-                            .font(.headline)
+                        Label { Text(sport.displayName).font(.system(.headline, design: .rounded)) } icon: {
+                            SportIcon(sport: sport, size: 24).foregroundStyle(.tint)
+                        }
                     }
                 }
             } header: {

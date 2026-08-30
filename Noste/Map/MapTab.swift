@@ -16,7 +16,51 @@ struct MapTab: View {
 
     @State private var editingSpot: SpotData?
 
+    // Rantainfra-kerros: OSM + Lipas palvelimen kautta, haku näkyvältä alueelta.
+    @AppStorage("mapPlacesEnabled") private var placesEnabled = false
+    @AppStorage("mapPlacesFilter") private var placesFilterRaw = ""
+    @State private var mapPlaces: [ServerClient.Place] = []
+    @State private var placesCache: [String: [ServerClient.Place]] = [:]
+    @State private var selectedPlace: ServerClient.Place?
+    @State private var showPlaceFilter = false
+    @State private var fetchTask: Task<Void, Never>?
+    @State private var zoomedOut = false
+
     private var layer: MapLayer { MapLayer(rawValue: layerRaw) ?? .standard }
+
+    private var placesFilter: Set<String> {
+        get { Set(placesFilterRaw.split(separator: "|").map(String.init)) }
+    }
+
+    private var visiblePlaces: [ServerClient.Place] {
+        guard placesEnabled else { return [] }
+        let filter = placesFilter
+        return filter.isEmpty ? mapPlaces : mapPlaces.filter { filter.contains($0.category) }
+    }
+
+    /// Hakee rantainfran näkyvän alueen keskeltä (viive perää nopeaa panorointia).
+    private func regionChanged(_ region: MKCoordinateRegion) {
+        guard placesEnabled else { return }
+        zoomedOut = region.span.latitudeDelta > 0.45
+        guard !zoomedOut else { return }
+        fetchTask?.cancel()
+        fetchTask = Task {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            let radius = min(6000.0, max(1500.0, region.span.latitudeDelta * 111_000 / 2))
+            let key = String(format: "%.2f,%.2f,%.0f", region.center.latitude, region.center.longitude, radius)
+            if let cached = placesCache[key] {
+                mapPlaces = cached
+                return
+            }
+            if let all = await ServerClient.shared.placesAll(
+                latitude: region.center.latitude, longitude: region.center.longitude, radius: radius
+            ), !Task.isCancelled {
+                placesCache[key] = all
+                mapPlaces = all
+            }
+        }
+    }
 
     /// Maastotiilet: oma palvelin > suora MML-avain > sisäänrakennettu palvelin.
     /// Karttatasot toimivat siis ilman mitään asetuksia.
@@ -48,6 +92,7 @@ struct MapTab: View {
                     layer: layer,
                     terrainTemplate: terrainTemplate,
                     marineTemplate: marineTemplateResolved,
+                    places: visiblePlaces,
                     onLongPress: { coordinate in
                         editingSpot = SpotData(
                             name: "",
@@ -57,16 +102,23 @@ struct MapTab: View {
                     },
                     onSelectSpot: { spot in
                         editingSpot = spot
-                    }
+                    },
+                    onSelectPlace: { place in
+                        selectedPlace = place
+                    },
+                    onRegionChange: regionChanged
                 )
                 .ignoresSafeArea(edges: .top)
 
                 VStack(spacing: 8) {
-                    if layer == .terrain && terrainTemplate == nil {
-                        Text("Maastokartta vaatii oman palvelimen tai MML:n API-avaimen — lisää asetuksista.")
-                            .font(.footnote)
-                            .padding(8)
-                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    if let place = selectedPlace {
+                        PlaceCard(place: place) { selectedPlace = nil }
+                    } else if placesEnabled && zoomedOut {
+                        Text("Lähennä karttaa nähdäksesi rantainfran")
+                            .font(.caption)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(.thinMaterial, in: Capsule())
                     }
                     Picker("Taso", selection: $layerRaw) {
                         ForEach(MapLayer.allCases) { layer in
@@ -80,6 +132,44 @@ struct MapTab: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(.bottom, 8)
+            }
+            .overlay(alignment: .topTrailing) {
+                VStack(spacing: 10) {
+                    Button {
+                        placesEnabled.toggle()
+                        if !placesEnabled {
+                            mapPlaces = []
+                            selectedPlace = nil
+                        }
+                    } label: {
+                        Image(systemName: placesEnabled ? "beach.umbrella.fill" : "beach.umbrella")
+                            .font(.title3)
+                            .frame(width: 40, height: 40)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                            .foregroundStyle(placesEnabled ? Color.accentColor : .secondary)
+                    }
+                    if placesEnabled {
+                        Button {
+                            showPlaceFilter = true
+                        } label: {
+                            Image(systemName: placesFilter.isEmpty
+                                  ? "line.3.horizontal.decrease.circle"
+                                  : "line.3.horizontal.decrease.circle.fill")
+                                .font(.title3)
+                                .frame(width: 40, height: 40)
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                                .foregroundStyle(placesFilter.isEmpty ? .secondary : Color.accentColor)
+                        }
+                    }
+                }
+                .padding(.trailing, 12)
+                .padding(.top, 4)
+            }
+            .sheet(isPresented: $showPlaceFilter) {
+                PlaceFilterSheet(selected: Binding(
+                    get: { placesFilter },
+                    set: { placesFilterRaw = $0.sorted().joined(separator: "|") }
+                ))
             }
             .sheet(item: $editingSpot) { spot in
                 SpotEditorView(draft: spot) { action in
@@ -140,8 +230,12 @@ struct SpotMapView: UIViewRepresentable {
     /// nil = maastotiilille ei ole lähdettä (ei palvelinta eikä MML-avainta).
     var terrainTemplate: String?
     var marineTemplate: String
+    /// Rantainfra-kerroksen kohteet (tyhjä = kerros pois).
+    var places: [ServerClient.Place] = []
     var onLongPress: (CLLocationCoordinate2D) -> Void
     var onSelectSpot: (SpotData) -> Void
+    var onSelectPlace: (ServerClient.Place?) -> Void = { _ in }
+    var onRegionChange: (MKCoordinateRegion) -> Void = { _ in }
 
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
@@ -162,6 +256,16 @@ struct SpotMapView: UIViewRepresentable {
         context.coordinator.parent = self
         updateOverlay(map, context: context)
         updateAnnotations(map)
+        updatePlaceAnnotations(map, context: context)
+    }
+
+    /// Rantainfran merkit vaihdetaan könttänä, kun haettu joukko vaihtuu.
+    private func updatePlaceAnnotations(_ map: MKMapView, context: Context) {
+        let signature = "\(places.count):\(places.first.map { "\($0.latitude),\($0.longitude)" } ?? "")"
+        guard signature != context.coordinator.placesSignature else { return }
+        context.coordinator.placesSignature = signature
+        map.removeAnnotations(map.annotations.compactMap { $0 as? PlaceAnnotation })
+        map.addAnnotations(places.map(PlaceAnnotation.init))
     }
 
     private func updateOverlay(_ map: MKMapView, context: Context) {
@@ -210,9 +314,34 @@ struct SpotMapView: UIViewRepresentable {
     final class Coordinator: NSObject, MKMapViewDelegate {
         var parent: SpotMapView
         var overlaySignature = ""
+        var placesSignature = ""
 
         init(parent: SpotMapView) {
             self.parent = parent
+        }
+
+        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            parent.onRegionChange(mapView.region)
+        }
+
+        func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
+            if let cluster = view.annotation as? MKClusterAnnotation {
+                // Klusterin napautus: zoomaa sisään.
+                var region = mapView.region
+                region.center = cluster.coordinate
+                region.span.latitudeDelta /= 3
+                region.span.longitudeDelta /= 3
+                mapView.setRegion(region, animated: true)
+                mapView.deselectAnnotation(cluster, animated: false)
+            } else if let place = view.annotation as? PlaceAnnotation {
+                parent.onSelectPlace(place.place)
+            }
+        }
+
+        func mapView(_ mapView: MKMapView, didDeselect view: MKAnnotationView) {
+            if view.annotation is PlaceAnnotation {
+                parent.onSelectPlace(nil)
+            }
         }
 
         @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
@@ -229,16 +358,40 @@ struct SpotMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
-            guard let spotAnnotation = annotation as? SpotAnnotation else { return nil }
-            let identifier = "spot"
-            let view = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView)
-                ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
-            view.annotation = annotation
-            view.canShowCallout = true
-            view.markerTintColor = spotAnnotation.spot.isFavorite ? .systemOrange : .systemTeal
-            view.glyphImage = UIImage(systemName: spotAnnotation.spot.waterType == .sea ? "water.waves" : "drop")
-            view.rightCalloutAccessoryView = UIButton(type: .detailDisclosure)
-            return view
+            if let spotAnnotation = annotation as? SpotAnnotation {
+                let identifier = "spot"
+                let view = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView)
+                    ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                view.annotation = annotation
+                view.canShowCallout = true
+                view.markerTintColor = spotAnnotation.spot.isFavorite ? .systemOrange : .systemTeal
+                view.glyphImage = UIImage(systemName: spotAnnotation.spot.waterType == .sea ? "water.waves" : "drop")
+                view.rightCalloutAccessoryView = UIButton(type: .detailDisclosure)
+                view.displayPriority = .required
+                return view
+            }
+            if let placeAnnotation = annotation as? PlaceAnnotation {
+                let identifier = "place"
+                let view = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView)
+                    ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                view.annotation = annotation
+                view.canShowCallout = false
+                view.clusteringIdentifier = "place"
+                view.markerTintColor = PlaceStyle.color(placeAnnotation.place.category)
+                view.glyphImage = UIImage(systemName: PlaceStyle.symbol(placeAnnotation.place.category))
+                view.displayPriority = .defaultLow
+                return view
+            }
+            if annotation is MKClusterAnnotation {
+                let identifier = "placeCluster"
+                let view = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView)
+                    ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                view.annotation = annotation
+                view.canShowCallout = false
+                view.markerTintColor = .systemBlue
+                return view
+            }
+            return nil
         }
 
         func mapView(_ mapView: MKMapView, annotationView view: MKAnnotationView, calloutAccessoryControlTapped control: UIControl) {

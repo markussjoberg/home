@@ -52,14 +52,28 @@ struct RecordSessionView: View {
                 }
             }
             Section {
-                ForEach(Sport.allCases) { sport in
-                    Button {
-                        workout.start(sport: sport)
-                    } label: {
-                        Label(sport.displayName, systemImage: sport.symbolName)
-                            .font(.headline)
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                    ForEach(Sport.allCases) { sport in
+                        Button {
+                            workout.start(sport: sport)
+                        } label: {
+                            VStack(spacing: 10) {
+                                SportIcon(sport: sport, size: 44)
+                                    .foregroundStyle(.tint)
+                                Text(sport.displayName)
+                                    .font(.system(.headline, design: .rounded))
+                                    .foregroundStyle(.primary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 18)
+                            .background(Color(.secondarySystemGroupedBackground),
+                                        in: RoundedRectangle(cornerRadius: 16))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets())
             } header: {
                 Text("Aloita sessio")
             } footer: {
@@ -187,8 +201,9 @@ struct RecordSessionView: View {
                                 }
                             } label: {
                                 HStack {
-                                    Label(item.displayName, systemImage: item.type.symbolName)
-                                        .foregroundStyle(.primary)
+                                    Label { Text(item.displayName).foregroundStyle(.primary) } icon: {
+                                        GearIcon(type: item.type, size: 24).foregroundStyle(.tint)
+                                    }
                                     Spacer()
                                     if selectedGear.contains(item.id) {
                                         Image(systemName: "checkmark.circle.fill")

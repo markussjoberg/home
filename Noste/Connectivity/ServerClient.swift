@@ -61,6 +61,7 @@ struct ServerClient {
 
     private struct PlacesResponse: Codable {
         var nearest: [Place]
+        var all: [Place]?
     }
 
     static let shared = ServerClient()
@@ -124,6 +125,20 @@ struct ServerClient {
               let decoded = try? JSONDecoder().decode(PlacesResponse.self, from: data)
         else { return nil }
         return decoded.nearest
+    }
+
+    /// KAIKKI rantapalvelut säteellä — kartan rantainfra-kerrokselle.
+    func placesAll(latitude: Double, longitude: Double, radius: Double) async -> [Place]? {
+        guard let request = request(path: "api/places", query: [
+            URLQueryItem(name: "lat", value: String(format: "%.4f", latitude)),
+            URLQueryItem(name: "lon", value: String(format: "%.4f", longitude)),
+            URLQueryItem(name: "radius", value: String(Int(radius)))
+        ]) else { return nil }
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let decoded = try? JSONDecoder().decode(PlacesResponse.self, from: data)
+        else { return nil }
+        return decoded.all ?? decoded.nearest
     }
 
     /// Lappis-katalogi kalustosuosituksiin (palvelin välimuistittaa kaupan

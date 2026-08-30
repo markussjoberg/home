@@ -50,8 +50,9 @@ struct GearView: View {
                                 Button {
                                     editing = item
                                 } label: {
-                                    Label(item.displayName, systemImage: type.symbolName)
-                                        .foregroundStyle(.primary)
+                                    Label { Text(item.displayName).foregroundStyle(.primary) } icon: {
+                                        GearIcon(type: type, size: 24).foregroundStyle(.tint)
+                                    }
                                 }
                             }
                             .onDelete { offsets in
@@ -107,8 +108,9 @@ struct GearTagSection: View {
                         toggle(item.id)
                     } label: {
                         HStack {
-                            Label(item.displayName, systemImage: item.type.symbolName)
-                                .foregroundStyle(.primary)
+                            Label { Text(item.displayName).foregroundStyle(.primary) } icon: {
+                                GearIcon(type: item.type, size: 24).foregroundStyle(.tint)
+                            }
                             Spacer()
                             if record.gearIDs?.contains(item.id) == true {
                                 Image(systemName: "checkmark.circle.fill")
@@ -149,13 +151,13 @@ struct LappisSuggestionCard: View {
                         AsyncImage(url: url) { image in
                             image.resizable().aspectRatio(contentMode: .fill)
                         } placeholder: {
-                            Image(systemName: suggestion.item.type.symbolName)
+                            GearIcon(type: suggestion.item.type, size: 30)
                                 .foregroundStyle(.orange)
                         }
                         .frame(width: 52, height: 52)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                     } else {
-                        Image(systemName: suggestion.item.type.symbolName)
+                        GearIcon(type: suggestion.item.type, size: 26)
                             .foregroundStyle(.orange)
                     }
                     Text(suggestion.item.name)
@@ -303,7 +305,7 @@ struct CatalogPickerView: View {
                             AsyncImage(url: url) { image in
                                 image.resizable().aspectRatio(contentMode: .fill)
                             } placeholder: {
-                                Image(systemName: item.type.symbolName).foregroundStyle(.secondary)
+                                GearIcon(type: item.type, size: 24).foregroundStyle(.secondary)
                             }
                             .frame(width: 44, height: 44)
                             .clipShape(RoundedRectangle(cornerRadius: 8))

@@ -14,7 +14,9 @@ struct SummaryView: View {
                         .foregroundStyle(.orange)
                 }
                 if let summary = workout.summary {
-                    Label(summary.sport.displayName, systemImage: summary.sport.symbolName)
+                    Label { Text(summary.sport.displayName) } icon: {
+                        SportIcon(sport: summary.sport, size: 20).foregroundStyle(.tint)
+                    }
                         .font(.headline)
 
                     row("Kesto", Format.duration(summary.duration))

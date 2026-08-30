@@ -175,11 +175,11 @@ export interface FetchLike {
 }
 
 /** OSM-paikat Overpassista; virhe tai ei-ok → tyhjä lista. */
-export async function fetchOsmPlaces(lat: number, lon: number, fetchImpl: FetchLike = fetch): Promise<Place[]> {
+export async function fetchOsmPlaces(lat: number, lon: number, fetchImpl: FetchLike = fetch, radiusM = 1500): Promise<Place[]> {
   try {
     const res = await fetchImpl(OVERPASS_URL, {
       method: "POST",
-      body: `data=${encodeURIComponent(overpassQuery(lat, lon))}`,
+      body: `data=${encodeURIComponent(overpassQuery(lat, lon, radiusM, Math.min(radiusM, 1500)))}`,
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         // Overpass vastaa 406 ilman tunnistautuvaa User-Agentia.

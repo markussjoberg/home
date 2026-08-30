@@ -22,6 +22,9 @@ public enum Sport: String, Codable, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// Oman ikonisetin asset-nimi (template-PDF appien asset-katalogeissa).
+    public var assetName: String { "sport.\(rawValue)" }
+
     public var symbolName: String {
         switch self {
         case .wingFoil: return "wind"
