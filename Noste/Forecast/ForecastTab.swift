@@ -150,7 +150,7 @@ struct SpotForecastView: View {
                     if let places {
                         ForEach(places) { place in
                             HStack {
-                                Text(place.name ?? place.category)
+                                Label(place.name ?? place.category, systemImage: Self.placeSymbol(place.category))
                                     .font(.subheadline)
                                 Spacer()
                                 if place.name != nil {
@@ -158,7 +158,7 @@ struct SpotForecastView: View {
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
-                                Text("\(place.distanceM) m")
+                                Text(Format.distance(Double(place.distanceM)))
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
@@ -270,6 +270,27 @@ struct SpotForecastView: View {
             }
         }
         .padding(.vertical, 2)
+    }
+
+    /// Rantainfran kategoriaikoni (OSM + Lipas -kategoriat palvelimelta).
+    static func placeSymbol(_ category: String) -> String {
+        switch category {
+        case "Uimaranta", "Uimapaikka": return "beach.umbrella"
+        case "Laituri": return "water.waves"
+        case "Veneluiska", "Rantautumispaikka": return "arrow.down.right.circle"
+        case "Satama", "Veneilyn palvelupaikka": return "sailboat"
+        case "Melontakeskus": return "oar.2.crossed"
+        case "Sauna": return "flame.circle"
+        case "Grillipaikka": return "flame"
+        case "Katos/laavu": return "house.lodge"
+        case "Suihku": return "shower"
+        case "Pukukoppi": return "tshirt"
+        case "Juomavesi": return "drop"
+        case "Pysäköinti": return "parkingsign"
+        case "WC": return "toilet"
+        case "Kioski": return "cart"
+        default: return "mappin.circle"
+        }
     }
 
     private func refresh(force: Bool) async {

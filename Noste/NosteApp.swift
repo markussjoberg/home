@@ -7,7 +7,7 @@ struct NosteApp: App {
 
     init() {
         do {
-            container = try ModelContainer(for: SpotRecord.self, SessionRecord.self)
+            container = try ModelContainer(for: SpotRecord.self, SessionRecord.self, GearRecord.self)
         } catch {
             fatalError("SwiftData-säiliö ei auennut: \(error)")
         }

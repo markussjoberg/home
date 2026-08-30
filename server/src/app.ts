@@ -3,7 +3,9 @@ import { TtlCache } from "./cache.js";
 import { type Config, DEFAULT_MARINE_TEMPLATE } from "./config.js";
 import { fetchSpotMeta, type SpotMeta } from "./elevation.js";
 import { fetchLatestObservation, type WindObservation } from "./fmi.js";
-import { fetchPlaces, type Place } from "./places.js";
+import { fetchLipasPlaces, fetchOsmPlaces, nearestPerCategory, type Place } from "./places.js";
+import { LipasMirror, lipasNearby } from "./lipas.js";
+import { LAPPIS_STORE_API, type ShopCatalog, fetchShopCatalog } from "./shop.js";
 import { type Alert, type AlertWindow, matchAlert } from "./kelivahti.js";
 import { type CombinedForecast, fetchCombinedForecast } from "./openmeteo.js";
 import { JsonStore } from "./store.js";
@@ -76,7 +78,7 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
   // varten). Kaksi tasoa: NOSTE_TOKEN = kaikki reitit; CLIENT_TOKEN (appiin
   // sisäänrakennettu) = vain lukureitit — synkka ja kelivahti pysyvät yksityisinä.
   // Mahdollinen premium-rajaus tehdään myöhemmin tähän väliin.
-  const readOnlyPaths = /^\/api\/(tiles|forecast|observation|openmeteo|spotmeta|places)\b/;
+  const readOnlyPaths = /^\/api\/(tiles|forecast|observation|openmeteo|spotmeta|places|shop)\b/;
   app.use("/api/*", async (c, next) => {
     if (!config.apiToken) {
       return c.json({ error: "NOSTE_TOKEN puuttuu palvelimen ympäristöstä" }, 503);
@@ -174,8 +176,12 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
     }
   });
 
-  // Rantainfo: OSM (Overpass) + Lipas.
+  // Rantainfo: Lipas vastataan omasta peilistä (koko aineisto levyllä,
+  // viikkovirkistys taustalla) ja OSM-tulokset talletetaan levylle 7 vrk:ksi
+  // paikkakohtaisesti — käytetyt spotit eivät kutsu Overpassia kuin harvoin.
   const placesCache = new TtlCache<{ nearest: Place[]; all: Place[] }>(24 * 3600);
+  const lipasMirror = new LipasMirror(store, config.lipasBase, fetchImpl, now);
+  const OSM_CACHE_MAX_AGE_MS = 7 * 24 * 3600 * 1000;
   app.get("/api/places", async (c) => {
     const lat = Number(c.req.query("lat"));
     const lon = Number(c.req.query("lon"));
@@ -184,10 +190,56 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
     }
     try {
       const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
-      const result = await placesCache.getOrSet(key, () => fetchPlaces(lat, lon, config.lipasBase, fetchImpl));
+      const cached = placesCache.get(key);
+      if (cached) return c.json(cached);
+
+      // OSM: levyltä jos tuore, muuten Overpassista (tyhjää ei talleteta).
+      const osmCache = await store.read<Record<string, { fetchedAt: string; places: Place[] }>>("places-osm", {});
+      const entry = osmCache[key];
+      let osm = entry && now().getTime() - new Date(entry.fetchedAt).getTime() <= OSM_CACHE_MAX_AGE_MS
+        ? entry.places
+        : null;
+      if (!osm) {
+        osm = await fetchOsmPlaces(lat, lon, fetchImpl);
+        if (osm.length > 0) {
+          osmCache[key] = { fetchedAt: now().toISOString(), places: osm };
+          await store.write("places-osm", osmCache);
+        }
+      }
+
+      // Lipas: peilistä; jos peiliä ei ole saatu kertaakaan, suoraan rajapinnasta.
+      const mirror = await lipasMirror.current();
+      const lipas = mirror
+        ? lipasNearby(mirror, lat, lon)
+        : await fetchLipasPlaces(lat, lon, config.lipasBase, fetchImpl);
+
+      const all = [...osm, ...lipas].sort((a, b) => a.distanceM - b.distanceM);
+      const result = { nearest: nearestPerCategory(all), all };
+      // Muistiin vain täysi tulos: jos OSM jäi saamatta (Overpass-häiriö),
+      // seuraava kutsu yrittää sitä uudelleen — Lipas tulee peilistä ilmaiseksi.
+      if (osm.length > 0) placesCache.set(key, result);
       return c.json(result);
     } catch (error) {
       return c.json({ error: String(error) }, 502);
+    }
+  });
+
+  // Lappis-katalogi (GearAdvisorin ehdotuksiin): kaupan julkinen Store API,
+  // välimuisti 24 h muistissa + levyllä — kauppaa ei kutsuta joka avauksella,
+  // ja katko kaupassa ei riko appia (vanha katalogi kelpaa).
+  const shopCache = new TtlCache<ShopCatalog>(24 * 3600);
+  app.get("/api/shop/catalog", async (c) => {
+    const cached = shopCache.get("catalog");
+    if (cached) return c.json(cached);
+    try {
+      const fresh = await fetchShopCatalog(fetchImpl, LAPPIS_STORE_API, now);
+      shopCache.set("catalog", fresh);
+      await store.write("shop-catalog", fresh);
+      return c.json(fresh);
+    } catch {
+      const disk = await store.read<ShopCatalog | null>("shop-catalog", null);
+      if (disk) return c.json(disk);
+      return c.json({ error: "katalogia ei saatu" }, 502);
     }
   });
 

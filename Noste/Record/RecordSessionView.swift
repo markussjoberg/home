@@ -8,6 +8,8 @@ struct RecordSessionView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @State private var rating: WindRating?
+    @Query(sort: \GearRecord.createdAt) private var gear: [GearRecord]
+    @State private var selectedGear: Set<UUID> = []
 
     var body: some View {
         NavigationStack {
@@ -176,6 +178,27 @@ struct RecordSessionView: View {
                 Section("Millainen tuuli?") {
                     RatingControl(rating: rating) { rating = $0 }
                 }
+                if !gear.isEmpty {
+                    Section("Millä kalustolla?") {
+                        ForEach(gear) { item in
+                            Button {
+                                if !selectedGear.insert(item.id).inserted {
+                                    selectedGear.remove(item.id)
+                                }
+                            } label: {
+                                HStack {
+                                    Label(item.displayName, systemImage: item.type.symbolName)
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    if selectedGear.contains(item.id) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundStyle(.green)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 Section {
                     Button {
                         store(payload: WatchSync.SessionPayload(summary: summary, track: workout.trackForSummary))
@@ -207,6 +230,7 @@ struct RecordSessionView: View {
 
     private func store(payload: WatchSync.SessionPayload) {
         let record = SessionRecord(summary: payload.summary, track: payload.track)
+        record.gearIDs = selectedGear.isEmpty ? nil : Array(selectedGear)
         modelContext.insert(record)
         try? modelContext.save()
         let context = modelContext

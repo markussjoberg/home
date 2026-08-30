@@ -43,6 +43,11 @@ struct SessionsTab: View {
             }
             .navigationTitle("Sessiot")
             .toolbar {
+                NavigationLink {
+                    GearView()
+                } label: {
+                    Image(systemName: "backpack")
+                }
                 Button {
                     showRecorder = true
                 } label: {
@@ -217,9 +222,14 @@ struct SessionDetailView: View {
                 Text("Arvosanoista spotti oppii sopivat suunnat ja voimakkuudet — ja lopulta ennuste saa tähdet.")
             }
 
+            GearTagSection(record: record)
+
             if let summary = record.summary {
                 Section("Yhteenveto") {
                     row("Kesto", Format.duration(summary.duration))
+                    if summary.segments?.contains(where: { $0.kind != .water }) == true {
+                        row("Vesillä", Format.duration(summary.waterDuration))
+                    }
                     row("Matka", Format.distance(summary.distance))
                     row("Maksiminopeus", Format.speedKmh(summary.maxSpeed))
                     row("Keskinopeus liikkeessä", Format.speedKmh(summary.averageMovingSpeed))

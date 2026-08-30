@@ -78,6 +78,44 @@ final class SpotRecord {
     }
 }
 
+/// Oma kalusto (quiver): siivet, laudat ja foilit. Sessiot tägätään näihin,
+/// ja GearAdvisor ehdottaa puutteisiin täydennystä (Lappis-demo).
+@Model
+final class GearRecord {
+    @Attribute(.unique) var id: UUID
+    var typeRaw: String
+    var name: String
+    /// Koko tyypin yksikössä (siipi m², lauta l, foili cm²); nil = ei tiedossa.
+    var size: Double?
+    /// Vuosimalli; nil = ei tiedossa.
+    var year: Int?
+    var createdAt: Date
+
+    init(type: GearType, name: String, size: Double? = nil, year: Int? = nil) {
+        id = UUID()
+        typeRaw = type.rawValue
+        self.name = name
+        self.size = size
+        self.year = year
+        createdAt = Date()
+    }
+
+    var type: GearType { GearType(rawValue: typeRaw) ?? .wing }
+
+    var info: GearInfo { GearInfo(type: type, name: name, size: size, year: year) }
+
+    /// Esim. "Unit 4,5 m² ’24".
+    var displayName: String {
+        var parts = [name]
+        if let size {
+            let sizeText = size == size.rounded() ? String(Int(size)) : String(format: "%.1f", size).replacingOccurrences(of: ".", with: ",")
+            parts.append("\(sizeText) \(type.sizeUnit)")
+        }
+        if let year { parts.append("’\(String(year).suffix(2))") }
+        return parts.joined(separator: " ")
+    }
+}
+
 @Model
 final class SessionRecord {
     @Attribute(.unique) var id: UUID
@@ -88,6 +126,8 @@ final class SessionRecord {
     /// JSON-koodattu [TrackPoint] — raakajälki uudelleenanalyysiä ja karttaa varten.
     var trackData: Data?
     var spotName: String?
+    /// Sessiossa käytetty kalusto (GearRecord-id:t).
+    var gearIDs: [UUID]?
     /// Tuuliarvosana (WindRating.rawValue; 0 = ei riittänyt, nil = ei reittausta).
     var ratingRaw: Int?
     /// Session aikana vallinnut tuuli (haetaan reittauksen yhteydessä).

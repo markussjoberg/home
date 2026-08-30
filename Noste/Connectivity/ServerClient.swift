@@ -126,6 +126,33 @@ struct ServerClient {
         return decoded.nearest
     }
 
+    /// Lappis-katalogi kalustosuosituksiin (palvelin välimuistittaa kaupan
+    /// julkisen Store API:n). nil jos haku epäonnistuu — ehdotukset vain jäävät pois.
+    func shopCatalog() async -> [GearCatalogItem]? {
+        struct Item: Codable {
+            var id: String
+            var type: String
+            var name: String
+            var size: Double?
+            var year: Int?
+            var price: Int
+            var url: String
+        }
+        struct CatalogResponse: Codable { var store: String; var items: [Item] }
+        guard let request = request(path: "api/shop/catalog") else { return nil }
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let decoded = try? JSONDecoder().decode(CatalogResponse.self, from: data)
+        else { return nil }
+        return decoded.items.compactMap { item in
+            guard let type = GearType(rawValue: item.type) else { return nil }
+            return GearCatalogItem(
+                id: item.id, type: type, name: item.name, size: item.size,
+                year: item.year ?? 0, price: item.price, url: item.url
+            )
+        }
+    }
+
     /// Vie koko spottilistan palvelimelle (varmuuskopio + kelivahdin lähtödata).
     func backupSpots(_ spots: [SpotData]) async {
         guard let body = try? JSONEncoder().encode(spots),

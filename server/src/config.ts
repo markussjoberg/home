@@ -38,7 +38,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     apiToken: env.NOSTE_TOKEN ?? "",
     clientToken: env.CLIENT_TOKEN ?? "",
     ntfyUrl: env.NTFY_URL ?? "",
-    lipasBase: env.LIPAS_BASE ?? "https://lipas.cc.jyu.fi/api",
+    // Lipas muutti: vanha lipas.cc.jyu.fi ei vastaa enää (todettu 2026-08).
+    lipasBase: env.LIPAS_BASE ?? "https://api.lipas.fi/v1",
     dataDir: env.DATA_DIR ?? "./data",
     tileCacheDir: env.TILE_CACHE_DIR ?? "./data/tiles",
     tileCacheTtl: Number(env.TILE_CACHE_TTL ?? 30 * 24 * 3600),

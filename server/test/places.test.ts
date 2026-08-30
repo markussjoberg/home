@@ -32,7 +32,8 @@ describe("lipas", () => {
   it("url sisältää sijainnin ja tyyppikoodit", () => {
     const url = new URL(lipasUrl("https://lipas.cc.jyu.fi/api", 60.1, 24.9));
     expect(url.pathname).toContain("sports-places");
-    expect(url.searchParams.getAll("typeCodes")).toEqual(["3220", "3230"]);
+    expect(url.searchParams.getAll("typeCodes")).toEqual(["203", "3220", "3230", "5150"]);
+    expect(url.searchParams.getAll("fields")).toContain("location.coordinates.wgs84");
     expect(url.searchParams.get("closeToLat")).toBe("60.10000");
   });
 
@@ -44,7 +45,7 @@ describe("lipas", () => {
     ];
     const places = parseLipas(body, 60.1, 24.9);
     expect(places).toHaveLength(1);
-    expect(places[0]).toMatchObject({ category: "Uimaranta (Lipas)", name: "Melkin ranta", source: "lipas" });
+    expect(places[0]).toMatchObject({ category: "Uimaranta", name: "Melkin ranta", source: "lipas" });
   });
 });
 
