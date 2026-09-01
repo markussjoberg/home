@@ -81,4 +81,26 @@ describe("fetchCombinedForecast", () => {
     const fetchImpl = fakeFetch(() => ({ status: 500, body: {} }));
     await expect(fetchCombinedForecast(60.1, 24.9, false, 3, fetchImpl, now)).rejects.toThrow("open-meteo 500");
   });
+
+  it("merispotilla tuulen virhe ennen aaltovastausta on tavallinen rejection", async () => {
+    // Aaltohaku viipyy, tuuli kaatuu heti: virheen pitää päätyä kutsujalle
+    // eikä käsittelemättömäksi rejectioniksi (vitest kaataa ajon sellaisesta).
+    const fetchImpl = (async (url: string) => {
+      if (url.includes("marine")) {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return new Response(JSON.stringify(marineBody), { status: 200 });
+      }
+      return new Response("{}", { status: 500 });
+    }) as unknown as typeof fetch;
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      await expect(fetchCombinedForecast(60.1, 24.9, true, 3, fetchImpl, now)).rejects.toThrow("open-meteo 500");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+    expect(unhandled).toHaveLength(0);
+  });
 });

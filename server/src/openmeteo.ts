@@ -111,18 +111,21 @@ export async function fetchCombinedForecast(
     return parseWind((await res.json()) as OpenMeteoWindResponse);
   });
 
-  let waves: WaveHour[] | null = null;
-  if (sea) {
-    waves = await fetchImpl(buildMarineUrl(lat, lon, days))
-      .then(async (res) => (res.ok ? parseWaves((await res.json()) as OpenMeteoMarineResponse) : null))
-      .catch(() => null);
-  }
+  // Aaltohaku ei saa kaataa tuulta — mutta tuulen virhe pitää ottaa kiinni
+  // samaan aikaan aaltojen kanssa: jos tuuli hylkää ennen kuin aallot ovat
+  // valmiit, käsittelemätön rejection tappaisi koko prosessin.
+  const wavesPromise: Promise<WaveHour[] | null> = sea
+    ? fetchImpl(buildMarineUrl(lat, lon, days))
+        .then(async (res) => (res.ok ? parseWaves((await res.json()) as OpenMeteoMarineResponse) : null))
+        .catch(() => null)
+    : Promise.resolve(null);
+  const [wind, waves] = await Promise.all([windPromise, wavesPromise]);
 
   return {
     latitude: lat,
     longitude: lon,
     fetchedAt: now().toISOString(),
-    wind: await windPromise,
+    wind,
     waves,
   };
 }

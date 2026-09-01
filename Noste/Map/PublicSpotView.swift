@@ -176,7 +176,7 @@ struct PublicSpotView: View {
     }
 
     private static func dateText(_ iso: String) -> String {
-        guard let date = ISO8601DateFormatter().date(from: iso) else { return "" }
+        guard let date = ISO8601.parse(iso) else { return "" }
         return date.formatted(.dateTime.day().month())
     }
 }

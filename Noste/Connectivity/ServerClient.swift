@@ -16,7 +16,7 @@ struct ServerClient {
         var airTemp: Double?
 
         var date: Date? {
-            ISO8601DateFormatter().date(from: time)
+            ISO8601.parse(time)
         }
     }
 
@@ -194,7 +194,7 @@ struct ServerClient {
         var period: Double?
 
         var id: String { time }
-        var date: Date? { ISO8601DateFormatter().date(from: time) }
+        var date: Date? { ISO8601.parse(time) }
     }
 
     struct WaveData: Codable {

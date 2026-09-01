@@ -39,6 +39,8 @@ struct MapTab: View {
     @State private var rasterTask: Task<Void, Never>?
     /// Aikajana: tunteja nykyhetkestä (0 = nyt). Sama valinta ohjaa tuuli- ja aaltokenttää.
     @State private var timelineOffset: Double = 0
+    /// Ennustepiste (Windy-tyyliin): napautettu kohta, jonka arvot luetaan kentistä.
+    @State private var probeCoordinate: CLLocationCoordinate2D?
     /// Panoroinnin/zoomin aikana tuulipartikkelit piilotetaan: SwiftUI-kerros
     /// ei seuraa karttaa liikkeen aikana, joten ne hyppäisivät lopussa.
     @State private var isMapMoving = false
@@ -179,6 +181,24 @@ struct MapTab: View {
         return corrections
     }
 
+    /// Tuuli napautetussa pisteessä valitulle tunnille (kentän interpolointi).
+    private func probeWind(at coordinate: CLLocationCoordinate2D) -> ForecastProbeCard.Wind? {
+        guard let wind = windModel.wind(atLat: coordinate.latitude, lon: coordinate.longitude), wind.speed > 0 else { return nil }
+        // Kulkusuunta (u, v) → meteorologinen "mistä"-suunta.
+        let from = (atan2(wind.u, wind.v) * 180 / .pi + 180).truncatingRemainder(dividingBy: 360)
+        return .init(speed: wind.speed, direction: from < 0 ? from + 360 : from)
+    }
+
+    /// Aallokko napautetussa pisteessä; nil maalla tai kentän ulkopuolella.
+    private func probeWave(at coordinate: CLLocationCoordinate2D) -> ForecastProbeCard.Wave? {
+        guard let field = waveField else { return nil }
+        if let mask = field.mask, mask.isWater(lat: coordinate.latitude, lon: coordinate.longitude) == false { return nil }
+        let s = field.sample(atLat: coordinate.latitude, lon: coordinate.longitude)
+        guard s.weight > 0.2 else { return nil }
+        let from = (atan2(s.u, s.v) * 180 / .pi + 180).truncatingRemainder(dividingBy: 360)
+        return .init(height: s.height, direction: from < 0 ? from + 360 : from, period: s.period)
+    }
+
     /// Aikajanan otsikko: "Nyt" tai viikonpäivä + tunti Suomen ajassa.
     private var timelineLabel: String {
         guard timelineOffset > 0 else { return "Nyt" }
@@ -251,6 +271,7 @@ struct MapTab: View {
                     seaState: seaStateEnabled ? seaState : nil,
                     waveField: seaStateEnabled ? waveField : nil,
                     waveRaster: seaStateEnabled ? waveRaster : nil,
+                    probeCoordinate: probeCoordinate,
                     onLongPress: { coordinate in
                         editingSpot = SpotData(
                             name: "",
@@ -266,6 +287,12 @@ struct MapTab: View {
                     },
                     onSelectPublicSpot: { spot in
                         selectedPublicSpot = spot
+                    },
+                    onTap: { coordinate in
+                        // Ennustepiste vain kun kentät ovat ladattuna — muuten napautus on neutraali.
+                        guard seaStateEnabled else { return }
+                        probeCoordinate = coordinate
+                        selectedPlace = nil
                     },
                     onRegionWillChange: { withAnimation(.easeOut(duration: 0.15)) { isMapMoving = true } },
                     onRegionChange: { region in
@@ -284,6 +311,28 @@ struct MapTab: View {
                 }
 
                 VStack(spacing: 8) {
+                    if let coordinate = probeCoordinate, seaStateEnabled {
+                        ForecastProbeCard(
+                            coordinate: coordinate,
+                            timeLabel: timelineLabel,
+                            wind: probeWind(at: coordinate),
+                            wave: probeWave(at: coordinate),
+                            onForecast: {
+                                let onWater = waveField?.mask?.isWater(lat: coordinate.latitude, lon: coordinate.longitude)
+                                forecastPoint = SpotData(
+                                    name: "Ennustepiste",
+                                    latitude: coordinate.latitude,
+                                    longitude: coordinate.longitude,
+                                    waterType: onWater == false ? .lake : .sea
+                                )
+                            },
+                            onMakeSpot: {
+                                editingSpot = SpotData(name: "", latitude: coordinate.latitude, longitude: coordinate.longitude)
+                                probeCoordinate = nil
+                            },
+                            onClose: { probeCoordinate = nil }
+                        )
+                    }
                     if let place = selectedPlace {
                         PlaceCard(place: place, onForecast: {
                             forecastPoint = SpotData(
@@ -371,6 +420,7 @@ struct MapTab: View {
                             waveRaster = nil
                             waterMask = nil
                             timelineOffset = 0
+                            probeCoordinate = nil
                         }
                     } label: {
                         Image(systemName: seaStateEnabled ? "water.waves" : "water.waves")
@@ -543,10 +593,14 @@ struct SpotMapView: UIViewRepresentable {
     var waveField: WaveField?
     /// Valmis, vesialueeseen klipattu kuva kentästä (nil = piirretään ruuduista).
     var waveRaster: WaveFieldRaster?
+    /// Ennustepisteen merkki; nil = ei näytetä.
+    var probeCoordinate: CLLocationCoordinate2D?
     var onLongPress: (CLLocationCoordinate2D) -> Void
     var onSelectSpot: (SpotData) -> Void
     var onSelectPlace: (ServerClient.Place?) -> Void = { _ in }
     var onSelectPublicSpot: (ServerClient.PublicSpot) -> Void = { _ in }
+    /// Napautus tyhjään kohtaan kartalla (merkit hoitaa MapKit itse).
+    var onTap: (CLLocationCoordinate2D) -> Void = { _ in }
     var onRegionWillChange: () -> Void = {}
     var onRegionChange: (MKCoordinateRegion) -> Void = { _ in }
     /// Keskityskomento: tick kasvaa → keskitä (nil koordinaatti = oma sijainti).
@@ -568,6 +622,18 @@ struct SpotMapView: UIViewRepresentable {
         )
         let longPress = UILongPressGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleLongPress(_:)))
         map.addGestureRecognizer(longPress)
+        // Napautus = ennustepiste. Tuplanapautus (zoom) ei saa laukaista sitä,
+        // eikä merkkien napautuksia kaapata — delegaatti suodattaa.
+        let doubleTap = UITapGestureRecognizer()
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.cancelsTouchesInView = false
+        doubleTap.delegate = context.coordinator
+        map.addGestureRecognizer(doubleTap)
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        tap.cancelsTouchesInView = false
+        tap.delegate = context.coordinator
+        tap.require(toFail: doubleTap)
+        map.addGestureRecognizer(tap)
         return map
     }
 
@@ -575,6 +641,7 @@ struct SpotMapView: UIViewRepresentable {
         context.coordinator.parent = self
         updateOverlay(map, context: context)
         updateWaveOverlay(map, context: context)
+        updateProbeAnnotation(map)
         updateAnnotations(map)
         updatePlaceAnnotations(map, context: context)
         if centerTick != context.coordinator.lastCenterTick {
@@ -662,6 +729,23 @@ struct SpotMapView: UIViewRepresentable {
         }
     }
 
+    /// Ennustepisteen merkki: yksi kerrallaan, siirtyy napautuksen mukana.
+    private func updateProbeAnnotation(_ map: MKMapView) {
+        let existing = map.annotations.compactMap { $0 as? ProbeAnnotation }
+        guard let coordinate = probeCoordinate else {
+            map.removeAnnotations(existing)
+            return
+        }
+        if let current = existing.first, current.coordinate.latitude == coordinate.latitude,
+           current.coordinate.longitude == coordinate.longitude, existing.count == 1 {
+            return
+        }
+        map.removeAnnotations(existing)
+        let annotation = ProbeAnnotation()
+        annotation.coordinate = coordinate
+        map.addAnnotation(annotation)
+    }
+
     private func updateAnnotations(_ map: MKMapView) {
         let existing = map.annotations.compactMap { $0 as? SpotAnnotation }
         let currentIDs = Set(spots.map(\.id))
@@ -682,7 +766,9 @@ struct SpotMapView: UIViewRepresentable {
         Coordinator(parent: self)
     }
 
-    final class Coordinator: NSObject, MKMapViewDelegate {
+    final class ProbeAnnotation: MKPointAnnotation {}
+
+    final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
         var parent: SpotMapView
         var overlaySignature = ""
         var placesSignature = ""
@@ -736,6 +822,26 @@ struct SpotMapView: UIViewRepresentable {
             if view.annotation is PlaceAnnotation {
                 parent.onSelectPlace(nil)
             }
+        }
+
+        @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            guard gesture.state == .ended, let map = gesture.view as? MKMapView else { return }
+            parent.onTap(map.convert(gesture.location(in: map), toCoordinateFrom: map))
+        }
+
+        /// Merkkien napautukset jätetään MapKitille (valinta), muut kartalle.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            var view = touch.view
+            while let current = view {
+                if current is MKAnnotationView { return false }
+                view = current.superview
+            }
+            return true
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            true // kartan omat eleet (zoom, panorointi) toimivat normaalisti
         }
 
         @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
@@ -807,6 +913,17 @@ struct SpotMapView: UIViewRepresentable {
                 view.annotation = annotation
                 view.canShowCallout = false
                 view.markerTintColor = .systemBlue
+                return view
+            }
+            if annotation is ProbeAnnotation {
+                let identifier = "probe"
+                let view = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView)
+                    ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                view.annotation = annotation
+                view.canShowCallout = false
+                view.markerTintColor = .systemIndigo
+                view.glyphImage = UIImage(systemName: "scope")
+                view.displayPriority = .required
                 return view
             }
             return nil
