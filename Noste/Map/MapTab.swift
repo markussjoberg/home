@@ -459,6 +459,11 @@ struct SpotMapView: UIViewRepresentable {
         context.coordinator.overlaySignature = signature
 
         map.removeOverlays(map.overlays)
+        // Ilma käyttää Applen satelliittikuvastoa (tarkempi ja globaali kuin
+        // MML-ortot); muut tasot normaalia pohjakarttaa + tiilioverlayta.
+        map.preferredConfiguration = layer == .aerial
+            ? MKImageryMapConfiguration()
+            : MKStandardMapConfiguration()
         switch layer {
         case .standard:
             break
@@ -470,11 +475,7 @@ struct SpotMapView: UIViewRepresentable {
             map.addOverlay(TileOverlays.overlay(template: marineTemplate, replacesContent: false,
                                                 minimumZ: 5, sourceMaxZ: 15), level: .aboveLabels)
         case .aerial:
-            // Ilmakuva sellaisenaan — kivet ja breikkaavat rannat näkyvät.
-            map.addOverlay(TileOverlays.overlay(
-                template: ServerSettings.tileTemplate(layer: "aerial", server: ServerSettings.current ?? ServerSettings.builtIn),
-                replacesContent: true
-            ), level: .aboveLabels)
+            break // Applen kuvasto tulee preferredConfigurationista.
         }
     }
 
