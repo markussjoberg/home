@@ -61,6 +61,19 @@ enum TileOverlays {
 ///    alkuperäisiä värejä.
 final class TunedTileOverlay: MKTileOverlay {
 
+    /// MML ja Traficom kattavat vain Suomen — rajataan taso Suomeen, jolloin
+    /// ulkomailla (esim. Norjan-reissu) Applen pohjakartta näkyy normaalisti
+    /// eikä taso peitä maailmaa tyhjällä.
+    override var boundingMapRect: MKMapRect {
+        let topLeft = MKMapPoint(CLLocationCoordinate2D(latitude: 70.5, longitude: 18.0))
+        let bottomRight = MKMapPoint(CLLocationCoordinate2D(latitude: 58.5, longitude: 32.5))
+        return MKMapRect(
+            x: topLeft.x, y: topLeft.y,
+            width: bottomRight.x - topLeft.x,
+            height: bottomRight.y - topLeft.y
+        )
+    }
+
     private let sourceMaxZ: Int
     private let muted: Bool
     private static let cache = NSCache<NSString, NSData>()

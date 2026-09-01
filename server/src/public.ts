@@ -57,7 +57,8 @@ export function parsePublicSpot(body: unknown, id: string, ownerHash: string, no
   const latitude = Number(b.latitude);
   const longitude = Number(b.longitude);
   if (!name || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-  if (latitude < 58 || latitude > 71 || longitude < 18 || longitude > 32) return null; // Suomi + lähialue
+  // Pohjola: Suomi, Skandinavia (Norjan rannikko ~4°E asti), Baltia.
+  if (latitude < 54 || latitude > 72 || longitude < 3 || longitude > 32) return null;
   const sports = Array.isArray(b.sports)
     ? b.sports.map((s) => cleanText(s, 20)).filter(Boolean).slice(0, 8)
     : [];
