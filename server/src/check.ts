@@ -117,7 +117,11 @@ async function main(): Promise<void> {
     const res = await fetch(OVERPASS_URL, {
       method: "POST",
       body: `data=${encodeURIComponent(overpassQuery(LAT, LON))}`,
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        // Overpass vastaa 406 ilman tunnistautuvaa User-Agentia (sama kuin places.ts).
+        "User-Agent": "noste-server/0.1 (https://aihiolabs.com/noste)",
+      },
     });
     if (!res.ok) {
       fail("OSM/Overpass", `HTTP ${res.status}`, "Overpass voi olla ruuhkainen — yritä hetken päästä");

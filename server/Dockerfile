@@ -7,4 +7,7 @@ COPY tsconfig.json ./
 COPY src ./src
 ENV NODE_ENV=production
 EXPOSE 8080
+# Traefik/Docker näkevät palvelun tilan; /healthz ei vaadi tokenia.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
 CMD ["pnpm", "start"]

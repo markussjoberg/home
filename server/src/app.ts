@@ -5,6 +5,7 @@ import { fetchSpotMeta, type SpotMeta } from "./elevation.js";
 import { fetchLatestObservation, type WindObservation } from "./fmi.js";
 import { type SeaStateStation, type WaveBuoyObservation, type WaveForecastHour, fetchSeaState, fetchWaveData } from "./wave.js";
 import { type WindFieldSeries, fetchWindField } from "./windfield.js";
+import { parseBBox, roundBBox } from "./bbox.js";
 import { type WaveFieldSeries, expandWaveBBox, fetchWaveField } from "./wavefield.js";
 import { fetchLipasPlaces, fetchOsmPlaces, nearestPerCategory, type Place } from "./places.js";
 import { LipasMirror, lipasNearby } from "./lipas.js";
@@ -36,8 +37,8 @@ export interface SpotSync {
 }
 
 /** Johtaa hälytyksen spotin tuuli-ikkunasta (sama logiikka kuin appin puolella). */
-export function alertFromSpot(spot: SpotSync): Alert | null {
-  if (!spot.alertEnabled) return null;
+export function alertFromSpot(spot: SpotSync | null | undefined): Alert | null {
+  if (!spot || typeof spot !== "object" || !spot.alertEnabled) return null;
   if (spot.minWind === undefined && spot.maxWind === undefined && !spot.goodDirections?.length) {
     return null; // ei ikkunaa jota vahtia
   }
@@ -82,6 +83,16 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
   const observationCache = new TtlCache<WindObservation | null>(300);
 
   app.get("/healthz", (c) => c.json({ ok: true }));
+
+  // Odottamaton virhe: JSON-vastaus ja lokimerkintä Honon text/plain-500:n sijaan.
+  app.onError((error, c) => {
+    console.error(`${c.req.method} ${c.req.path}:`, error);
+    return c.json({ error: "palvelinvirhe" }, 500);
+  });
+
+  /** Rungon JSON tai null (kutsuja vastaa 400) — rikkinäinen JSON ei saa olla 500. */
+  const readJson = async <T,>(c: { req: { json(): Promise<unknown> } }): Promise<T | null> =>
+    (await c.req.json().catch(() => null)) as T | null;
 
   // Kaikki /api-reitit vaativat tokenin (headerissa tai ?token=, tiiliosoitteita
   // varten). Kaksi tasoa: NOSTE_TOKEN = kaikki reitit; CLIENT_TOKEN (appiin
@@ -188,34 +199,32 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
   // Merisää kartalle: kaikki aaltopoijut + tuuliasemat näkyvällä alueella.
   const seaStateCache = new TtlCache<{ buoys: SeaStateStation[]; stations: SeaStateStation[] }>(900);
   app.get("/api/seastate", async (c) => {
-    const parts = (c.req.query("bbox") ?? "").split(",").map(Number);
-    if (parts.length !== 4 || parts.some((v) => !Number.isFinite(v))) {
-      return c.json({ error: "bbox=minLon,minLat,maxLon,maxLat vaaditaan" }, 400);
-    }
-    const bbox = parts.map((v) => v.toFixed(1)).join(",");
+    const parsed = parseBBox(c.req.query("bbox"));
+    if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+    const bbox = roundBBox(parsed.bbox).map((v) => v.toFixed(1)).join(",");
     try {
       const state = await seaStateCache.getOrSet(bbox, () => fetchSeaState(bbox, fetchImpl, now));
       return c.json(state);
     } catch (error) {
+      console.error("seastate: FMI-haku epäonnistui", bbox, String(error));
       return c.json({ error: String(error) }, 502);
     }
   });
 
   // Tuulikenttä partikkelianimaatioon: 9×9-hila Open-Meteosta kaikille
-  // ennustetunneille (aikajana appissa), 30 min välimuisti.
+  // ennustetunneille (aikajana appissa), 30 min välimuisti. Haetaan
+  // pyöristetyllä alueella, jotta avain ja hila vastaavat toisiaan.
   const windFieldCache = new TtlCache<WindFieldSeries>(1800);
   app.get("/api/windfield", async (c) => {
-    const parts = (c.req.query("bbox") ?? "").split(",").map(Number);
-    if (parts.length !== 4 || parts.some((v) => !Number.isFinite(v))) {
-      return c.json({ error: "bbox=minLon,minLat,maxLon,maxLat vaaditaan" }, 400);
-    }
-    const key = parts.map((v) => v.toFixed(1)).join(",");
+    const parsed = parseBBox(c.req.query("bbox"));
+    if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+    const bbox = roundBBox(parsed.bbox);
+    const key = bbox.map((v) => v.toFixed(1)).join(",");
     try {
-      const series = await windFieldCache.getOrSet(key, () =>
-        fetchWindField(parts[0]!, parts[1]!, parts[2]!, parts[3]!, fetchImpl),
-      );
+      const series = await windFieldCache.getOrSet(key, () => fetchWindField(...bbox, fetchImpl));
       return c.json(series);
     } catch (error) {
+      console.error("windfield: Open-Meteo-haku epäonnistui", key, String(error));
       return c.json({ error: String(error) }, 502);
     }
   });
@@ -224,18 +233,16 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
   // marine-mallista; maapisteet karsittu jo palvelimella.
   const waveFieldCache = new TtlCache<WaveFieldSeries>(1800);
   app.get("/api/wavefield", async (c) => {
-    const parts = (c.req.query("bbox") ?? "").split(",").map(Number);
-    if (parts.length !== 4 || parts.some((v) => !Number.isFinite(v))) {
-      return c.json({ error: "bbox=minLon,minLat,maxLon,maxLat vaaditaan" }, 400);
-    }
+    const parsed = parseBBox(c.req.query("bbox"));
+    if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+    const bbox = parsed.bbox;
     // Avain laajennetusta alueesta: lähekkäiset pienet näkymät jakavat tuloksen.
-    const key = expandWaveBBox(parts[0]!, parts[1]!, parts[2]!, parts[3]!).map((v) => v.toFixed(1)).join(",");
+    const key = expandWaveBBox(...bbox).map((v) => v.toFixed(1)).join(",");
     try {
-      const result = await waveFieldCache.getOrSet(key, () =>
-        fetchWaveField(parts[0]!, parts[1]!, parts[2]!, parts[3]!, fetchImpl),
-      );
+      const result = await waveFieldCache.getOrSet(key, () => fetchWaveField(...bbox, fetchImpl));
       return c.json(result);
     } catch (error) {
+      console.error("wavefield: Open-Meteo-haku epäonnistui", key, String(error));
       return c.json({ error: String(error) }, 502);
     }
   });
@@ -441,8 +448,14 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
   app.get("/api/spots", async (c) => c.json(await store.read<SpotSync[]>("spots", [])));
 
   app.put("/api/spots", async (c) => {
-    const body = (await c.req.json()) as SpotSync[];
+    const body = await readJson<SpotSync[]>(c);
     if (!Array.isArray(body)) return c.json({ error: "odotettiin listaa" }, 400);
+    // Kevyt alkiotarkistus: rikkinäinen alkio kaataisi kelivahdin joka kierroksella.
+    const valid = body.every(
+      (spot) => spot && typeof spot === "object" && typeof spot.id === "string"
+        && Number.isFinite(spot.latitude) && Number.isFinite(spot.longitude),
+    );
+    if (!valid) return c.json({ error: "jokaisella spotilla pitää olla id, latitude ja longitude" }, 400);
     await store.write("spots", body);
     return c.json({ ok: true, count: body.length });
   });
@@ -454,7 +467,7 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
   });
 
   app.post("/api/sessions", async (c) => {
-    const body = (await c.req.json()) as SessionSync;
+    const body = await readJson<SessionSync>(c);
     if (!body?.id || !body?.startDate) return c.json({ error: "id ja startDate vaaditaan" }, 400);
     await store.upsertById("sessions", [body]);
     return c.json({ ok: true });
@@ -465,7 +478,7 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
   app.get("/api/alerts", async (c) => c.json(await store.read<Alert[]>("alerts", [])));
 
   app.put("/api/alerts", async (c) => {
-    const body = (await c.req.json()) as Alert[];
+    const body = await readJson<Alert[]>(c);
     if (!Array.isArray(body)) return c.json({ error: "odotettiin listaa" }, 400);
     await store.write("alerts", body);
     return c.json({ ok: true, count: body.length });
@@ -497,7 +510,10 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
         const forecast = await forecastCache.getOrSet(key, () =>
           fetchCombinedForecast(spot.latitude, spot.longitude, spot.waterType === "sea", 3, fetchImpl, now),
         );
-        const windows = matchAlert(alert, forecast.wind);
+        // Vain tulevat tunnit: Open-Meteon päivä alkaa 00 UTC, eikä aamun
+        // ikkunasta pidä ilmoittaa iltapäivällä.
+        const nowHour = `${now().toISOString().slice(0, 13)}:00`; // käynnissä oleva tunti mukaan
+        const windows = matchAlert(alert, forecast.wind.filter((h) => h.time >= nowHour));
         if (windows.length > 0) {
           results.push({ alertId: alert.id, spotName: alert.spotName || spot.name, windows });
         }
@@ -511,6 +527,15 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
       await notifyNewWindows(results);
     }
     return results;
+  }
+
+  /** Open-Meteon UTC-tunti ("2026-08-21T10:00") suomalaiselle lukijalle: "pe 13:00". */
+  function formatLocal(isoUtc: string): string {
+    const date = new Date(`${isoUtc}:00Z`);
+    if (Number.isNaN(date.getTime())) return isoUtc;
+    return new Intl.DateTimeFormat("fi-FI", {
+      timeZone: "Europe/Helsinki", weekday: "short", hour: "2-digit", minute: "2-digit",
+    }).format(date);
   }
 
   /** Lähettää ntfy-ilmoituksen uusista ikkunoista. Sama ikkuna ilmoitetaan vain kerran. */
@@ -535,7 +560,7 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
               Priority: "default",
             },
             body:
-              `Ennusteessa kelit ${window.start}–${window.end} UTC ` +
+              `Ennusteessa kelit ${formatLocal(window.start)}–${formatLocal(window.end)} ` +
               `(${window.hours} h, max ${window.maxSpeed.toFixed(1)} m/s).`,
           });
           if (res.ok) {

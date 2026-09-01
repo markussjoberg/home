@@ -23,12 +23,25 @@ export class TtlCache<V> {
     this.entries.set(key, { value, expires: now + this.ttlSeconds * 1000 });
   }
 
-  /** Hakee välimuistista tai tuottaa ja tallettaa. */
+  private inflight = new Map<string, Promise<V>>();
+
+  /**
+   * Hakee välimuistista tai tuottaa ja tallettaa. Samanaikaiset pyynnöt
+   * samalle avaimelle odottavat samaa tuotantoa — kartan avaus tekee helposti
+   * useita identtisiä kutsuja ennen kuin ensimmäinen on valmis.
+   */
   async getOrSet(key: string, produce: () => Promise<V>): Promise<V> {
     const hit = this.get(key);
     if (hit !== undefined) return hit;
-    const value = await produce();
-    this.set(key, value);
-    return value;
+    const pending = this.inflight.get(key);
+    if (pending) return pending;
+    const promise = produce()
+      .then((value) => {
+        this.set(key, value);
+        return value;
+      })
+      .finally(() => this.inflight.delete(key));
+    this.inflight.set(key, promise);
+    return promise;
   }
 }

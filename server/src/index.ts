@@ -5,16 +5,18 @@ import { loadConfig } from "./config.js";
 const config = loadConfig();
 const { app, checkAlerts } = createApp({ config });
 
-serve({ fetch: app.fetch, port: config.port }, (info) => {
+const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`noste-server käynnissä portissa ${info.port}`);
   if (!config.apiToken) console.warn("VAROITUS: NOSTE_TOKEN puuttuu — API ei vastaa ennen kuin se on asetettu");
+  if (!config.clientToken) console.warn("VAROITUS: CLIENT_TOKEN puuttuu — appin sisäänrakennettu palvelin ei toimi");
   if (!config.mmlApiKey) console.warn("HUOM: MML_API_KEY puuttuu — maastokarttatiilet eivät toimi");
+  if (!config.ntfyUrl) console.warn("HUOM: NTFY_URL puuttuu — kelivahti kirjaa osumat vain lokiin");
 });
 
-// Kelivahti: tarkista puolen tunnin välein. Osumat talletetaan dataan ja lokiin;
-// push-ilmoitukset (APNs) kytketään myöhemmin.
+// Kelivahti: heti käynnistyksessä (deployn jälkeen ei odoteta puolta tuntia)
+// ja sen jälkeen puolen tunnin välein. Osumat talletetaan ja ilmoitetaan ntfy:llä.
 const KELIVAHTI_INTERVAL_MS = 30 * 60 * 1000;
-setInterval(() => {
+function runKelivahti(): void {
   checkAlerts()
     .then((results) => {
       for (const result of results) {
@@ -27,4 +29,15 @@ setInterval(() => {
       }
     })
     .catch((error) => console.error("kelivahti epäonnistui:", error));
-}, KELIVAHTI_INTERVAL_MS);
+}
+runKelivahti();
+const kelivahtiTimer = setInterval(runKelivahti, KELIVAHTI_INTERVAL_MS);
+
+// Docker lähettää SIGTERMin: suljetaan siististi, ettei levykirjoitus jää kesken.
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.on(signal, () => {
+    clearInterval(kelivahtiTimer);
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 5000).unref();
+  });
+}

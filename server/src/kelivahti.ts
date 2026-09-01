@@ -1,7 +1,7 @@
 /**
  * Kelivahti: spotille asetetaan tuuli-ikkuna (nopeus + suunta), ja palvelin etsii
- * ennusteesta yhtenäiset jaksot jotka osuvat ikkunaan. Ilmoituskanava (push)
- * kytketään myöhemmin — nyt osumat talletetaan ja näkyvät APIsta.
+ * ennusteesta yhtenäiset jaksot jotka osuvat ikkunaan. Osumat talletetaan,
+ * näkyvät APIsta ja ilmoitetaan ntfy:llä (app.ts notifyNewWindows).
  */
 import type { WindHour } from "./openmeteo.js";
 

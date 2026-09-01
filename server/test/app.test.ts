@@ -231,6 +231,46 @@ describe("app", () => {
     expect(await checkAlerts()).toHaveLength(0);
   });
 
+  it("kelivahti ohittaa menneet tunnit", async () => {
+    // Ennusteen tunnit 10–13 UTC (9, 10, 11, 3 m/s). Kello 10:30 → ikkuna alkaa
+    // käynnissä olevasta tunnista; kello 12:30 → jäljellä vain 13:00 (3 m/s), ei ikkunaa.
+    const spots = JSON.stringify([{ id: "s1", name: "Lauttis", latitude: 60.1, longitude: 24.9, waterType: "sea",
+      alertEnabled: true, minWind: 8 }]);
+    const at = async (iso: string, suffix: string) => {
+      const built = createApp({
+        config: loadConfig({
+          NOSTE_TOKEN: "secret", CLIENT_TOKEN: "client", DATA_DIR: join(dir, `data-${suffix}`), TILE_CACHE_DIR: join(dir, `tiles-${suffix}`),
+        } as NodeJS.ProcessEnv),
+        fetchImpl: testFetch(),
+        now: () => new Date(iso),
+      });
+      await built.app.request("/api/spots", { method: "PUT", ...auth, body: spots });
+      return built.checkAlerts();
+    };
+    const morning = await at("2026-08-21T10:30:00Z", "a");
+    expect(morning).toHaveLength(1);
+    expect(morning[0]!.windows[0]!.start).toBe("2026-08-21T10:00");
+    expect(await at("2026-08-21T12:30:00Z", "b")).toEqual([]);
+  });
+
+  it("rikkinäinen JSON ja puutteelliset spotit → 400, ei 500", async () => {
+    const broken = await app.request("/api/spots", { method: "PUT", ...auth, body: "{not json" });
+    expect(broken.status).toBe(400);
+    const invalid = await app.request("/api/spots", {
+      method: "PUT", ...auth, body: JSON.stringify([null, { id: 1, latitude: "x" }]),
+    });
+    expect(invalid.status).toBe(400);
+    const session = await app.request("/api/sessions", { method: "POST", ...auth, body: "[" });
+    expect(session.status).toBe(400);
+  });
+
+  it("bbox-reitit tarkistavat alueen", async () => {
+    const client = { headers: { authorization: "Bearer client" } };
+    expect((await app.request("/api/windfield?bbox=26,59,24,60", client)).status).toBe(400);
+    expect((await app.request("/api/wavefield?bbox=0,0,50,50", client)).status).toBe(400);
+    expect((await app.request("/api/seastate?bbox=24,59,26", client)).status).toBe(400);
+  });
+
   it("ntfy-ilmoitus lähtee kerran per ikkuna", async () => {
     await app.request("/api/spots", {
       method: "PUT",
