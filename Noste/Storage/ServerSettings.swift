@@ -41,6 +41,16 @@ enum ServerSettings {
         return ServerConfig(baseURL: url, token: token)
     }
 
+    /// Laitekohtainen avain julkisten spottien omistajuuteen (vain lisääjä voi
+    /// muokata omiaan). Luodaan kerran; palvelin näkee vain hashin.
+    static var deviceKey: String {
+        let defaults = UserDefaults.standard
+        if let key = defaults.string(forKey: "deviceKey") { return key }
+        let key = UUID().uuidString
+        defaults.set(key, forKey: "deviceKey")
+        return key
+    }
+
     /// Tiilitemplate palvelimen proxyyn (MKTileOverlay-muoto).
     static func tileTemplate(layer: String, server: ServerConfig) -> String {
         "\(server.baseURL.absoluteString)/api/tiles/\(layer)/{z}/{x}/{y}.png?token=\(server.token)"

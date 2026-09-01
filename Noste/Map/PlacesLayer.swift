@@ -41,6 +41,19 @@ final class PlaceAnnotation: NSObject, MKAnnotation {
     }
 }
 
+/// Muiden jakama julkinen spotti kartalla.
+final class PublicSpotAnnotation: NSObject, MKAnnotation {
+    let spot: ServerClient.PublicSpot
+    let coordinate: CLLocationCoordinate2D
+
+    var title: String? { spot.name }
+
+    init(spot: ServerClient.PublicSpot) {
+        self.spot = spot
+        self.coordinate = CLLocationCoordinate2D(latitude: spot.latitude, longitude: spot.longitude)
+    }
+}
+
 /// Kategoriasuodatin: tyhjä valinta = näytä kaikki.
 struct PlaceFilterSheet: View {
     @Binding var selected: Set<String>
@@ -89,6 +102,7 @@ struct PlaceFilterSheet: View {
 /// Valitun kohteen kortti kartan alalaidassa.
 struct PlaceCard: View {
     let place: ServerClient.Place
+    var onMakeSpot: () -> Void = {}
     var onClose: () -> Void
 
     var body: some View {
@@ -115,6 +129,15 @@ struct PlaceCard: View {
             }
 
             Spacer()
+
+            // Rantakohteesta suoraan spotiksi — eksplisiittinen lisäyspolku.
+            Button {
+                onMakeSpot()
+            } label: {
+                Image(systemName: "star.circle.fill")
+                    .font(.title)
+                    .foregroundStyle(.orange)
+            }
 
             Button {
                 let item = MKMapItem(placemark: MKPlacemark(

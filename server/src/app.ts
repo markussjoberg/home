@@ -6,6 +6,10 @@ import { fetchLatestObservation, type WindObservation } from "./fmi.js";
 import { fetchLipasPlaces, fetchOsmPlaces, nearestPerCategory, type Place } from "./places.js";
 import { LipasMirror, lipasNearby } from "./lipas.js";
 import { LAPPIS_STORE_API, type ShopCatalog, fetchShopCatalog } from "./shop.js";
+import {
+  MAX_COMMENTS_PER_SPOT, MAX_PUBLIC_SPOTS, type PublicSpot, type SpotComment,
+  cleanText, hashOwnerKey, parseComment, parsePublicSpot, toPublicJson,
+} from "./public.js";
 import { type Alert, type AlertWindow, matchAlert } from "./kelivahti.js";
 import { type CombinedForecast, fetchCombinedForecast } from "./openmeteo.js";
 import { JsonStore } from "./store.js";
@@ -79,15 +83,18 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
   // sisäänrakennettu) = vain lukureitit — synkka ja kelivahti pysyvät yksityisinä.
   // Mahdollinen premium-rajaus tehdään myöhemmin tähän väliin.
   const readOnlyPaths = /^\/api\/(tiles|forecast|observation|openmeteo|spotmeta|places|shop)\b/;
+  // Yhteisöreitit (julkiset spotit + kommentit): myös kirjoitus onnistuu appiin
+  // upotetulla tokenilla — omistajuus varmistetaan laitekohtaisella avaimella.
+  const communityPaths = /^\/api\/public\//;
   app.use("/api/*", async (c, next) => {
     if (!config.apiToken) {
       return c.json({ error: "NOSTE_TOKEN puuttuu palvelimen ympäristöstä" }, 503);
     }
     const header = c.req.header("authorization");
     const token = header ? header.replace(/^Bearer\s+/i, "") : c.req.query("token");
-    const readOnly = readOnlyPaths.test(c.req.path);
+    const clientOk = readOnlyPaths.test(c.req.path) || communityPaths.test(c.req.path);
     const allowed = token === config.apiToken
-      || (readOnly && !!config.clientToken && token === config.clientToken);
+      || (clientOk && !!config.clientToken && token === config.clientToken);
     if (!allowed) {
       return c.json({ error: "unauthorized" }, 401);
     }
@@ -243,6 +250,82 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
       if (disk) return c.json(disk);
       return c.json({ error: "katalogia ei saatu" }, 502);
     }
+  });
+
+  // --- Julkiset spotit ja kommentit ---
+
+  app.get("/api/public/spots", async (c) => {
+    const spots = await store.read<PublicSpot[]>("public-spots", []);
+    const comments = await store.read<SpotComment[]>("spot-comments", []);
+    const counts = new Map<string, number>();
+    for (const comment of comments) {
+      counts.set(comment.spotId, (counts.get(comment.spotId) ?? 0) + 1);
+    }
+    return c.json({ spots: spots.map((s) => toPublicJson(s, counts.get(s.id) ?? 0)) });
+  });
+
+  // Upsert: uusi id kelpaa kenelle vain; olemassa olevan saa yli vain sama
+  // omistaja-avain (tai täysi token).
+  app.put("/api/public/spots/:id", async (c) => {
+    const id = cleanText(c.req.param("id"), 64);
+    const body = await c.req.json().catch(() => null);
+    const ownerKey = cleanText((body as Record<string, unknown> | null)?.ownerKey, 128);
+    if (!id || !ownerKey) return c.json({ error: "id ja ownerKey vaaditaan" }, 400);
+    const ownerHash = hashOwnerKey(ownerKey);
+    const spot = parsePublicSpot(body, id, ownerHash, now());
+    if (!spot) return c.json({ error: "kelvoton spotti" }, 400);
+
+    const spots = await store.read<PublicSpot[]>("public-spots", []);
+    const existing = spots.find((s) => s.id === id);
+    const fullToken = (c.req.header("authorization") ?? "").includes(config.apiToken);
+    if (existing && existing.ownerHash !== ownerHash && !fullToken) {
+      return c.json({ error: "vain lisääjä voi muokata" }, 403);
+    }
+    if (!existing && spots.length >= MAX_PUBLIC_SPOTS) {
+      return c.json({ error: "spottipooli täynnä" }, 507);
+    }
+    const updated = spots.filter((s) => s.id !== id);
+    updated.push(spot);
+    await store.write("public-spots", updated);
+    return c.json({ ok: true });
+  });
+
+  app.delete("/api/public/spots/:id", async (c) => {
+    const id = cleanText(c.req.param("id"), 64);
+    const ownerKey = cleanText(c.req.query("ownerKey"), 128);
+    const spots = await store.read<PublicSpot[]>("public-spots", []);
+    const existing = spots.find((s) => s.id === id);
+    if (!existing) return c.json({ ok: true });
+    const fullToken = (c.req.header("authorization") ?? "").includes(config.apiToken);
+    if (existing.ownerHash !== hashOwnerKey(ownerKey) && !fullToken) {
+      return c.json({ error: "vain lisääjä voi poistaa" }, 403);
+    }
+    await store.write("public-spots", spots.filter((s) => s.id !== id));
+    return c.json({ ok: true });
+  });
+
+  app.get("/api/public/spots/:id/comments", async (c) => {
+    const id = cleanText(c.req.param("id"), 64);
+    const comments = await store.read<SpotComment[]>("spot-comments", []);
+    const forSpot = comments.filter((comment) => comment.spotId === id);
+    return c.json({ comments: forSpot.slice(-200).reverse() });
+  });
+
+  app.post("/api/public/spots/:id/comments", async (c) => {
+    const id = cleanText(c.req.param("id"), 64);
+    const spots = await store.read<PublicSpot[]>("public-spots", []);
+    if (!spots.some((s) => s.id === id)) return c.json({ error: "spottia ei ole" }, 404);
+    const body = await c.req.json().catch(() => null);
+    const comment = parseComment(body, id, now());
+    if (!comment) return c.json({ error: "nimimerkki ja teksti vaaditaan" }, 400);
+    const comments = await store.read<SpotComment[]>("spot-comments", []);
+    const forSpot = comments.filter((existing) => existing.spotId === id);
+    if (forSpot.length >= MAX_COMMENTS_PER_SPOT) {
+      return c.json({ error: "kommentit täynnä" }, 507);
+    }
+    comments.push(comment);
+    await store.write("spot-comments", comments);
+    return c.json({ comment });
   });
 
   // --- Karttatiilet ---

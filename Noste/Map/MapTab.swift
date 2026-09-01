@@ -26,7 +26,18 @@ struct MapTab: View {
     @State private var fetchTask: Task<Void, Never>?
     @State private var zoomedOut = false
 
+    // Julkiset spotit: yhteinen pooli palvelimelta, kaikkien nähtävillä.
+    @State private var publicSpots: [ServerClient.PublicSpot] = []
+    @State private var selectedPublicSpot: ServerClient.PublicSpot?
+    @State private var mapCenter = CLLocationCoordinate2D(latitude: 62.5, longitude: 26.0)
+
     private var layer: MapLayer { MapLayer(rawValue: layerRaw) ?? .standard }
+
+    /// Julkiset spotit ilman omia (omat piirtyvät omina merkkeinään).
+    private var visiblePublicSpots: [ServerClient.PublicSpot] {
+        let ownIDs = Set(spots.map { $0.id.uuidString })
+        return publicSpots.filter { !ownIDs.contains($0.id) }
+    }
 
     private var placesFilter: Set<String> {
         get { Set(placesFilterRaw.split(separator: "|").map(String.init)) }
@@ -40,6 +51,7 @@ struct MapTab: View {
 
     /// Hakee rantainfran näkyvän alueen keskeltä (viive perää nopeaa panorointia).
     private func regionChanged(_ region: MKCoordinateRegion) {
+        mapCenter = region.center
         guard placesEnabled else { return }
         zoomedOut = region.span.latitudeDelta > 0.45
         guard !zoomedOut else { return }
@@ -93,6 +105,7 @@ struct MapTab: View {
                     terrainTemplate: terrainTemplate,
                     marineTemplate: marineTemplateResolved,
                     places: visiblePlaces,
+                    publicSpots: visiblePublicSpots,
                     onLongPress: { coordinate in
                         editingSpot = SpotData(
                             name: "",
@@ -106,13 +119,23 @@ struct MapTab: View {
                     onSelectPlace: { place in
                         selectedPlace = place
                     },
+                    onSelectPublicSpot: { spot in
+                        selectedPublicSpot = spot
+                    },
                     onRegionChange: regionChanged
                 )
                 .ignoresSafeArea(edges: .top)
 
                 VStack(spacing: 8) {
                     if let place = selectedPlace {
-                        PlaceCard(place: place) { selectedPlace = nil }
+                        PlaceCard(place: place, onMakeSpot: {
+                            editingSpot = SpotData(
+                                name: place.name ?? place.category,
+                                latitude: place.latitude,
+                                longitude: place.longitude
+                            )
+                            selectedPlace = nil
+                        }, onClose: { selectedPlace = nil })
                     } else if placesEnabled && zoomedOut {
                         Text("Lähennä karttaa nähdäksesi rantainfran")
                             .font(.caption)
@@ -127,7 +150,7 @@ struct MapTab: View {
                     }
                     .pickerStyle(.segmented)
                     .padding(.horizontal)
-                    Text("Lisää spotti painamalla karttaa pitkään")
+                    Text("Lisää spotti +-napista tai painamalla karttaa pitkään")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -135,6 +158,20 @@ struct MapTab: View {
             }
             .overlay(alignment: .topTrailing) {
                 VStack(spacing: 10) {
+                    // Eksplisiittinen spotin lisäys: kartan keskipisteeseen.
+                    Button {
+                        editingSpot = SpotData(
+                            name: "",
+                            latitude: mapCenter.latitude,
+                            longitude: mapCenter.longitude
+                        )
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.title3.weight(.semibold))
+                            .frame(width: 40, height: 40)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                            .foregroundStyle(Color.accentColor)
+                    }
                     Button {
                         placesEnabled.toggle()
                         if !placesEnabled {
@@ -176,6 +213,14 @@ struct MapTab: View {
                     handle(action, original: spot)
                 }
             }
+            .sheet(item: $selectedPublicSpot) { spot in
+                PublicSpotView(spot: spot)
+            }
+            .task {
+                if let shared = await ServerClient.shared.publicSpots() {
+                    publicSpots = shared
+                }
+            }
         }
     }
 
@@ -196,6 +241,15 @@ struct MapTab: View {
             updated.append(data)
             let context = modelContext
             Task {
+                // Julkinen spotti näkyy kaikille — julkaisu/poisto yhteispoolista.
+                if data.isPublic == true {
+                    await ServerClient.shared.publishSpot(data)
+                } else {
+                    await ServerClient.shared.unpublishSpot(id: data.id)
+                }
+                if let shared = await ServerClient.shared.publicSpots() {
+                    publicSpots = shared
+                }
                 await forecastStore.refresh(spot: data, force: true, allSpots: updated)
                 await ServerClient.shared.backupSpots(updated)
                 // Maastoanalyysi kerran per spotti: fetch + avoimuus ilmansuunnittain.
@@ -213,6 +267,7 @@ struct MapTab: View {
                 try? modelContext.save()
                 let remaining = spots.map(\.data).filter { $0.id != original.id }
                 Task {
+                    await ServerClient.shared.unpublishSpot(id: original.id)
                     await ServerClient.shared.backupSpots(remaining)
                 }
             }
@@ -232,9 +287,12 @@ struct SpotMapView: UIViewRepresentable {
     var marineTemplate: String
     /// Rantainfra-kerroksen kohteet (tyhjä = kerros pois).
     var places: [ServerClient.Place] = []
+    /// Muiden jakamat julkiset spotit.
+    var publicSpots: [ServerClient.PublicSpot] = []
     var onLongPress: (CLLocationCoordinate2D) -> Void
     var onSelectSpot: (SpotData) -> Void
     var onSelectPlace: (ServerClient.Place?) -> Void = { _ in }
+    var onSelectPublicSpot: (ServerClient.PublicSpot) -> Void = { _ in }
     var onRegionChange: (MKCoordinateRegion) -> Void = { _ in }
 
     func makeUIView(context: Context) -> MKMapView {
@@ -262,10 +320,17 @@ struct SpotMapView: UIViewRepresentable {
     /// Rantainfran merkit vaihdetaan könttänä, kun haettu joukko vaihtuu.
     private func updatePlaceAnnotations(_ map: MKMapView, context: Context) {
         let signature = "\(places.count):\(places.first.map { "\($0.latitude),\($0.longitude)" } ?? "")"
-        guard signature != context.coordinator.placesSignature else { return }
-        context.coordinator.placesSignature = signature
-        map.removeAnnotations(map.annotations.compactMap { $0 as? PlaceAnnotation })
-        map.addAnnotations(places.map(PlaceAnnotation.init))
+        if signature != context.coordinator.placesSignature {
+            context.coordinator.placesSignature = signature
+            map.removeAnnotations(map.annotations.compactMap { $0 as? PlaceAnnotation })
+            map.addAnnotations(places.map(PlaceAnnotation.init))
+        }
+        let publicSignature = "\(publicSpots.count):\(publicSpots.map(\.id).joined())"
+        if publicSignature != context.coordinator.publicSpotsSignature {
+            context.coordinator.publicSpotsSignature = publicSignature
+            map.removeAnnotations(map.annotations.compactMap { $0 as? PublicSpotAnnotation })
+            map.addAnnotations(publicSpots.map(PublicSpotAnnotation.init))
+        }
     }
 
     private func updateOverlay(_ map: MKMapView, context: Context) {
@@ -315,6 +380,7 @@ struct SpotMapView: UIViewRepresentable {
         var parent: SpotMapView
         var overlaySignature = ""
         var placesSignature = ""
+        var publicSpotsSignature = ""
 
         init(parent: SpotMapView) {
             self.parent = parent
@@ -335,6 +401,9 @@ struct SpotMapView: UIViewRepresentable {
                 mapView.deselectAnnotation(cluster, animated: false)
             } else if let place = view.annotation as? PlaceAnnotation {
                 parent.onSelectPlace(place.place)
+            } else if let publicSpot = view.annotation as? PublicSpotAnnotation {
+                parent.onSelectPublicSpot(publicSpot.spot)
+                mapView.deselectAnnotation(publicSpot, animated: false)
             }
         }
 
@@ -380,6 +449,18 @@ struct SpotMapView: UIViewRepresentable {
                 view.markerTintColor = PlaceStyle.color(placeAnnotation.place.category)
                 view.glyphImage = UIImage(systemName: PlaceStyle.symbol(placeAnnotation.place.category))
                 view.displayPriority = .defaultLow
+                return view
+            }
+            if let publicAnnotation = annotation as? PublicSpotAnnotation {
+                let identifier = "publicSpot"
+                let view = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView)
+                    ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                view.annotation = annotation
+                view.canShowCallout = false
+                view.markerTintColor = .systemPurple
+                view.glyphImage = UIImage(systemName: "person.2.fill")
+                view.displayPriority = .defaultHigh
+                _ = publicAnnotation
                 return view
             }
             if annotation is MKClusterAnnotation {

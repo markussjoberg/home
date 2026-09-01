@@ -74,7 +74,7 @@ struct SpotEditorView: View {
                 Section {
                     Toggle("Julkinen spotti", isOn: publicBinding)
                 } footer: {
-                    Text("Yksityinen näkyy vain sinulle. Julkinen saa näkyä muille, kun spottien jako kavereille toteutuu — merkintä kannattaa tehdä jo nyt.")
+                    Text("Julkinen spotti näkyy kaikille Nosten käyttäjille kartalla, ja muut voivat kommentoida kokemuksiaan. Yksityinen näkyy vain sinulle.")
                 }
 
                 Section("Muistiinpanot") {

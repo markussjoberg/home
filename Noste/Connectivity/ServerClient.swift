@@ -170,6 +170,113 @@ struct ServerClient {
         }
     }
 
+    // MARK: - Julkiset spotit ja kommentit
+
+    struct PublicSpot: Codable, Identifiable {
+        var id: String
+        var name: String
+        var latitude: Double
+        var longitude: Double
+        var waterType: String
+        var sports: [String]
+        var goodDirections: [Int]?
+        var minWind: Double?
+        var maxWind: Double?
+        var updatedAt: String
+        var commentCount: Int
+    }
+
+    struct SpotComment: Codable, Identifiable {
+        var id: String
+        var author: String
+        var text: String
+        var windMs: Double?
+        var windDir: Double?
+        var createdAt: String
+    }
+
+    func publicSpots() async -> [PublicSpot]? {
+        struct ListResponse: Codable { var spots: [PublicSpot] }
+        guard let request = request(path: "api/public/spots") else { return nil }
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let decoded = try? JSONDecoder().decode(ListResponse.self, from: data)
+        else { return nil }
+        return decoded.spots
+    }
+
+    /// Julkaisee spotin yhteiseen pooliin. Best effort — virhe ei riko mitään.
+    func publishSpot(_ spot: SpotData) async {
+        struct Upload: Codable {
+            var name: String
+            var latitude: Double
+            var longitude: Double
+            var waterType: String
+            var sports: [String]
+            var goodDirections: [Int]?
+            var minWind: Double?
+            var maxWind: Double?
+            var ownerKey: String
+        }
+        let upload = Upload(
+            name: spot.name, latitude: spot.latitude, longitude: spot.longitude,
+            waterType: spot.waterType.rawValue, sports: spot.sports.map(\.rawValue),
+            goodDirections: spot.goodDirections, minWind: spot.minWind, maxWind: spot.maxWind,
+            ownerKey: ServerSettings.deviceKey
+        )
+        guard let body = try? JSONEncoder().encode(upload),
+              let request = communityRequest(path: "api/public/spots/\(spot.id.uuidString)", method: "PUT", body: body)
+        else { return }
+        _ = try? await URLSession.shared.data(for: request)
+    }
+
+    func unpublishSpot(id: UUID) async {
+        guard let request = communityRequest(
+            path: "api/public/spots/\(id.uuidString)", method: "DELETE",
+            query: [URLQueryItem(name: "ownerKey", value: ServerSettings.deviceKey)]
+        ) else { return }
+        _ = try? await URLSession.shared.data(for: request)
+    }
+
+    func spotComments(spotID: String) async -> [SpotComment]? {
+        struct CommentsResponse: Codable { var comments: [SpotComment] }
+        guard let request = request(path: "api/public/spots/\(spotID)/comments") else { return nil }
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let decoded = try? JSONDecoder().decode(CommentsResponse.self, from: data)
+        else { return nil }
+        return decoded.comments
+    }
+
+    func postComment(spotID: String, author: String, text: String) async -> Bool {
+        struct Upload: Codable { var author: String; var text: String }
+        guard let body = try? JSONEncoder().encode(Upload(author: author, text: text)),
+              let request = communityRequest(path: "api/public/spots/\(spotID)/comments", method: "POST", body: body)
+        else { return false }
+        guard let (_, response) = try? await URLSession.shared.data(for: request) else { return false }
+        return (response as? HTTPURLResponse)?.statusCode == 200
+    }
+
+    /// Yhteisöreitit toimivat myös sisäänrakennetulla palvelimella (toisin kuin
+    /// yksityinen synkka, joka vaatii oman palvelimen).
+    private func communityRequest(path: String, method: String, query: [URLQueryItem] = [], body: Data? = nil) -> URLRequest? {
+        guard let server = ServerSettings.current else { return nil }
+        var components = URLComponents(
+            url: server.baseURL.appendingPathComponent(path),
+            resolvingAgainstBaseURL: false
+        )!
+        if !query.isEmpty { components.queryItems = query }
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = method
+        request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Authorization")
+        if let body {
+            request.httpBody = body
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        request.timeoutInterval = 15
+        return request
+    }
+
     /// Vie koko spottilistan palvelimelle (varmuuskopio + kelivahdin lähtödata).
     func backupSpots(_ spots: [SpotData]) async {
         guard let body = try? JSONEncoder().encode(spots),
