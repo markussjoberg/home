@@ -173,6 +173,46 @@ struct ServerClient {
         }
     }
 
+    // MARK: - FMI-aallokko (poiju + WAM)
+
+    struct WaveBuoy: Codable {
+        var time: String
+        var latitude: Double
+        var longitude: Double
+        var waveHeight: Double?
+        var waveDirection: Double?
+        var wavePeriod: Double?
+        var waterTemp: Double?
+    }
+
+    struct WaveHourForecast: Codable, Identifiable {
+        var time: String
+        var height: Double
+        var direction: Double?
+        var period: Double?
+
+        var id: String { time }
+        var date: Date? { ISO8601DateFormatter().date(from: time) }
+    }
+
+    struct WaveData: Codable {
+        var buoy: WaveBuoy?
+        var forecast: [WaveHourForecast]
+    }
+
+    /// FMI:n aaltopoijuhavainto + WAM-pisteennuste merispoteille.
+    func wave(latitude: Double, longitude: Double) async -> WaveData? {
+        guard let request = request(path: "api/wave", query: [
+            URLQueryItem(name: "lat", value: String(format: "%.4f", latitude)),
+            URLQueryItem(name: "lon", value: String(format: "%.4f", longitude))
+        ]) else { return nil }
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let decoded = try? JSONDecoder().decode(WaveData.self, from: data)
+        else { return nil }
+        return decoded
+    }
+
     // MARK: - Julkiset spotit ja kommentit
 
     struct PublicSpot: Codable, Identifiable {

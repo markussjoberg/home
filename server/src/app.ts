@@ -3,6 +3,7 @@ import { TtlCache } from "./cache.js";
 import { type Config, DEFAULT_MARINE_TEMPLATE } from "./config.js";
 import { fetchSpotMeta, type SpotMeta } from "./elevation.js";
 import { fetchLatestObservation, type WindObservation } from "./fmi.js";
+import { type WaveBuoyObservation, type WaveForecastHour, fetchWaveData } from "./wave.js";
 import { fetchLipasPlaces, fetchOsmPlaces, nearestPerCategory, type Place } from "./places.js";
 import { LipasMirror, lipasNearby } from "./lipas.js";
 import { LAPPIS_STORE_API, type ShopCatalog, fetchShopCatalog } from "./shop.js";
@@ -84,7 +85,7 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
   // varten). Kaksi tasoa: NOSTE_TOKEN = kaikki reitit; CLIENT_TOKEN (appiin
   // sisäänrakennettu) = vain lukureitit — synkka ja kelivahti pysyvät yksityisinä.
   // Mahdollinen premium-rajaus tehdään myöhemmin tähän väliin.
-  const readOnlyPaths = /^\/api\/(tiles|forecast|observation|openmeteo|spotmeta|places|shop)\b/;
+  const readOnlyPaths = /^\/api\/(tiles|forecast|observation|openmeteo|spotmeta|places|shop|wave)\b/;
   // Yhteisöreitit (julkiset spotit + kommentit): myös kirjoitus onnistuu appiin
   // upotetulla tokenilla — omistajuus varmistetaan laitekohtaisella avaimella.
   const communityPaths = /^\/api\/public\//;
@@ -159,6 +160,24 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
         fetchLatestObservation(lat, lon, fetchImpl),
       );
       return c.json({ observation });
+    } catch (error) {
+      return c.json({ error: String(error) }, 502);
+    }
+  });
+
+  // FMI:n meriaallokko: poijuhavainto + WAM-pisteennuste. Poijudata päivittyy
+  // ~30 min välein — sama välimuisti-ikä.
+  const waveCache = new TtlCache<{ buoy: WaveBuoyObservation | null; forecast: WaveForecastHour[] }>(1800);
+  app.get("/api/wave", async (c) => {
+    const lat = Number(c.req.query("lat"));
+    const lon = Number(c.req.query("lon"));
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return c.json({ error: "lat ja lon vaaditaan" }, 400);
+    }
+    try {
+      const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+      const wave = await waveCache.getOrSet(key, () => fetchWaveData(lat, lon, fetchImpl, now));
+      return c.json(wave);
     } catch (error) {
       return c.json({ error: String(error) }, 502);
     }

@@ -102,6 +102,7 @@ struct SpotForecastView: View {
     @State private var selectedTime: Date?
     @State private var places: [ServerClient.Place]?
     @State private var mediumRange: [MediumRangeDay]?
+    @State private var fmiWave: ServerClient.WaveData?
 
     /// Spotin oppiva tuuliprofiili reittatuista sessioista.
     private var profile: SpotWindProfile {
@@ -137,6 +138,63 @@ struct SpotForecastView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                    }
+                }
+            }
+
+            if spot.waterType == .sea, let wave = fmiWave,
+               wave.buoy != nil || !wave.forecast.isEmpty {
+                Section {
+                    if let buoy = wave.buoy, let height = buoy.waveHeight {
+                        HStack {
+                            Image(systemName: "water.waves").foregroundStyle(.cyan)
+                            Text("Poiju nyt")
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 1) {
+                                Text(String(format: "%.1f m · %.0f s", height, buoy.wavePeriod ?? 0))
+                                    .fontWeight(.semibold)
+                                if let temp = buoy.waterTemp {
+                                    Text(String(format: "vesi %.1f °C", temp))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .font(.subheadline)
+                    }
+                    ForEach(waveRows) { hour in
+                        HStack {
+                            if let date = hour.date {
+                                Text(date, format: .dateTime.weekday(.abbreviated).hour())
+                                    .font(.subheadline)
+                                    .frame(width: 76, alignment: .leading)
+                            }
+                            if surfWindowMatches(hour) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                    .font(.caption)
+                            }
+                            Spacer()
+                            if let direction = hour.direction {
+                                Image(systemName: "arrow.up")
+                                    .rotationEffect(.degrees(direction + 180))
+                                    .foregroundStyle(.cyan)
+                                    .font(.caption)
+                            }
+                            Text(String(format: "%.1f m", hour.height))
+                                .font(.subheadline.weight(.medium))
+                                .frame(width: 52, alignment: .trailing)
+                            Text(String(format: "%.0f s", hour.period ?? 0))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 34, alignment: .trailing)
+                        }
+                    }
+                } header: {
+                    Text("Aallokko — FMI poiju + WAM")
+                } footer: {
+                    if spot.sports.contains(.surf) && spot.exposureByOctant != nil {
+                        Text("✓ = aallokko osuu spotin avoimeen suuntaan ≥ 0,5 m — surffi-ikkuna.")
                     }
                 }
             }
@@ -293,9 +351,28 @@ struct SpotForecastView: View {
         }
     }
 
+    /// WAM-rivit: seuraavat 24 h kolmen tunnin välein.
+    private var waveRows: [ServerClient.WaveHourForecast] {
+        guard let forecast = fmiWave?.forecast else { return [] }
+        return forecast.enumerated().filter { $0.offset % 3 == 0 && $0.offset < 24 }.map(\.element)
+    }
+
+    /// Surffi-ikkuna: aallon tulosuunta osuu spotin avoimeen oktanttiin ja
+    /// korkeus riittää.
+    private func surfWindowMatches(_ hour: ServerClient.WaveHourForecast) -> Bool {
+        guard spot.sports.contains(.surf),
+              let exposure = spot.exposureByOctant, exposure.count == 8,
+              let direction = hour.direction, hour.height >= 0.5 else { return false }
+        let octant = Int((direction + 22.5).truncatingRemainder(dividingBy: 360) / 45)
+        return exposure[octant] >= 0.6
+    }
+
     private func refresh(force: Bool) async {
         await forecastStore.refresh(spot: spot, force: force, allSpots: allSpots)
         observation = await ServerClient.shared.observation(latitude: spot.latitude, longitude: spot.longitude)
+        if spot.waterType == .sea, fmiWave == nil {
+            fmiWave = await ServerClient.shared.wave(latitude: spot.latitude, longitude: spot.longitude)
+        }
         if places == nil {
             places = await ServerClient.shared.places(latitude: spot.latitude, longitude: spot.longitude)
         }

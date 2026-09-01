@@ -30,7 +30,7 @@ export function buildObservationUrl(lat: number, lon: number, now: () => Date = 
   return url.toString();
 }
 
-interface RawElement {
+export interface RawElement {
   time: string;
   lat: number;
   lon: number;
@@ -38,7 +38,7 @@ interface RawElement {
   value: number;
 }
 
-function parseElements(xml: string): RawElement[] {
+export function parseElements(xml: string): RawElement[] {
   const result: RawElement[] = [];
   const blocks = xml.match(/<BsWfs:BsWfsElement[\s\S]*?<\/BsWfs:BsWfsElement>/g) ?? [];
   for (const block of blocks) {
