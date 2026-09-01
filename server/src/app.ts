@@ -4,6 +4,7 @@ import { type Config, DEFAULT_MARINE_TEMPLATE } from "./config.js";
 import { fetchSpotMeta, type SpotMeta } from "./elevation.js";
 import { fetchLatestObservation, type WindObservation } from "./fmi.js";
 import { type SeaStateStation, type WaveBuoyObservation, type WaveForecastHour, fetchSeaState, fetchWaveData } from "./wave.js";
+import { type WindCell, fetchWindField } from "./windfield.js";
 import { fetchLipasPlaces, fetchOsmPlaces, nearestPerCategory, type Place } from "./places.js";
 import { LipasMirror, lipasNearby } from "./lipas.js";
 import { LAPPIS_STORE_API, type ShopCatalog, fetchShopCatalog } from "./shop.js";
@@ -85,7 +86,7 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
   // varten). Kaksi tasoa: NOSTE_TOKEN = kaikki reitit; CLIENT_TOKEN (appiin
   // sisäänrakennettu) = vain lukureitit — synkka ja kelivahti pysyvät yksityisinä.
   // Mahdollinen premium-rajaus tehdään myöhemmin tähän väliin.
-  const readOnlyPaths = /^\/api\/(tiles|forecast|observation|openmeteo|spotmeta|places|shop|wave|seastate)\b/;
+  const readOnlyPaths = /^\/api\/(tiles|forecast|observation|openmeteo|spotmeta|places|shop|wave|seastate|windfield)\b/;
   // Yhteisöreitit (julkiset spotit + kommentit): myös kirjoitus onnistuu appiin
   // upotetulla tokenilla — omistajuus varmistetaan laitekohtaisella avaimella.
   const communityPaths = /^\/api\/public\//;
@@ -194,6 +195,24 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
     try {
       const state = await seaStateCache.getOrSet(bbox, () => fetchSeaState(bbox, fetchImpl, now));
       return c.json(state);
+    } catch (error) {
+      return c.json({ error: String(error) }, 502);
+    }
+  });
+
+  // Tuulikenttä partikkelianimaatioon: 9×9-hila Open-Meteosta, 30 min välimuisti.
+  const windFieldCache = new TtlCache<WindCell[]>(1800);
+  app.get("/api/windfield", async (c) => {
+    const parts = (c.req.query("bbox") ?? "").split(",").map(Number);
+    if (parts.length !== 4 || parts.some((v) => !Number.isFinite(v))) {
+      return c.json({ error: "bbox=minLon,minLat,maxLon,maxLat vaaditaan" }, 400);
+    }
+    const key = parts.map((v) => v.toFixed(1)).join(",");
+    try {
+      const cells = await windFieldCache.getOrSet(key, () =>
+        fetchWindField(parts[0]!, parts[1]!, parts[2]!, parts[3]!, fetchImpl),
+      );
+      return c.json({ cells });
     } catch (error) {
       return c.json({ error: String(error) }, 502);
     }

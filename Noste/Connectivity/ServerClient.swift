@@ -245,6 +245,22 @@ struct ServerClient {
         return decoded
     }
 
+    /// Tuulihila partikkelianimaatioon (9×9 Open-Meteo-solua alueelle).
+    func windField(minLat: Double, minLon: Double, maxLat: Double, maxLon: Double) async -> [WindCell]? {
+        struct FieldResponse: Codable { var cells: [Cell] }
+        struct Cell: Codable { var latitude: Double; var longitude: Double; var speed: Double; var direction: Double }
+        guard let request = request(path: "api/windfield", query: [
+            URLQueryItem(name: "bbox", value: String(format: "%.2f,%.2f,%.2f,%.2f", minLon, minLat, maxLon, maxLat))
+        ]) else { return nil }
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let decoded = try? JSONDecoder().decode(FieldResponse.self, from: data)
+        else { return nil }
+        return decoded.cells.map {
+            WindCell(latitude: $0.latitude, longitude: $0.longitude, speed: $0.speed, direction: $0.direction)
+        }
+    }
+
     // MARK: - Julkiset spotit ja kommentit
 
     struct PublicSpot: Codable, Identifiable {

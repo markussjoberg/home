@@ -30,6 +30,8 @@ struct MapTab: View {
     @AppStorage("mapSeaState") private var seaStateEnabled = false
     @State private var seaState: ServerClient.SeaState?
     @State private var seaStateTask: Task<Void, Never>?
+    @State private var windModel = WindParticleModel()
+    @State private var currentRegion: MKCoordinateRegion?
 
     // Julkiset spotit: yhteinen pooli palvelimelta, kaikkien nähtävillä.
     @State private var publicSpots: [ServerClient.PublicSpot] = []
@@ -68,13 +70,26 @@ struct MapTab: View {
             guard !Task.isCancelled else { return }
             let halfLat = region.span.latitudeDelta / 2
             let halfLon = region.span.longitudeDelta / 2
-            if let state = await ServerClient.shared.seaState(
+            async let stateTask = ServerClient.shared.seaState(
                 minLat: region.center.latitude - halfLat,
                 minLon: region.center.longitude - halfLon,
                 maxLat: region.center.latitude + halfLat,
                 maxLon: region.center.longitude + halfLon
-            ), !Task.isCancelled {
-                seaState = state
+            )
+            async let fieldTask = ServerClient.shared.windField(
+                minLat: region.center.latitude - halfLat,
+                minLon: region.center.longitude - halfLon,
+                maxLat: region.center.latitude + halfLat,
+                maxLon: region.center.longitude + halfLon
+            )
+            let (state, field) = await (stateTask, fieldTask)
+            guard !Task.isCancelled else { return }
+            if let state { seaState = state }
+            if let field {
+                windModel.update(
+                    cells: field.map { WindCell(latitude: $0.latitude, longitude: $0.longitude, speed: $0.speed, direction: $0.direction) },
+                    region: region
+                )
             }
         }
     }
@@ -82,6 +97,7 @@ struct MapTab: View {
     /// Hakee rantainfran näkyvän alueen keskeltä (viive perää nopeaa panorointia).
     private func regionChanged(_ region: MKCoordinateRegion) {
         mapCenter = region.center
+        currentRegion = region
         refreshSeaState(region)
         guard placesEnabled else { return }
         zoomedOut = region.span.latitudeDelta > 0.45
@@ -159,6 +175,11 @@ struct MapTab: View {
                     centerCoordinate: centerCoordinate
                 )
                 .ignoresSafeArea(edges: .top)
+
+                if seaStateEnabled, let region = currentRegion, windModel.isReady {
+                    WindFieldOverlay(model: windModel, region: region)
+                        .ignoresSafeArea(edges: .top)
+                }
 
                 VStack(spacing: 8) {
                     if let place = selectedPlace {
