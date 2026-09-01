@@ -9,11 +9,17 @@ import type { FetchLike } from "./places.js";
 export const LAPPIS_STORE_API = "https://lappis.fi/wp-json/wc/store/v1";
 
 /** Kategoria → kalustotyyppi. Tarkistettu Store API:sta 2026-08. */
-export const SHOP_CATEGORIES: { id: number; type: ShopItemType }[] = [
-  { id: 1454, type: "wing" },     // Uudet wingit
-  { id: 2810, type: "parawing" }, // Parawingit
-  { id: 1594, type: "board" },    // Foil-laudat
-  { id: 1467, type: "foil" },     // Wingfoil hydrofoil etusiivet
+export const SHOP_CATEGORIES: { id: number; type: ShopItemType; sport: string }[] = [
+  { id: 1454, type: "wing", sport: "wingFoil" },      // Uudet wingit
+  { id: 2810, type: "parawing", sport: "parawing" },  // Parawingit
+  { id: 1594, type: "board", sport: "wingFoil" },     // Foil-laudat
+  { id: 1467, type: "foil", sport: "wingFoil" },      // Wingfoil hydrofoil etusiivet
+  { id: 1597, type: "board", sport: "pumpFoil" },     // Pumpfoil laudat
+  { id: 1569, type: "foil", sport: "pumpFoil" },      // Pumpfoil etusiivet
+  { id: 1600, type: "board", sport: "proneFoil" },    // Pronefoil laudat
+  { id: 1572, type: "foil", sport: "proneFoil" },     // Pronefoil etusiivet
+  { id: 1598, type: "board", sport: "dwSup" },        // Downwind foil laudat
+  { id: 1570, type: "foil", sport: "dwSup" },         // Downwind foil etusiivet
 ];
 
 export type ShopItemType = "wing" | "parawing" | "board" | "foil";
@@ -30,6 +36,8 @@ export interface ShopItem {
   url: string;
   /** Tuotekuvan osoite (thumbnail); null jos ei kuvaa. */
   image: string | null;
+  /** Ensisijainen laji (Sport.rawValue) kaupan kategoriasta. */
+  sport: string | null;
 }
 
 export interface ShopCatalog {
@@ -55,7 +63,7 @@ export function parseSizeTerm(term: string): number | null {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
-export function parseProducts(body: unknown, type: ShopItemType): ShopItem[] {
+export function parseProducts(body: unknown, type: ShopItemType, sport: string | null = null): ShopItem[] {
   const products = Array.isArray(body) ? (body as StoreProduct[]) : [];
   const items: ShopItem[] = [];
   for (const product of products) {
@@ -83,10 +91,11 @@ export function parseProducts(body: unknown, type: ShopItemType): ShopItem[] {
           price,
           url: product.permalink,
           image,
+          sport,
         });
       }
     } else {
-      items.push({ id: String(product.id), type, name: product.name, size: null, year, price, url: product.permalink, image });
+      items.push({ id: String(product.id), type, name: product.name, size: null, year, price, url: product.permalink, image, sport });
     }
   }
   return items;
@@ -104,7 +113,7 @@ export async function fetchShopCatalog(
     try {
       const res = await fetchImpl(url);
       if (!res.ok) continue;
-      items.push(...parseProducts(await res.json(), category.type));
+      items.push(...parseProducts(await res.json(), category.type, category.sport));
     } catch {
       // Yksi kategoria saa epäonnistua — muut kelpaavat silti.
     }

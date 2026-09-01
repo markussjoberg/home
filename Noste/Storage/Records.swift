@@ -89,20 +89,25 @@ final class GearRecord {
     var size: Double?
     /// Vuosimalli; nil = ei tiedossa.
     var year: Int?
+    /// Ensisijainen laji (Sport.rawValue); nil = yleiskäyttöinen.
+    var primarySportRaw: String?
     var createdAt: Date
 
-    init(type: GearType, name: String, size: Double? = nil, year: Int? = nil) {
+    init(type: GearType, name: String, size: Double? = nil, year: Int? = nil, primarySport: Sport? = nil) {
         id = UUID()
         typeRaw = type.rawValue
         self.name = name
         self.size = size
         self.year = year
+        primarySportRaw = primarySport?.rawValue
         createdAt = Date()
     }
 
     var type: GearType { GearType(rawValue: typeRaw) ?? .wing }
 
-    var info: GearInfo { GearInfo(type: type, name: name, size: size, year: year) }
+    var primarySport: Sport? { primarySportRaw.flatMap(Sport.init(rawValue:)) }
+
+    var info: GearInfo { GearInfo(type: type, name: name, size: size, year: year, sport: primarySport) }
 
     /// Esim. "Unit 4,5 m² ’24".
     var displayName: String {

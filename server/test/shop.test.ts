@@ -22,10 +22,10 @@ describe("lappis-katalogi", () => {
   });
 
   it("tuote laajenee riviksi per koko, hinta euroina ja vuosi nimestä", () => {
-    const items = parseProducts([wingProduct], "wing");
+    const items = parseProducts([wingProduct], "wing", "wingFoil");
     expect(items).toHaveLength(2);
     expect(items[0]).toMatchObject({
-      id: "72760-2.5", type: "wing", size: 2.5, year: 2026, price: 929,
+      id: "72760-2.5", type: "wing", size: 2.5, year: 2026, price: 929, sport: "wingFoil",
       url: "https://lappis.fi/tuote/duotone-float-2026/",
     });
     expect(items[1]!.size).toBe(4.5);

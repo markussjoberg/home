@@ -156,6 +156,7 @@ struct ServerClient {
             var price: Int
             var url: String
             var image: String?
+            var sport: String?
         }
         struct CatalogResponse: Codable { var store: String; var items: [Item] }
         guard let request = request(path: "api/shop/catalog") else { return nil }
@@ -168,7 +169,8 @@ struct ServerClient {
             return GearCatalogItem(
                 id: item.id, type: type, name: item.name, size: item.size,
                 year: item.year ?? 0, price: item.price, url: item.url,
-                imageURL: item.image
+                imageURL: item.image,
+                sport: item.sport.flatMap(Sport.init(rawValue:))
             )
         }
     }

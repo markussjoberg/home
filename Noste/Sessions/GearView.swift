@@ -17,7 +17,8 @@ struct GearView: View {
         GearAdvisor.suggestions(
             quiver: gear.map(\.info),
             catalog: catalog,
-            currentYear: Calendar.current.component(.year, from: Date())
+            currentYear: Calendar.current.component(.year, from: Date()),
+            userSports: UserProfile.sports
         )
     }
 
@@ -50,7 +51,14 @@ struct GearView: View {
                                 Button {
                                     editing = item
                                 } label: {
-                                    Label { Text(item.displayName).foregroundStyle(.primary) } icon: {
+                                    Label {
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text(item.displayName).foregroundStyle(.primary)
+                                            if let sport = item.primarySport {
+                                                Text(sport.displayName).font(.caption2).foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    } icon: {
                                         GearIcon(type: type, size: 24).foregroundStyle(.tint)
                                     }
                                 }
@@ -189,6 +197,7 @@ struct GearEditorView: View {
     @State private var name = ""
     @State private var sizeText = ""
     @State private var yearText = ""
+    @State private var primarySport: Sport?
 
     var body: some View {
         NavigationStack {
@@ -207,6 +216,12 @@ struct GearEditorView: View {
                 Picker("Tyyppi", selection: $type) {
                     ForEach(GearType.allCases) { type in
                         Text(type.displayName).tag(type)
+                    }
+                }
+                Picker("Ensisijainen laji", selection: $primarySport) {
+                    Text("Yleiskäyttöinen").tag(Sport?.none)
+                    ForEach(Sport.allCases) { sport in
+                        Text(sport.displayName).tag(Sport?.some(sport))
                     }
                 }
                 TextField("Merkki ja malli (esim. Duotone Unit)", text: $name)
@@ -235,6 +250,7 @@ struct GearEditorView: View {
                     name = record.name
                     sizeText = record.size.map { $0 == $0.rounded() ? String(Int($0)) : String($0) } ?? ""
                     yearText = record.year.map(String.init) ?? ""
+                    primarySport = record.primarySport
                 }
             }
         }
@@ -248,6 +264,7 @@ struct GearEditorView: View {
             .trimmingCharacters(in: .whitespaces)
         sizeText = item.size.map { $0 == $0.rounded() ? String(Int($0)) : String($0) } ?? ""
         yearText = item.year > 0 ? String(item.year) : ""
+        primarySport = item.sport
     }
 
     private func save() {
@@ -258,8 +275,9 @@ struct GearEditorView: View {
             record.name = name
             record.size = size
             record.year = year
+            record.primarySportRaw = primarySport?.rawValue
         } else {
-            modelContext.insert(GearRecord(type: type, name: name, size: size, year: year))
+            modelContext.insert(GearRecord(type: type, name: name, size: size, year: year, primarySport: primarySport))
         }
         try? modelContext.save()
     }

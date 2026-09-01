@@ -105,7 +105,7 @@ struct MetricsView: View {
                 row("Pumput", "\(workout.livePumpCount)", .cyan)
                 row("Lennot", "\(workout.rideState.rideCount)", .green)
                 row("Foiliaika", Format.duration(workout.rideState.totalRideTime), .green)
-            case .wingFoil, .parawing, .kite:
+            case .wingFoil, .parawing, .kite, .proneFoil, .dwSup:
                 row("Foiliaika", Format.duration(workout.rideState.totalRideTime), .green)
                 row("Lennot", "\(workout.rideState.rideCount)", .green)
                 row("Matka", Format.distance(workout.liveDistance), .primary)
@@ -129,7 +129,7 @@ struct MetricsView: View {
             } else {
                 heroText("\(workout.livePumpCount)", label: "pumppua", color: .cyan)
             }
-        case .wingFoil, .parawing, .kite:
+        case .wingFoil, .parawing, .kite, .proneFoil, .dwSup:
             heroText(
                 Format.speedKmh(workout.currentSpeed),
                 label: workout.rideState.isRiding ? "FOILILLA · \(Format.duration(workout.rideState.currentRideDuration))" : "nopeus",

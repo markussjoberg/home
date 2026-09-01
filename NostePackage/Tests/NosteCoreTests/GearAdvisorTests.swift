@@ -69,3 +69,35 @@ final class GearAdvisorTests: XCTestCase {
         XCTAssertFalse(a.isEmpty)
     }
 }
+
+extension GearAdvisorTests {
+
+    /// Bugikorjaus: pumppari ei saa wingfoil-siipiehdotuksia.
+    func testPumpFoilerGetsNoWingSuggestions() {
+        let catalog = [
+            GearCatalogItem(id: "w30", type: .wing, name: "Wing 3.0", size: 3.0, year: 2026, price: 899, url: "u", sport: .wingFoil),
+            GearCatalogItem(id: "pb", type: .board, name: "Pumppilauta 2026", size: 30, year: 2026, price: 990, url: "u", sport: .pumpFoil),
+            GearCatalogItem(id: "wb", type: .board, name: "Wingilauta 2026", size: 95, year: 2026, price: 1290, url: "u", sport: .wingFoil),
+        ]
+        // Pumppari, jolla vanha pumppilauta: ehdotus on pumppilauta, EI wingiä.
+        let quiver = [GearInfo(type: .board, name: "Wanha pumppilauta", size: 32, year: 2021, sport: .pumpFoil)]
+        let suggestions = GearAdvisor.suggestions(
+            quiver: quiver, catalog: catalog, currentYear: 2026, userSports: [.pumpFoil]
+        )
+        XCTAssertFalse(suggestions.contains { $0.item.type == .wing }, "pumppari ei tarvitse siipiä")
+        XCTAssertEqual(suggestions.first?.item.id, "pb", "korvaaja samasta lajista")
+    }
+
+    /// Vanhalle wingilaudalle ei ehdoteta pumppilautaa vaikka se olisi uudempi.
+    func testReplacementMatchesGearSport() {
+        let catalog = [
+            GearCatalogItem(id: "pb", type: .board, name: "Pumppilauta 2026", size: 30, year: 2026, price: 990, url: "u", sport: .pumpFoil),
+            GearCatalogItem(id: "wb", type: .board, name: "Wingilauta 2025", size: 95, year: 2025, price: 1290, url: "u", sport: .wingFoil),
+        ]
+        let quiver = [GearInfo(type: .board, name: "Wanha wingilauta", size: 100, year: 2021, sport: .wingFoil)]
+        let suggestions = GearAdvisor.suggestions(
+            quiver: quiver, catalog: catalog, currentYear: 2026, userSports: [.wingFoil, .pumpFoil]
+        )
+        XCTAssertEqual(suggestions.first?.item.id, "wb", "saman lajin lauta, ei pumppilautaa")
+    }
+}

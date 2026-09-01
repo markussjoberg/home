@@ -6,6 +6,8 @@ public enum Sport: String, Codable, CaseIterable, Sendable, Identifiable {
     case pumpFoil
     case parawing
     case kite
+    case proneFoil
+    case dwSup
     case surf
     case sup
 
@@ -17,6 +19,8 @@ public enum Sport: String, Codable, CaseIterable, Sendable, Identifiable {
         case .pumpFoil: return "Pumpfoil"
         case .parawing: return "Parawing"
         case .kite: return "Kite"
+        case .proneFoil: return "Prone foil"
+        case .dwSup: return "DW SUP"
         case .surf: return "Lainelautailu"
         case .sup: return "SUP"
         }
@@ -31,6 +35,8 @@ public enum Sport: String, Codable, CaseIterable, Sendable, Identifiable {
         case .pumpFoil: return "figure.surfing"
         case .parawing: return "wind.circle"
         case .kite: return "paperplane"
+        case .proneFoil: return "figure.surfing"
+        case .dwSup: return "oar.2.crossed"
         case .surf: return "water.waves"
         case .sup: return "oar.2.crossed"
         }
@@ -39,7 +45,7 @@ public enum Sport: String, Codable, CaseIterable, Sendable, Identifiable {
     /// Käyttääkö laji foilia (foiliajan tunnistus päällä).
     public var usesFoil: Bool {
         switch self {
-        case .wingFoil, .pumpFoil, .parawing, .kite: return true
+        case .wingFoil, .pumpFoil, .parawing, .kite, .proneFoil, .dwSup: return true
         case .surf, .sup: return false
         }
     }
@@ -51,7 +57,7 @@ public enum Sport: String, Codable, CaseIterable, Sendable, Identifiable {
     public var countsJumps: Bool {
         switch self {
         case .wingFoil, .parawing, .kite: return true
-        case .pumpFoil, .surf, .sup: return false
+        case .pumpFoil, .proneFoil, .dwSup, .surf, .sup: return false
         }
     }
 
@@ -62,6 +68,8 @@ public enum Sport: String, Codable, CaseIterable, Sendable, Identifiable {
         case .pumpFoil: return 2.2   // ~8 km/h
         case .parawing: return 3.3   // kuten wing — kalibroidaan kenttädatalla
         case .kite: return 3.5
+        case .proneFoil: return 2.8
+        case .dwSup: return 3.0
         case .surf: return 2.8       // ~10 km/h: laskunopeus selvästi yli melonnan
         case .sup: return 2.8
         }
@@ -74,6 +82,8 @@ public enum Sport: String, Codable, CaseIterable, Sendable, Identifiable {
         case .pumpFoil: return 1.7
         case .parawing: return 2.5
         case .kite: return 2.5
+        case .proneFoil: return 2.0
+        case .dwSup: return 2.2
         case .surf: return 2.0
         case .sup: return 2.0
         }
@@ -88,6 +98,8 @@ public enum Sport: String, Codable, CaseIterable, Sendable, Identifiable {
         case .pumpFoil: return 9    // 32 km/h
         case .parawing: return 18
         case .kite: return 25       // 90 km/h — kitefoil kulkee wingiä lujempaa
+        case .proneFoil: return 12
+        case .dwSup: return 12
         case .surf: return 15
         case .sup: return 8
         }

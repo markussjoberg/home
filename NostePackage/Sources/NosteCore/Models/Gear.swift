@@ -48,12 +48,17 @@ public struct GearInfo: Sendable, Equatable {
     public var size: Double?
     /// Vuosimalli; nil jos ei tiedossa.
     public var year: Int?
+    /// Ensisijainen laji. nil = yleiskäyttöinen — ristiinkäyttö on sallittua
+    /// (sama lauta voi vetää wingiä, pumppia ja dw-suppia), tämä ohjaa vain
+    /// suosituksia.
+    public var sport: Sport?
 
-    public init(type: GearType, name: String, size: Double? = nil, year: Int? = nil) {
+    public init(type: GearType, name: String, size: Double? = nil, year: Int? = nil, sport: Sport? = nil) {
         self.type = type
         self.name = name
         self.size = size
         self.year = year
+        self.sport = sport
     }
 }
 
@@ -69,8 +74,10 @@ public struct GearCatalogItem: Sendable, Equatable, Identifiable {
     public var url: String
     /// Tuotekuvan osoite; nil jos ei kuvaa.
     public var imageURL: String?
+    /// Tuotteen ensisijainen laji (kaupan kategoriasta); nil = yleiskäyttöinen.
+    public var sport: Sport?
 
-    public init(id: String, type: GearType, name: String, size: Double? = nil, year: Int, price: Int, url: String, imageURL: String? = nil) {
+    public init(id: String, type: GearType, name: String, size: Double? = nil, year: Int, price: Int, url: String, imageURL: String? = nil, sport: Sport? = nil) {
         self.id = id
         self.type = type
         self.name = name
@@ -79,6 +86,7 @@ public struct GearCatalogItem: Sendable, Equatable, Identifiable {
         self.price = price
         self.url = url
         self.imageURL = imageURL
+        self.sport = sport
     }
 }
 
@@ -112,11 +120,21 @@ public enum GearAdvisor {
         quiver: [GearInfo],
         catalog: [GearCatalogItem],
         currentYear: Int,
-        maxCount: Int = 2
+        maxCount: Int = 2,
+        userSports: [Sport] = Sport.allCases
     ) -> [GearSuggestion] {
         var result: [GearSuggestion] = []
 
-        let wingSizes = quiver.filter { $0.type == .wing }.compactMap(\.size).sorted()
+        // Ehdota vain käyttäjän lajien tuotteita (nil = yleiskäyttöinen kelpaa).
+        let catalog = catalog.filter { item in
+            item.sport == nil || userSports.contains(item.sport!)
+        }
+
+        // Siipisäännöt vain jos käyttäjä wingaa — pumppari ei tarvitse siipiä.
+        let wingSizes = userSports.contains(.wingFoil)
+            ? quiver.filter { $0.type == .wing && ($0.sport == nil || $0.sport == .wingFoil) }
+                .compactMap(\.size).sorted()
+            : []
         if let smallest = wingSizes.first, let largest = wingSizes.last {
             if smallest > 3.6, let item = closestWing(to: smallest - 1.5, in: catalog) {
                 result.append(GearSuggestion(
@@ -146,7 +164,11 @@ public enum GearAdvisor {
             return (gear, year)
         }.sorted { $0.1 < $1.1 }
         for (gear, year) in dated {
-            let candidates = catalog.filter { $0.type == gear.type }
+            // Korvaaja: sama tyyppi JA sama laji (nil sopii kumpaankin suuntaan).
+            let candidates = catalog.filter { item in
+                item.type == gear.type
+                    && (gear.sport == nil || item.sport == nil || item.sport == gear.sport)
+            }
             let newestYear = candidates.map(\.year).max()
             guard let newestYear, newestYear > year else { continue }
             let newest = candidates.filter { $0.year == newestYear }
