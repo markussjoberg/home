@@ -26,6 +26,11 @@ struct MapTab: View {
     @State private var fetchTask: Task<Void, Never>?
     @State private var zoomedOut = false
 
+    // Merisää-kerros: FMI:n poijut + tuuliasemat näkyvältä alueelta.
+    @AppStorage("mapSeaState") private var seaStateEnabled = false
+    @State private var seaState: ServerClient.SeaState?
+    @State private var seaStateTask: Task<Void, Never>?
+
     // Julkiset spotit: yhteinen pooli palvelimelta, kaikkien nähtävillä.
     @State private var publicSpots: [ServerClient.PublicSpot] = []
     @State private var selectedPublicSpot: ServerClient.PublicSpot?
@@ -55,9 +60,29 @@ struct MapTab: View {
         return filter.isEmpty ? mapPlaces : mapPlaces.filter { filter.contains($0.category) }
     }
 
+    private func refreshSeaState(_ region: MKCoordinateRegion) {
+        guard seaStateEnabled else { return }
+        seaStateTask?.cancel()
+        seaStateTask = Task {
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            guard !Task.isCancelled else { return }
+            let halfLat = region.span.latitudeDelta / 2
+            let halfLon = region.span.longitudeDelta / 2
+            if let state = await ServerClient.shared.seaState(
+                minLat: region.center.latitude - halfLat,
+                minLon: region.center.longitude - halfLon,
+                maxLat: region.center.latitude + halfLat,
+                maxLon: region.center.longitude + halfLon
+            ), !Task.isCancelled {
+                seaState = state
+            }
+        }
+    }
+
     /// Hakee rantainfran näkyvän alueen keskeltä (viive perää nopeaa panorointia).
     private func regionChanged(_ region: MKCoordinateRegion) {
         mapCenter = region.center
+        refreshSeaState(region)
         guard placesEnabled else { return }
         zoomedOut = region.span.latitudeDelta > 0.45
         guard !zoomedOut else { return }
@@ -112,6 +137,7 @@ struct MapTab: View {
                     marineTemplate: marineTemplateResolved,
                     places: visiblePlaces,
                     publicSpots: visiblePublicSpots,
+                    seaState: seaStateEnabled ? seaState : nil,
                     onLongPress: { coordinate in
                         editingSpot = SpotData(
                             name: "",
@@ -182,6 +208,16 @@ struct MapTab: View {
                             .frame(width: 40, height: 40)
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
                             .foregroundStyle(.secondary)
+                    }
+                    Button {
+                        seaStateEnabled.toggle()
+                        if !seaStateEnabled { seaState = nil }
+                    } label: {
+                        Image(systemName: seaStateEnabled ? "water.waves" : "water.waves")
+                            .font(.title3)
+                            .frame(width: 40, height: 40)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                            .foregroundStyle(seaStateEnabled ? Color.accentColor : .secondary)
                     }
                     Button {
                         MapLocation.requestPermission()
@@ -341,6 +377,8 @@ struct SpotMapView: UIViewRepresentable {
     var places: [ServerClient.Place] = []
     /// Muiden jakamat julkiset spotit.
     var publicSpots: [ServerClient.PublicSpot] = []
+    /// Merisää (poijut + tuuliasemat); nil = kerros pois.
+    var seaState: ServerClient.SeaState?
     var onLongPress: (CLLocationCoordinate2D) -> Void
     var onSelectSpot: (SpotData) -> Void
     var onSelectPlace: (ServerClient.Place?) -> Void = { _ in }
@@ -397,6 +435,15 @@ struct SpotMapView: UIViewRepresentable {
             context.coordinator.publicSpotsSignature = publicSignature
             map.removeAnnotations(map.annotations.compactMap { $0 as? PublicSpotAnnotation })
             map.addAnnotations(publicSpots.map(PublicSpotAnnotation.init))
+        }
+        let seaSignature = seaState.map { "\($0.buoys.count):\($0.stations.count):\($0.buoys.first?.time ?? "")" } ?? "off"
+        if seaSignature != context.coordinator.seaStateSignature {
+            context.coordinator.seaStateSignature = seaSignature
+            map.removeAnnotations(map.annotations.compactMap { $0 as? SeaStateAnnotation })
+            if let seaState {
+                map.addAnnotations(seaState.buoys.map { SeaStateAnnotation(kind: .buoy, data: $0) })
+                map.addAnnotations(seaState.stations.map { SeaStateAnnotation(kind: .station, data: $0) })
+            }
         }
     }
 
@@ -456,6 +503,7 @@ struct SpotMapView: UIViewRepresentable {
         var overlaySignature = ""
         var placesSignature = ""
         var publicSpotsSignature = ""
+        var seaStateSignature = ""
         var lastCenterTick = 0
 
         init(parent: SpotMapView) {
@@ -537,6 +585,15 @@ struct SpotMapView: UIViewRepresentable {
                 view.glyphImage = UIImage(systemName: "person.2.fill")
                 view.displayPriority = .defaultHigh
                 _ = publicAnnotation
+                return view
+            }
+            if let seaAnnotation = annotation as? SeaStateAnnotation {
+                let identifier = "seaChip"
+                let view = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? SeaChipAnnotationView)
+                    ?? SeaChipAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                view.annotation = annotation
+                view.configure(seaAnnotation)
+                view.displayPriority = seaAnnotation.kind == .buoy ? .defaultHigh : .defaultLow
                 return view
             }
             if annotation is MKClusterAnnotation {

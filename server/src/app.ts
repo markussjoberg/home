@@ -3,7 +3,7 @@ import { TtlCache } from "./cache.js";
 import { type Config, DEFAULT_MARINE_TEMPLATE } from "./config.js";
 import { fetchSpotMeta, type SpotMeta } from "./elevation.js";
 import { fetchLatestObservation, type WindObservation } from "./fmi.js";
-import { type WaveBuoyObservation, type WaveForecastHour, fetchWaveData } from "./wave.js";
+import { type SeaStateStation, type WaveBuoyObservation, type WaveForecastHour, fetchSeaState, fetchWaveData } from "./wave.js";
 import { fetchLipasPlaces, fetchOsmPlaces, nearestPerCategory, type Place } from "./places.js";
 import { LipasMirror, lipasNearby } from "./lipas.js";
 import { LAPPIS_STORE_API, type ShopCatalog, fetchShopCatalog } from "./shop.js";
@@ -85,7 +85,7 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
   // varten). Kaksi tasoa: NOSTE_TOKEN = kaikki reitit; CLIENT_TOKEN (appiin
   // sisäänrakennettu) = vain lukureitit — synkka ja kelivahti pysyvät yksityisinä.
   // Mahdollinen premium-rajaus tehdään myöhemmin tähän väliin.
-  const readOnlyPaths = /^\/api\/(tiles|forecast|observation|openmeteo|spotmeta|places|shop|wave)\b/;
+  const readOnlyPaths = /^\/api\/(tiles|forecast|observation|openmeteo|spotmeta|places|shop|wave|seastate)\b/;
   // Yhteisöreitit (julkiset spotit + kommentit): myös kirjoitus onnistuu appiin
   // upotetulla tokenilla — omistajuus varmistetaan laitekohtaisella avaimella.
   const communityPaths = /^\/api\/public\//;
@@ -178,6 +178,22 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
       const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
       const wave = await waveCache.getOrSet(key, () => fetchWaveData(lat, lon, fetchImpl, now));
       return c.json(wave);
+    } catch (error) {
+      return c.json({ error: String(error) }, 502);
+    }
+  });
+
+  // Merisää kartalle: kaikki aaltopoijut + tuuliasemat näkyvällä alueella.
+  const seaStateCache = new TtlCache<{ buoys: SeaStateStation[]; stations: SeaStateStation[] }>(900);
+  app.get("/api/seastate", async (c) => {
+    const parts = (c.req.query("bbox") ?? "").split(",").map(Number);
+    if (parts.length !== 4 || parts.some((v) => !Number.isFinite(v))) {
+      return c.json({ error: "bbox=minLon,minLat,maxLon,maxLat vaaditaan" }, 400);
+    }
+    const bbox = parts.map((v) => v.toFixed(1)).join(",");
+    try {
+      const state = await seaStateCache.getOrSet(bbox, () => fetchSeaState(bbox, fetchImpl, now));
+      return c.json(state);
     } catch (error) {
       return c.json({ error: String(error) }, 502);
     }

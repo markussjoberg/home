@@ -215,6 +215,36 @@ struct ServerClient {
         return decoded
     }
 
+    struct SeaStation: Codable {
+        var latitude: Double
+        var longitude: Double
+        var time: String
+        var waveHeight: Double?
+        var waveDirection: Double?
+        var wavePeriod: Double?
+        var waterTemp: Double?
+        var windSpeed: Double?
+        var windGust: Double?
+        var windDirection: Double?
+    }
+
+    struct SeaState: Codable {
+        var buoys: [SeaStation]
+        var stations: [SeaStation]
+    }
+
+    /// Merisää kartalle: kaikki aaltopoijut ja tuuliasemat alueella.
+    func seaState(minLat: Double, minLon: Double, maxLat: Double, maxLon: Double) async -> SeaState? {
+        guard let request = request(path: "api/seastate", query: [
+            URLQueryItem(name: "bbox", value: String(format: "%.1f,%.1f,%.1f,%.1f", minLon, minLat, maxLon, maxLat))
+        ]) else { return nil }
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let decoded = try? JSONDecoder().decode(SeaState.self, from: data)
+        else { return nil }
+        return decoded
+    }
+
     // MARK: - Julkiset spotit ja kommentit
 
     struct PublicSpot: Codable, Identifiable {
