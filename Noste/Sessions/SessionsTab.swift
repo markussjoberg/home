@@ -309,6 +309,31 @@ struct SessionDetailView: View {
                     Image(systemName: "square.and.arrow.up")
                 }
             }
+            if let url = rawExportURL() {
+                ShareLink(item: url) {
+                    Image(systemName: "waveform.path")
+                }
+            }
+        }
+    }
+
+    /// Raakadatapaketti kalibrointia varten: yhteenveto + jälki + kiihtyvyys + pumput.
+    private func rawExportURL() -> URL? {
+        guard let summary = record.summary else { return nil }
+        let export = RawSessionExport(
+            summary: summary,
+            track: record.track,
+            motionPacked: record.motionData,
+            strokeTimes: summary.pumps?.strokeTimes
+        )
+        guard let data = try? JSONEncoder().encode(export) else { return nil }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("noste-raw-\(Int(record.startDate.timeIntervalSince1970)).json")
+        do {
+            try data.write(to: url)
+            return url
+        } catch {
+            return nil
         }
     }
 

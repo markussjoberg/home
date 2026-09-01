@@ -30,6 +30,8 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
     @Published var trackForSummary: [TrackPoint] = []
     /// Senhetkinen ympäristö (vesi/maissa/siirtymä) — vain infoa, ei pysäytä mitään.
     @Published var segmentKind: SessionSegment.Kind = .water
+    /// Pakattu kiihtyvyysraakadata talletusta varten (kalibrointi).
+    @Published var motionForSummary: Data?
     @Published var notice: String?
 
     private let locationManager = CLLocationManager()
@@ -139,6 +141,7 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
             segments: segments.isEmpty ? nil : segments
         )
         trackForSummary = trackPoints
+        motionForSummary = motion.isEmpty ? nil : MotionLog.pack(motion)
         SessionRecovery.clear()
     }
 

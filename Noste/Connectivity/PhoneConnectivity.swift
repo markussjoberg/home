@@ -10,6 +10,8 @@ final class PhoneConnectivity: NSObject, ObservableObject {
     static let shared = PhoneConnectivity()
 
     private var container: ModelContainer?
+    /// Raakadata joka saapui ennen sessiotiedostoa (siirtojärjestystä ei taata).
+    private var pendingMotion: [TimeInterval: Data] = [:]
 
     private override init() {
         super.init()
@@ -52,13 +54,41 @@ final class PhoneConnectivity: NSObject, ObservableObject {
         }
 
         let record = SessionRecord(summary: payload.summary, track: payload.track, spotName: spotName)
+        // Ehtikö raakadata perille ensin?
+        if let key = pendingMotion.keys.first(where: { abs($0 - payload.summary.startDate.timeIntervalSince1970) < 2 }) {
+            record.motionData = pendingMotion.removeValue(forKey: key)
+        }
         context.insert(record)
         try? context.save()
 
         // Varmuuskopio palvelimelle (best effort — paikallinen talletus on jo tehty).
         let recordID = record.id
+        let motion = record.motionData
         Task {
-            await ServerClient.shared.backupSession(payload, id: recordID)
+            await ServerClient.shared.backupSession(payload, id: recordID, motion: motion)
+        }
+    }
+
+    /// Kellolta saapunut kiihtyvyysraakadata: liitä sessioon ja vie palvelimelle.
+    @MainActor
+    private func attachMotion(_ data: Data, startDate: Date) {
+        guard let container else { return }
+        let context = container.mainContext
+        let records = (try? context.fetch(FetchDescriptor<SessionRecord>())) ?? []
+        guard let record = records.first(where: { abs($0.startDate.timeIntervalSince(startDate)) < 2 }) else {
+            pendingMotion[startDate.timeIntervalSince1970] = data
+            return
+        }
+        record.motionData = data
+        try? context.save()
+        if let summary = record.summary {
+            let payload = WatchSync.SessionPayload(summary: summary, track: record.track)
+            let recordID = record.id
+            let rating = record.rating
+            let wind = record.sessionWind
+            Task {
+                await ServerClient.shared.backupSession(payload, id: recordID, rating: rating, wind: wind, motion: data)
+            }
         }
     }
 
@@ -92,6 +122,15 @@ extension PhoneConnectivity: WCSessionDelegate {
     }
 
     func session(_ session: WCSession, didReceive file: WCSessionFile) {
+        // Kiihtyvyysraakadata: liitä sessioon alkuhetken perusteella.
+        if let startDate = WatchSync.MotionFile.decodeStart(file.metadata ?? [:]),
+           let data = try? Data(contentsOf: file.fileURL) {
+            Task { @MainActor in
+                self.attachMotion(data, startDate: startDate)
+            }
+            return
+        }
+
         guard file.metadata?["type"] as? String == "session",
               let data = try? Data(contentsOf: file.fileURL),
               let payload = try? WatchSync.decode(WatchSync.SessionPayload.self, from: data)

@@ -30,7 +30,8 @@ enum RatingService {
                 WatchSync.SessionPayload(summary: summary, track: record.track),
                 id: record.id,
                 rating: record.rating,
-                wind: record.sessionWind
+                wind: record.sessionWind,
+                motion: record.motionData
             )
         }
     }

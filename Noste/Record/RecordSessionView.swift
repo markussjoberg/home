@@ -246,15 +246,17 @@ struct RecordSessionView: View {
     private func store(payload: WatchSync.SessionPayload) {
         let record = SessionRecord(summary: payload.summary, track: payload.track)
         record.gearIDs = selectedGear.isEmpty ? nil : Array(selectedGear)
+        record.motionData = workout.motionForSummary
         modelContext.insert(record)
         try? modelContext.save()
         let context = modelContext
         let chosenRating = rating
+        let motion = record.motionData
         Task {
             if let chosenRating {
                 await RatingService.apply(rating: chosenRating, to: record, context: context)
             } else {
-                await ServerClient.shared.backupSession(payload, id: record.id)
+                await ServerClient.shared.backupSession(payload, id: record.id, motion: motion)
             }
         }
     }

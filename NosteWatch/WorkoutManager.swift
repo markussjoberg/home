@@ -173,6 +173,9 @@ final class WorkoutManager: NSObject, ObservableObject {
         session?.end()
 
         WatchConnectivityManager.shared.send(payload: WatchSync.SessionPayload(summary: result, track: trackPoints))
+        // Raakakiihtyvyys talteen puhelimeen — pumppu-/foilitunnistuksen voi
+        // kalibroida uudelleen jälkikäteen todellisella datalla.
+        WatchConnectivityManager.shared.send(motion: motion, for: startDate)
         SessionRecovery.clear()
     }
 

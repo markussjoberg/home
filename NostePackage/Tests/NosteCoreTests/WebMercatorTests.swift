@@ -36,6 +36,20 @@ final class WebMercatorTests: XCTestCase {
         XCTAssertEqual(b.y - a.y, 0, accuracy: 0.5)
     }
 
+    func testMotionLogRoundTrip() {
+        let samples = (0..<500).map { i in
+            MotionSample(t: Double(i) / 50, verticalAcceleration: 3.0 * sin(Double(i) * 0.1))
+        }
+        let packed = MotionLog.pack(samples)
+        XCTAssertEqual(packed.count, 8 + 500 * 8)
+        let unpacked = MotionLog.unpack(packed)
+        XCTAssertEqual(unpacked?.count, 500)
+        XCTAssertEqual(unpacked?[123].t ?? 0, samples[123].t, accuracy: 0.001)
+        XCTAssertEqual(unpacked?[123].verticalAcceleration ?? 0, samples[123].verticalAcceleration, accuracy: 0.001)
+        XCTAssertNil(MotionLog.unpack(Data([1, 2, 3])))
+        XCTAssertEqual(MotionLog.unpack(MotionLog.pack([]))?.count, 0)
+    }
+
     func testMapImageMetadataRoundTrip() {
         let calibration = OfflineMapCalibration.centered(latitude: 60.15, longitude: 24.95, zoom: 15, tileCount: 3)
         let id = UUID()

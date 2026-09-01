@@ -45,6 +45,20 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
         WCSession.default.transferUserInfo(WatchSync.RatingMessage.encode(startDate: startDate, rating: rating))
     }
 
+    /// Lähettää kiihtyvyysraakadatan puhelimeen (kalibroinnin kulta-aines).
+    func send(motion: [MotionSample], for startDate: Date) {
+        guard !motion.isEmpty else { return }
+        let data = MotionLog.pack(motion)
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("motion-\(Int(startDate.timeIntervalSince1970)).bin")
+        do {
+            try data.write(to: url)
+            WCSession.default.transferFile(url, metadata: WatchSync.MotionFile.metadata(startDate: startDate))
+        } catch {
+            // Raakadata jää tältä sessiolta siirtämättä; analyysi on jo tehty kellossa.
+        }
+    }
+
     /// Lähettää session puhelimeen tiedostona (jälki voi olla iso).
     /// transferFile jonottaa siirron ja hoitaa sen kun puhelin on taas saatavilla.
     func send(payload: WatchSync.SessionPayload) {

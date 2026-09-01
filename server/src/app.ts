@@ -60,6 +60,8 @@ export interface SessionSync {
   rating?: number;
   /** Session aikana vallinnut tuuli {speed, gust, direction}. */
   wind?: unknown;
+  /** Kiihtyvyysraakadata (MotionLog-binääri base64:na) — kalibrointia varten. */
+  motion?: string;
 }
 
 export interface AppDeps {

@@ -30,6 +30,23 @@ public enum WatchSync {
     /// applicationContext-avain snapshotille (arvo = JSON Data).
     public static let snapshotKey = "noste.snapshot"
 
+    /// Kello → puhelin: kiihtyvyysraakadata (MotionLog-binääritiedosto).
+    /// Sessio yksilöidään alkuhetkellä, kuten tuuliarvosanakin.
+    public enum MotionFile {
+        public static let typeValue = "motiondata"
+        public static let startKey = "start"
+
+        public static func metadata(startDate: Date) -> [String: Any] {
+            ["type": typeValue, startKey: startDate.timeIntervalSince1970]
+        }
+
+        public static func decodeStart(_ metadata: [String: Any]) -> Date? {
+            guard metadata["type"] as? String == typeValue,
+                  let start = metadata[startKey] as? TimeInterval else { return nil }
+            return Date(timeIntervalSince1970: start)
+        }
+    }
+
     /// Puhelin → kello: offline-karttakuva (PNG-tiedosto + metadata).
     public enum MapImage {
         public static let typeValue = "mapimage"

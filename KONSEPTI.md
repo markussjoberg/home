@@ -286,5 +286,8 @@ järviaaltolaskenta, kelivahti omalla palvelimella ja FMI-havainnot.
 - Palvelimen domain/alidomain ja Caddy-reititys Hetznerillä.
 - Kelivahdin ilmoituskanava: APNs (vaatii Apple-avaimet) vs. välivaiheena
   esim. sähköposti/ntfy.
-- Kalibrointidata: ekat oikeat sessiot ratkaisevat kynnysarvot — raakadata talteen
-  alusta asti (kiihtyvyys + GPS lokiin), jotta algoritmeja voi ajaa uusiksi jälkikäteen.
+- Kalibrointidata: ekat oikeat sessiot ratkaisevat kynnysarvot. Raakadata
+  tallentuu nyt kokonaisuudessaan: GPS-jälki + 50 Hz kiihtyvyys (MotionLog-
+  binääri, ~0,7 Mt / 30 min) siirtyvät kellosta puhelimeen ja palvelimelle,
+  ja sessionäkymän raakadatanapista saa kalibrointipaketin ulos (yhteenveto +
+  jälki + kiihtyvyys + pumppuhetket yhtenä JSON-tiedostona).

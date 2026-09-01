@@ -125,6 +125,8 @@ final class SessionRecord {
     var summaryData: Data
     /// JSON-koodattu [TrackPoint] — raakajälki uudelleenanalyysiä ja karttaa varten.
     var trackData: Data?
+    /// Kiihtyvyysraakadata (MotionLog-binääri) — kalibrointia varten.
+    @Attribute(.externalStorage) var motionData: Data?
     var spotName: String?
     /// Sessiossa käytetty kalusto (GearRecord-id:t).
     var gearIDs: [UUID]?

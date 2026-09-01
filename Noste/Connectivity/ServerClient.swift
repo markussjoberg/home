@@ -31,6 +31,8 @@ struct ServerClient {
         var track: [TrackPoint]
         var rating: Int?
         var wind: RatedWind?
+        /// MotionLog-binääri (JSONissa base64) — kalibrointidata palvelimelle.
+        var motion: Data?
     }
 
     /// Maastoanalyysi: fetch (km) ja avoimuus (0–1) ilmansuunnittain.
@@ -288,7 +290,8 @@ struct ServerClient {
     /// Vie yhden session palvelimelle raakajälkineen. Vakaa id → uudelleenvienti
     /// (esim. reittauksen jälkeen) päivittää saman session, ei duplikoi.
     func backupSession(_ payload: WatchSync.SessionPayload, id: UUID,
-                       rating: WindRating? = nil, wind: RatedWind? = nil) async {
+                       rating: WindRating? = nil, wind: RatedWind? = nil,
+                       motion: Data? = nil) async {
         let upload = SessionUpload(
             id: id.uuidString,
             startDate: ISO8601DateFormatter().string(from: payload.summary.startDate),
@@ -296,7 +299,8 @@ struct ServerClient {
             summary: payload.summary,
             track: payload.track,
             rating: rating?.rawValue,
-            wind: wind
+            wind: wind,
+            motion: motion.flatMap { $0.count <= 8_000_000 ? $0 : nil }
         )
         guard let body = try? JSONEncoder().encode(upload),
               let request = request(path: "api/sessions", method: "POST", body: body)
