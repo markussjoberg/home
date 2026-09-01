@@ -4,8 +4,8 @@ import { type Config, DEFAULT_MARINE_TEMPLATE } from "./config.js";
 import { fetchSpotMeta, type SpotMeta } from "./elevation.js";
 import { fetchLatestObservation, type WindObservation } from "./fmi.js";
 import { type SeaStateStation, type WaveBuoyObservation, type WaveForecastHour, fetchSeaState, fetchWaveData } from "./wave.js";
-import { type WindCell, fetchWindField } from "./windfield.js";
-import { type WaveFieldResult, expandWaveBBox, fetchWaveField } from "./wavefield.js";
+import { type WindFieldSeries, fetchWindField } from "./windfield.js";
+import { type WaveFieldSeries, expandWaveBBox, fetchWaveField } from "./wavefield.js";
 import { fetchLipasPlaces, fetchOsmPlaces, nearestPerCategory, type Place } from "./places.js";
 import { LipasMirror, lipasNearby } from "./lipas.js";
 import { LAPPIS_STORE_API, type ShopCatalog, fetchShopCatalog } from "./shop.js";
@@ -201,8 +201,9 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
     }
   });
 
-  // Tuulikenttä partikkelianimaatioon: 9×9-hila Open-Meteosta, 30 min välimuisti.
-  const windFieldCache = new TtlCache<WindCell[]>(1800);
+  // Tuulikenttä partikkelianimaatioon: 9×9-hila Open-Meteosta kaikille
+  // ennustetunneille (aikajana appissa), 30 min välimuisti.
+  const windFieldCache = new TtlCache<WindFieldSeries>(1800);
   app.get("/api/windfield", async (c) => {
     const parts = (c.req.query("bbox") ?? "").split(",").map(Number);
     if (parts.length !== 4 || parts.some((v) => !Number.isFinite(v))) {
@@ -210,10 +211,10 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
     }
     const key = parts.map((v) => v.toFixed(1)).join(",");
     try {
-      const cells = await windFieldCache.getOrSet(key, () =>
+      const series = await windFieldCache.getOrSet(key, () =>
         fetchWindField(parts[0]!, parts[1]!, parts[2]!, parts[3]!, fetchImpl),
       );
-      return c.json({ cells });
+      return c.json(series);
     } catch (error) {
       return c.json({ error: String(error) }, 502);
     }
@@ -221,7 +222,7 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
 
   // Aaltokenttä (korkeus, suunta, periodi) samalla reseptillä Open-Meteon
   // marine-mallista; maapisteet karsittu jo palvelimella.
-  const waveFieldCache = new TtlCache<WaveFieldResult>(1800);
+  const waveFieldCache = new TtlCache<WaveFieldSeries>(1800);
   app.get("/api/wavefield", async (c) => {
     const parts = (c.req.query("bbox") ?? "").split(",").map(Number);
     if (parts.length !== 4 || parts.some((v) => !Number.isFinite(v))) {

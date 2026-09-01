@@ -1,21 +1,21 @@
 /**
  * Aaltokenttä kartalle: karkea hila näkyvälle alueelle Open-Meteon marine-
- * mallista yhdellä monipistekutsulla (sama resepti kuin tuulikentässä).
- * Maapisteet tulevat null-arvoina ja karsitaan — kenttä kattaa vain vettä,
- * joten appi voi värjätä aallonkorkeuden suoraan merialueen päälle.
+ * mallista yhdellä monipistekutsulla, kaikille ennustetunneille (sama resepti
+ * kuin tuulikentässä). Maapisteet tulevat null-arvoina ja karsitaan — kenttä
+ * kattaa vain vettä, joten appi voi värjätä aallonkorkeuden merialueen päälle.
  */
 import type { FetchLike } from "./places.js";
-import { GRID_SIZE } from "./windfield.js";
+import { FIELD_FORECAST_DAYS, gridPoints } from "./windfield.js";
 
-export interface WaveCell {
+export interface WaveCellSeries {
   latitude: number;
   longitude: number;
-  /** Merkitsevä aallonkorkeus (m). */
-  height: number;
-  /** Aaltojen tulosuunta (°). */
-  direction: number;
-  /** Aaltoperiodi (s). */
-  period: number;
+  /** Merkitsevä aallonkorkeus (m) per tunti — indeksi vastaa `times`-taulukkoa. */
+  height: number[];
+  /** Aaltojen tulosuunta (°) per tunti. */
+  direction: number[];
+  /** Aaltoperiodi (s) per tunti; 0 jos malli ei anna. */
+  period: number[];
 }
 
 /**
@@ -37,67 +37,75 @@ export function expandWaveBBox(minLon: number, minLat: number, maxLon: number, m
 }
 
 export function buildWaveFieldUrl(minLon: number, minLat: number, maxLon: number, maxLat: number): string {
-  const lats: string[] = [];
-  const lons: string[] = [];
-  for (let row = 0; row < GRID_SIZE; row++) {
-    for (let col = 0; col < GRID_SIZE; col++) {
-      lats.push((minLat + ((maxLat - minLat) * row) / (GRID_SIZE - 1)).toFixed(3));
-      lons.push((minLon + ((maxLon - minLon) * col) / (GRID_SIZE - 1)).toFixed(3));
-    }
-  }
+  const { lats, lons } = gridPoints(minLon, minLat, maxLon, maxLat);
   const url = new URL("https://marine-api.open-meteo.com/v1/marine");
   url.searchParams.set("latitude", lats.join(","));
   url.searchParams.set("longitude", lons.join(","));
-  url.searchParams.set("current", "wave_height,wave_direction,wave_period");
+  url.searchParams.set("hourly", "wave_height,wave_direction,wave_period");
+  url.searchParams.set("timezone", "UTC");
+  url.searchParams.set("forecast_days", String(FIELD_FORECAST_DAYS));
   return url.toString();
 }
 
 interface OpenMeteoMarinePoint {
   latitude: number;
   longitude: number;
-  current?: {
-    wave_height?: number | null;
-    wave_direction?: number | null;
-    wave_period?: number | null;
+  hourly?: {
+    time?: string[];
+    wave_height?: (number | null)[];
+    wave_direction?: (number | null)[];
+    wave_period?: (number | null)[];
   };
 }
 
-/** Maapisteet (null) karsitaan; samaan mallisoluun osuneet pyynnöt yhdistetään. */
-export function parseWaveField(body: unknown): WaveCell[] {
+export interface WaveFieldSeries {
+  times: string[];
+  cells: WaveCellSeries[];
+  /** Todellinen haettu alue (laajennettu vähimmäiskokoon). */
+  bbox: BBox;
+}
+
+/**
+ * Maapisteet (kaikki null) karsitaan; samaan mallisoluun osuneet pyynnöt
+ * yhdistetään. Yksittäinen puuttuva tunti täytetään edellisestä, jotta
+ * aikajana ei katkea.
+ */
+export function parseWaveField(body: unknown): { times: string[]; cells: WaveCellSeries[] } {
   const points = Array.isArray(body) ? (body as OpenMeteoMarinePoint[]) : [body as OpenMeteoMarinePoint];
-  const cells: WaveCell[] = [];
+  const times = points[0]?.hourly?.time ?? [];
+  const cells: WaveCellSeries[] = [];
   const seen = new Set<string>();
   for (const point of points) {
-    const height = point?.current?.wave_height;
-    const direction = point?.current?.wave_direction;
-    const period = point?.current?.wave_period;
-    if (typeof height !== "number" || typeof direction !== "number") continue;
+    const heights = point?.hourly?.wave_height;
+    const directions = point?.hourly?.wave_direction;
+    if (!heights || !directions || heights.length !== times.length || directions.length !== times.length) continue;
+    if (!heights.some((v) => typeof v === "number")) continue; // maapiste
     const key = `${point.latitude},${point.longitude}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    cells.push({
-      latitude: point.latitude,
-      longitude: point.longitude,
-      height,
-      direction,
-      period: typeof period === "number" ? period : 0,
-    });
+    const periods = point.hourly?.wave_period ?? [];
+    const height: number[] = [];
+    const direction: number[] = [];
+    const period: number[] = [];
+    for (let i = 0; i < times.length; i++) {
+      const h = heights[i];
+      const d = directions[i];
+      height.push(typeof h === "number" ? h : (height[i - 1] ?? 0));
+      direction.push(typeof d === "number" ? d : (direction[i - 1] ?? 0));
+      const p = periods[i];
+      period.push(typeof p === "number" ? p : (period[i - 1] ?? 0));
+    }
+    cells.push({ latitude: point.latitude, longitude: point.longitude, height, direction, period });
   }
-  return cells;
-}
-
-export interface WaveFieldResult {
-  cells: WaveCell[];
-  /** Todellinen haettu alue (laajennettu vähimmäiskokoon). */
-  bbox: BBox;
+  return { times, cells };
 }
 
 export async function fetchWaveField(
   minLon: number, minLat: number, maxLon: number, maxLat: number,
   fetchImpl: FetchLike = fetch,
-): Promise<WaveFieldResult> {
+): Promise<WaveFieldSeries> {
   const bbox = expandWaveBBox(minLon, minLat, maxLon, maxLat);
   const res = await fetchImpl(buildWaveFieldUrl(...bbox));
-  if (!res.ok) return { cells: [], bbox };
-  return { cells: parseWaveField(await res.json()), bbox };
+  if (!res.ok) return { times: [], cells: [], bbox };
+  return { ...parseWaveField(await res.json()), bbox };
 }

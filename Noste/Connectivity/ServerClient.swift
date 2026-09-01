@@ -245,36 +245,30 @@ struct ServerClient {
         return decoded
     }
 
-    /// Tuulihila partikkelianimaatioon (9×9 Open-Meteo-solua alueelle).
-    func windField(minLat: Double, minLon: Double, maxLat: Double, maxLon: Double) async -> [WindCell]? {
-        struct FieldResponse: Codable { var cells: [Cell] }
-        struct Cell: Codable { var latitude: Double; var longitude: Double; var speed: Double; var direction: Double }
+    /// Tuulihila partikkelianimaatioon: 9×9 Open-Meteo-solua alueelle, kaikki
+    /// ennustetunnit (aikajana selaa ilman uusia hakuja).
+    func windField(minLat: Double, minLon: Double, maxLat: Double, maxLon: Double) async -> WindFieldSeries? {
         guard let request = request(path: "api/windfield", query: [
             URLQueryItem(name: "bbox", value: String(format: "%.2f,%.2f,%.2f,%.2f", minLon, minLat, maxLon, maxLat))
         ]) else { return nil }
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200,
-              let decoded = try? JSONDecoder().decode(FieldResponse.self, from: data)
+              let decoded = try? JSONDecoder().decode(WindFieldSeries.self, from: data)
         else { return nil }
-        return decoded.cells.map {
-            WindCell(latitude: $0.latitude, longitude: $0.longitude, speed: $0.speed, direction: $0.direction)
-        }
+        return decoded
     }
 
-    /// Aaltohila (korkeus, suunta, periodi) merialueen värjäykseen; maapisteet
-    /// karsittu palvelimella.
-    func waveField(minLat: Double, minLon: Double, maxLat: Double, maxLon: Double) async -> WaveField? {
-        /// bbox = palvelimen todella hakema alue [minLon, minLat, maxLon, maxLat].
-        struct FieldResponse: Codable { var cells: [WaveCell]; var bbox: [Double] }
+    /// Aaltohila (korkeus, suunta, periodi) kaikille ennustetunneille; maapisteet
+    /// karsittu palvelimella, mukana todella haettu alue.
+    func waveField(minLat: Double, minLon: Double, maxLat: Double, maxLon: Double) async -> WaveFieldSeries? {
         guard let request = request(path: "api/wavefield", query: [
             URLQueryItem(name: "bbox", value: String(format: "%.2f,%.2f,%.2f,%.2f", minLon, minLat, maxLon, maxLat))
         ]) else { return nil }
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200,
-              let decoded = try? JSONDecoder().decode(FieldResponse.self, from: data),
-              decoded.bbox.count == 4
+              let decoded = try? JSONDecoder().decode(WaveFieldSeries.self, from: data)
         else { return nil }
-        return WaveField(cells: decoded.cells, spanLat: decoded.bbox[3] - decoded.bbox[1], spanLon: decoded.bbox[2] - decoded.bbox[0])
+        return decoded
     }
 
     // MARK: - Julkiset spotit ja kommentit

@@ -51,6 +51,12 @@ final class WindParticleModel {
         particles = (0..<220).map { _ in spawn(initialAge: Int(random01() * 120)) }
     }
 
+    /// Aikajanan tunti vaihtuu: kenttä vaihdetaan alta, partikkelit jatkavat
+    /// matkaansa uudessa kentässä (ei hyppäystä).
+    func setCells(_ cells: [WindCell]) {
+        self.cells = cells
+    }
+
     /// Kevyt deterministinen satunnaisuus (Date/random ei tarpeen).
     private func random01() -> Double {
         seed = seed &* 6364136223846793005 &+ 1442695040888963407
