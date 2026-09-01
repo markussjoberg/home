@@ -119,6 +119,18 @@ public enum SessionAnalyzer {
             bouts: pumps?.bouts ?? []
         )
 
+        // Hypyt: vapaapudotus kelpaa vain vauhdissa — kaatumisen mätkähdys
+        // paikaltaan ei ole hyppy.
+        var jumps: JumpAnalysis?
+        if sport.countsJumps, !motion.isEmpty {
+            let raw = JumpDetector.analyze(motion)
+            let valid = raw.jumps.filter { jump in
+                guard let speed = Self.speed(at: jump.t, in: points) else { return false }
+                return speed >= 3.0
+            }
+            jumps = valid.isEmpty ? nil : JumpAnalysis(jumps: valid)
+        }
+
         return SessionSummary(
             sport: sport,
             startDate: startDate,
@@ -131,7 +143,8 @@ public enum SessionAnalyzer {
             heartRate: HeartRateStats.from(heartRate),
             flights: flights,
             speedRecords: SpeedRecords.compute(points: points, maxPlausibleSpeed: speedCap),
-            segments: segments
+            segments: segments,
+            jumps: jumps
         )
     }
 
@@ -164,6 +177,7 @@ public enum SessionAnalyzer {
         var swimTotal: TimeInterval = 0
         var hasSwim = false
         var records: SpeedRecords?
+        var allJumps: [Jump] = []
         var waterPoints: [TrackPoint] = []
         let speedCap = config.maxPlausibleSpeed ?? sport.maxPlausibleSpeed
 
@@ -195,6 +209,9 @@ public enum SessionAnalyzer {
                     swimTotal += swim
                     hasSwim = true
                 }
+            }
+            if let partJumps = part.jumps {
+                allJumps.append(contentsOf: partJumps.jumps)
             }
             if let partRecords = part.speedRecords {
                 records = SpeedRecords(
@@ -250,7 +267,8 @@ public enum SessionAnalyzer {
             heartRate: HeartRateStats.from(sessionHeartRate),
             flights: flights,
             speedRecords: records,
-            segments: segments
+            segments: segments,
+            jumps: allJumps.isEmpty ? nil : JumpAnalysis(jumps: allJumps)
         )
     }
 

@@ -37,6 +37,19 @@ struct SummaryView: View {
                             row("Keskilento", Format.duration(summary.rides.averageDuration))
                         }
                     }
+                    if let jumps = summary.jumps, let longest = jumps.longest {
+                        Divider()
+                        row("Hypyt", "\(jumps.count)")
+                        row("Pisin air time", String(format: "%.1f s", longest.airTime))
+                    }
+                    if let dives = summary.dives {
+                        Divider()
+                        row("Sukellukset", "\(dives.count)")
+                        row("Pinnan alla", Format.duration(dives.totalTime))
+                        if let depth = dives.maxDepth {
+                            row("Syvin", String(format: "%.1f m", depth))
+                        }
+                    }
                     if let pumps = summary.pumps {
                         Divider()
                         if let attempts = summary.rides.attemptCount, let rate = summary.rides.successRate {

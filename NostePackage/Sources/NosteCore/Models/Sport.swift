@@ -47,6 +47,14 @@ public enum Sport: String, Codable, CaseIterable, Sendable, Identifiable {
     /// Lasketaanko pumppauksia.
     public var countsPumps: Bool { self == .pumpFoil }
 
+    /// Lasketaanko hypyt (air time) — tuulilajit joissa hypätään.
+    public var countsJumps: Bool {
+        switch self {
+        case .wingFoil, .parawing, .kite: return true
+        case .pumpFoil, .surf, .sup: return false
+        }
+    }
+
     /// Nopeus (m/s), jonka ylitys tulkitaan lennoksi / laskuksi.
     public var takeoffSpeed: Double {
         switch self {

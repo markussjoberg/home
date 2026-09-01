@@ -174,6 +174,21 @@ public struct SessionSegment: Codable, Sendable, Equatable {
     public var duration: TimeInterval { end - start }
 }
 
+/// Sukellukset (duck divet, kaatumiset pinnan alle): määrä, aika ja syvyys.
+public struct DiveAnalysis: Codable, Sendable, Equatable {
+    public var count: Int
+    /// Aika pinnan alla yhteensä (s).
+    public var totalTime: TimeInterval
+    /// Suurin syvyys metreinä; nil jos anturi ei mitannut.
+    public var maxDepth: Double?
+
+    public init(count: Int, totalTime: TimeInterval, maxDepth: Double? = nil) {
+        self.count = count
+        self.totalTime = totalTime
+        self.maxDepth = maxDepth
+    }
+}
+
 /// Koko session yhteenveto — se mitä kello näyttää lopuksi ja mitä puhelin tallettaa.
 public struct SessionSummary: Codable, Sendable, Equatable {
     public var sport: Sport
@@ -195,8 +210,12 @@ public struct SessionSummary: Codable, Sendable, Equatable {
     /// Ympäristösegmentit (vesi/maa/siirtymä). Koko jälki tallentuu aina;
     /// mittarit lasketaan vain vesisegmenteistä. nil = vanha data (kaikki vettä).
     public var segments: [SessionSegment]?
+    /// Hypyt (air time) — tuulilajit. nil = ei laskettu / vanha data.
+    public var jumps: JumpAnalysis?
+    /// Sukellukset (kellon syvyysanturi, Ultra). nil = ei dataa.
+    public var dives: DiveAnalysis?
 
-    public init(sport: Sport, startDate: Date, duration: TimeInterval, distance: Double, maxSpeed: Double, averageMovingSpeed: Double, rides: RideAnalysis, pumps: PumpAnalysis?, heartRate: HeartRateStats? = nil, flights: [FlightDetail]? = nil, speedRecords: SpeedRecords? = nil, segments: [SessionSegment]? = nil) {
+    public init(sport: Sport, startDate: Date, duration: TimeInterval, distance: Double, maxSpeed: Double, averageMovingSpeed: Double, rides: RideAnalysis, pumps: PumpAnalysis?, heartRate: HeartRateStats? = nil, flights: [FlightDetail]? = nil, speedRecords: SpeedRecords? = nil, segments: [SessionSegment]? = nil, jumps: JumpAnalysis? = nil, dives: DiveAnalysis? = nil) {
         self.sport = sport
         self.startDate = startDate
         self.duration = duration
@@ -209,6 +228,8 @@ public struct SessionSummary: Codable, Sendable, Equatable {
         self.flights = flights
         self.speedRecords = speedRecords
         self.segments = segments
+        self.jumps = jumps
+        self.dives = dives
     }
 
     /// Foiliajan osuus koko sessiosta (0–1).

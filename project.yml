@@ -61,6 +61,8 @@ targets:
       path: NosteWatch/NosteWatch.entitlements
       properties:
         com.apple.developer.healthkit: true
+        # Syvyysanturi (Ultra): duck divet, vedenalainen aika, syvyys.
+        com.apple.developer.submerged-shallow-depth-and-pressure: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: fi.markussjoberg.noste.watchkitapp

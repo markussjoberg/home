@@ -279,6 +279,24 @@ struct SessionDetailView: View {
                         }
                     }
                 }
+                if let jumps = summary.jumps, let longest = jumps.longest {
+                    Section("Hypyt") {
+                        row("Hyppyjä", "\(jumps.count)")
+                        row("Pisin air time", String(format: "%.1f s", longest.airTime))
+                        row("Air time yhteensä", String(format: "%.1f s", jumps.totalAirTime))
+                    }
+                }
+
+                if let dives = summary.dives {
+                    Section("Sukellukset") {
+                        row("Sukelluksia", "\(dives.count)")
+                        row("Pinnan alla", Format.duration(dives.totalTime))
+                        if let depth = dives.maxDepth {
+                            row("Syvin", String(format: "%.1f m", depth))
+                        }
+                    }
+                }
+
                 if let records = summary.speedRecords {
                     Section("Huippunopeudet") {
                         row("Paras 2 s", Format.speedKmh(records.best2s))

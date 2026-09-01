@@ -73,6 +73,12 @@ final class WorkoutManager: NSObject, ObservableObject {
     private var gatedSpeed: Double = -1
     private var rideTracker = LiveRideTracker(sport: .wingFoil)
     private var segmentTracker = SegmentTracker(sport: .wingFoil)
+    // Sukellukset (Ultran syvyysanturi): duck divet, vedenalainen aika, syvyys.
+    private var submersionManager: CMWaterSubmersionManager?
+    private var submergedAt: Date?
+    private var diveCount = 0
+    private var diveTime: TimeInterval = 0
+    private var maxDepth: Double?
     private var waterMasks = WaterMaskIndex(masks: [])
     private var lastGoodLocation: CLLocation?
 
@@ -118,6 +124,12 @@ final class WorkoutManager: NSObject, ObservableObject {
         startDate = Date()
         ticksSinceAutosave = 0
 
+        diveCount = 0
+        diveTime = 0
+        maxDepth = nil
+        submergedAt = nil
+        startSubmersion()
+
         startWorkoutSession()
         startLocation()
         startMotion()
@@ -156,7 +168,7 @@ final class WorkoutManager: NSObject, ObservableObject {
         motionLock.unlock()
 
         let segments = segmentTracker.snapshot(at: trackPoints.last?.t ?? 0)
-        let result = SessionAnalyzer.summarize(
+        var result = SessionAnalyzer.summarize(
             sport: sport,
             startDate: startDate,
             points: trackPoints,
@@ -164,6 +176,14 @@ final class WorkoutManager: NSObject, ObservableObject {
             heartRate: heartRateSamples,
             segments: segments.isEmpty ? nil : segments
         )
+        if let since = submergedAt {
+            diveTime += Date().timeIntervalSince(since)
+            submergedAt = nil
+        }
+        submersionManager = nil
+        if diveCount > 0 {
+            result.dives = DiveAnalysis(count: diveCount, totalTime: diveTime, maxDepth: maxDepth)
+        }
         summary = result
 
         let builder = builder
@@ -226,6 +246,38 @@ final class WorkoutManager: NSObject, ObservableObject {
                 self.ticksSinceAutosave = 0
                 self.autosave()
             }
+        }
+    }
+
+    // MARK: - Sukellukset
+
+    private func startSubmersion() {
+        guard CMWaterSubmersionManager.waterSubmersionAvailable else { return }
+        let manager = CMWaterSubmersionManager()
+        manager.delegate = self
+        submersionManager = manager
+    }
+
+    fileprivate func handleSubmersion(_ event: CMWaterSubmersionEvent) {
+        switch event.state {
+        case .submerged:
+            if submergedAt == nil {
+                submergedAt = Date()
+                diveCount += 1
+            }
+        case .notSubmerged, .unknown:
+            if let since = submergedAt {
+                diveTime += Date().timeIntervalSince(since)
+                submergedAt = nil
+            }
+        @unknown default:
+            break
+        }
+    }
+
+    fileprivate func recordDepth(_ meters: Double) {
+        if maxDepth == nil || meters > maxDepth! {
+            maxDepth = meters
         }
     }
 
@@ -364,6 +416,26 @@ final class WorkoutManager: NSObject, ObservableObject {
 }
 
 // MARK: - Delegaatit
+
+extension WorkoutManager: CMWaterSubmersionManagerDelegate {
+    nonisolated func manager(_ manager: CMWaterSubmersionManager, didUpdate event: CMWaterSubmersionEvent) {
+        Task { @MainActor in
+            self.handleSubmersion(event)
+        }
+    }
+
+    nonisolated func manager(_ manager: CMWaterSubmersionManager, didUpdate measurement: CMWaterSubmersionMeasurement) {
+        guard let depth = measurement.depth else { return }
+        let meters = depth.converted(to: .meters).value
+        Task { @MainActor in
+            self.recordDepth(meters)
+        }
+    }
+
+    nonisolated func manager(_ manager: CMWaterSubmersionManager, didUpdate measurement: CMWaterTemperature) {}
+
+    nonisolated func manager(_ manager: CMWaterSubmersionManager, errorOccurred error: Error) {}
+}
 
 extension WorkoutManager: CLLocationManagerDelegate {
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {

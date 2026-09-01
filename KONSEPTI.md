@@ -106,6 +106,20 @@ toimii parhaiten liivin/vyötärön taskussa), syke ja HealthKit-treeni jäävä
 pois. Tämä avaa appin myös kaverille, jolla ei ole kelloa mutta kännykkä kulkee
 foilatessa mukana.
 
+### Data & statistiikka -roadmap (Markuksen ideat 2026-09, strukturoituna)
+
+Lajikohtaiset "se yksi kiinnostava luku" -mittarit — kuten juoksuapeissa
+vauhtivaihtelu, näissä lajeissa:
+
+| Laji | Mittari | Tila |
+|---|---|---|
+| Wingfoil, kite, parawing | **Air time** (hypyt: määrä, pisin, yhteensä, alastulon G) | ✅ Toteutettu — vapaapudotus kiihtyvyysdatasta, toimii takautuvasti raakadataan |
+| Kaikki | **Sukellukset**: duck divet, vedenalainen aika, syvyys | ✅ Toteutettu (Ultran syvyysanturi, CMWaterSubmersionManager) |
+| Lainelautailu | Step-up-tunnistus, aaltoaika | ⏳ Odottaa kenttädataa aaltojen tunnistukseen |
+| Wingfoil | Pumppausten erottelu normivedosta | ⏳ Vaikea — kalibroidaan kerätyllä raakadatalla |
+| Purjelautailu (plaani/foili) | Oma lajinsa + plaaniaika | ⏳ Lisätään kun tarve |
+| Kaikki | **Vaiheet jäljellä highlightattuna**: "pumppasin tuon matkan", "tuossa hyppäsin, air time X" | ⏳ Karttaan hyppy-/vaihemerkit (jälki + väritys on jo) |
+
 ## 2. Ennusteet (myös sisämaahan)
 
 Kaksi lähdettä, molemmat ilmaisia ja avaimettomia:
