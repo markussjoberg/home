@@ -21,6 +21,9 @@ struct SettingsTab: View {
 
     @AppStorage(UserProfile.sportsKey) private var mySportsRaw = ""
     @AppStorage(UserProfile.stanceKey) private var stance = ""
+    /// Kehittäjäasetukset piilossa peruskäyttäjältä (5 napautusta versioon).
+    @AppStorage("devMode") private var devMode = false
+    @State private var versionTaps = 0
 
     private var serverConfigured: Bool {
         ServerSettings.config(base: serverBase, token: serverToken) != nil
@@ -68,55 +71,49 @@ struct SettingsTab: View {
                 }
 
                 Section {
-                    LabeledContent("Kartat ja ennusteet", value: "Nosten palvelin")
-                    LabeledContent("Ennustemalli", value: "Open-Meteo")
                     LabeledContent("Versio", value: "0.1")
-                } header: {
-                    Text("Tietoa")
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            // Kehittäjätila: 5 napautusta versioon.
+                            versionTaps += 1
+                            if versionTaps >= 5 {
+                                devMode.toggle()
+                                versionTaps = 0
+                            }
+                        }
                 } footer: {
-                    Text("Maastokartta (MML), merikartta (Traficom — ei navigointikäyttöön), tuuli- ja aaltoennusteet (Open-Meteo, CC BY 4.0) ja FMI-havainnot tulevat suoraan Nosten palvelimelta ilman asetuksia. Ennuste on malli — vesille lähdetään omalla harkinnalla.")
+                    Text("Kartat: Maanmittauslaitos ja Traficom (ei navigointikäyttöön). Sää: Open-Meteo (CC BY 4.0) ja Ilmatieteen laitos. Ennuste on malli — vesille lähdetään omalla harkinnalla.")
                 }
 
-                Section {
-                    TextField("https://noste.esimerkki.fi", text: $serverBase)
-                        .keyboardType(.URL)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                    SecureField("Token (NOSTE_TOKEN)", text: $serverToken)
-                    if serverConfigured {
-                        Label("Oma palvelin käytössä — myös synkka ja kelivahti toimivat", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                            .font(.footnote)
-                    }
-                } header: {
-                    Text("Oma palvelin (valinnainen)")
-                } footer: {
-                    Text("Kehitykseen tai omalle noste-serverille (ks. repo: server/). Täysi token avaa myös spottien ja sessioiden varmuuskopioinnin sekä kelivahdin.")
-                }
-
-                if !serverConfigured {
+                if devMode {
                     Section {
-                        TextField("API-avain", text: $mmlApiKey)
+                        TextField("https://noste.esimerkki.fi", text: $serverBase)
+                            .keyboardType(.URL)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
-                    } header: {
-                        Text("Oma MML-avain (valinnainen)")
-                    } footer: {
-                        Text("Maastokarttatiilet suoraan MML:ltä ohi Nosten palvelimen. Ilmainen API-avain: maanmittauslaitos.fi → Rajapinnat → API-avain.")
-                    }
-
-                    Section {
-                        TextField("WMTS-tiiliosoite", text: $marineTemplate, axis: .vertical)
+                        SecureField("Token (NOSTE_TOKEN)", text: $serverToken)
+                        if serverConfigured {
+                            Label("Oma palvelin käytössä — myös synkka ja kelivahti toimivat", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                                .font(.footnote)
+                        }
+                        TextField("Oma MML-avain", text: $mmlApiKey)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                        TextField("Merikartan WMTS-osoite", text: $marineTemplate, axis: .vertical)
                             .font(.caption)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
-                        Button("Palauta oletus") {
+                        Button("Palauta merikartan oletus") {
                             marineTemplate = TileOverlays.defaultMarineTemplate
                         }
+                        Button("Piilota kehittäjäasetukset") {
+                            devMode = false
+                        }
                     } header: {
-                        Text("Merikartan tiiliosoite (valinnainen)")
+                        Text("Kehittäjä")
                     } footer: {
-                        Text("Oletuksena merikartta tulee Nosten palvelimelta. Osoitteessa {z}/{y}/{x} korvataan tiilikoordinaateilla. Huom: ei navigointikäyttöön.")
+                        Text("Ylikirjoitukset kehitykseen — appi toimii ilman näitä.")
                     }
                 }
             }
