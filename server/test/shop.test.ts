@@ -28,7 +28,7 @@ describe("lappis-katalogi", () => {
       id: "72760-2.5", type: "wing", size: 2.5, year: 2026, price: 929,
       url: "https://lappis.fi/tuote/duotone-float-2026/",
     });
-    expect(items[1].size).toBe(4.5);
+    expect(items[1]!.size).toBe(4.5);
   });
 
   it("kooton tuote tulee yhtenä rivinä, nollahintainen ei lainkaan", () => {
@@ -36,7 +36,7 @@ describe("lappis-katalogi", () => {
     const noPrice = { ...wingProduct, id: 2, prices: { price: "0", currency_minor_unit: 2 } };
     const items = parseProducts([noSize, noPrice], "board");
     expect(items).toHaveLength(1);
-    expect(items[0].size).toBeNull();
+    expect(items[0]!.size).toBeNull();
   });
 
   it("haku kokoaa kategoriat ja heittää tyhjästä", async () => {

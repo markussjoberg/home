@@ -79,9 +79,9 @@ describe("lipas-peili", () => {
     };
     const nearby = lipasNearby(data, 60.0, 24.9);
     expect(nearby).toHaveLength(1);
-    expect(nearby[0].name).toBe("Lähi");
-    expect(nearby[0].distanceM).toBeGreaterThan(50);
-    expect(nearby[0].distanceM).toBeLessThan(200);
+    expect(nearby[0]!.name).toBe("Lähi");
+    expect(nearby[0]!.distanceM).toBeGreaterThan(50);
+    expect(nearby[0]!.distanceM).toBeLessThan(200);
   });
 
   it("peili talletetaan levylle ja toista synkkaa ei tehdä tuoreena", async () => {
