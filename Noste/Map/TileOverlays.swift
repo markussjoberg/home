@@ -38,41 +38,95 @@ enum TileOverlays {
         "https://julkinen.traficom.fi/rasteripalvelu/wmts?service=WMTS&request=GetTile&version=1.0.0&layer=Traficom:Merikarttasarjat%20public&style=default&tilematrixset=WGS84_Pseudo-Mercator&format=image/png&TileMatrix=WGS84_Pseudo-Mercator:{z}&TileRow={y}&TileCol={x}"
 
     /// Lähteiden todelliset zoomialueet (mitattu proxyn läpi 2026-09):
-    /// maasto ja ilmakuva vastaavat z2–18, merikartta vain z5–15. Maksimin
-    /// yläpuolella MapKit skaalaa ylimmän tason tiiliä — taso ei katoa.
+    /// maasto ja ilmakuva vastaavat z2–18, merikartta vain z5–15. Lähteen
+    /// maksimin yli zoomattaessa TunedTileOverlay hakee ylimmän tason tiilen
+    /// ja rajaa+skaalaa siitä oikean osan — tarkin taso ei koskaan katoa.
     static func overlay(template: String, replacesContent: Bool, muted: Bool = false,
-                        minimumZ: Int = 2, maximumZ: Int = 18) -> MKTileOverlay {
-        let overlay = muted ? MutedTileOverlay(urlTemplate: template) : MKTileOverlay(urlTemplate: template)
+                        minimumZ: Int = 2, sourceMaxZ: Int = 18) -> MKTileOverlay {
+        let overlay = TunedTileOverlay(urlTemplate: template, sourceMaxZ: sourceMaxZ, muted: muted)
         overlay.canReplaceMapContent = replacesContent
-        overlay.maximumZ = maximumZ
+        overlay.maximumZ = 22
         overlay.minimumZ = minimumZ
         return overlay
     }
 }
 
-/// Maastokartan sävytys Nosten ilmeeseen: vesialueet ovat pääasia, joten
-/// maa vedetään pehmeäksi harmaasävyksi ja vesi sävytetään ocean/mint-suuntaan
-/// (kirkkaus säilyy → syvyyskäyrät ja rantaviivat erottuvat yhä). Käsittely
-/// tehdään per pikseli vain näytölle piirrettäville tiilille; kellon offline-
-/// kartat ja vesialuemaski käyttävät alkuperäisiä värejä.
-final class MutedTileOverlay: MKTileOverlay {
+/// Tiilitaso, joka osaa kaksi asiaa:
+/// 1. Overzoom: lähteen maksimitason yli zoomattaessa haetaan ylimmän tason
+///    tiili ja rajataan+skaalataan siitä oikea osa — MapKit ei tee tätä itse,
+///    joten ilman tätä taso katoaa tarkimman tason jälkeen.
+/// 2. Sävytys (muted): maastokartan vesi minttuun, maa harmaasävyyn, vesidata
+///    (syvyyskäyrät, nimet — kylläinen sininen) tummana petrolina. Käsittely
+///    vain näytölle; kellon offline-kartat ja vesialuemaski käyttävät
+///    alkuperäisiä värejä.
+final class TunedTileOverlay: MKTileOverlay {
 
+    private let sourceMaxZ: Int
+    private let muted: Bool
     private static let cache = NSCache<NSString, NSData>()
+    /// Overzoomin katto: 256/2^5 = 8 px lähdetiilestä — syvemmällä sama kuva.
+    private static let maxOverzoomSteps = 5
+
+    init(urlTemplate: String, sourceMaxZ: Int, muted: Bool) {
+        self.sourceMaxZ = sourceMaxZ
+        self.muted = muted
+        super.init(urlTemplate: urlTemplate)
+    }
 
     override func loadTile(at path: MKTileOverlayPath, result: @escaping (Data?, Error?) -> Void) {
-        let key = "\(path.z)/\(path.x)/\(path.y)" as NSString
+        let key = "\(muted ? "m" : "p"):\(urlTemplate?.hashValue ?? 0):\(path.z)/\(path.x)/\(path.y)" as NSString
         if let cached = Self.cache.object(forKey: key) {
             result(cached as Data, nil)
             return
         }
-        super.loadTile(at: path) { data, error in
-            guard let data, let adjusted = Self.recolor(data) else {
-                result(data, error)
-                return
+
+        if path.z <= sourceMaxZ {
+            super.loadTile(at: path) { [muted] data, error in
+                guard let data else { return result(nil, error) }
+                let processed = muted ? (Self.recolor(data) ?? data) : data
+                Self.cache.setObject(processed as NSData, forKey: key)
+                result(processed, nil)
             }
-            Self.cache.setObject(adjusted as NSData, forKey: key)
-            result(adjusted, nil)
+            return
         }
+
+        // Overzoom: hae lähdetiili maksimitasolta ja rajaa+skaalaa oma osa.
+        let steps = min(path.z - sourceMaxZ, Self.maxOverzoomSteps)
+        let clampedZ = path.z - steps
+        let factor = 1 << (path.z - clampedZ)
+        let parent = MKTileOverlayPath(x: path.x / factor, y: path.y / factor,
+                                       z: clampedZ, contentScaleFactor: path.contentScaleFactor)
+        super.loadTile(at: parent) { [muted] data, error in
+            guard let data else { return result(nil, error) }
+            let processed = muted ? (Self.recolor(data) ?? data) : data
+            guard let cropped = Self.cropAndScale(
+                processed,
+                subX: path.x - parent.x * factor,
+                subY: path.y - parent.y * factor,
+                factor: factor
+            ) else { return result(processed, nil) }
+            Self.cache.setObject(cropped as NSData, forKey: key)
+            result(cropped, nil)
+        }
+    }
+
+    /// Rajaa lähdetiilestä (subX, subY) -osan 1/factor-koossa ja skaalaa 256²:een.
+    private static func cropAndScale(_ data: Data, subX: Int, subY: Int, factor: Int) -> Data? {
+        guard let source = UIImage(data: data)?.cgImage, factor > 1 else { return nil }
+        let side = source.width / factor
+        guard side > 0 else { return nil }
+        let rect = CGRect(x: subX * side, y: subY * side, width: side, height: side)
+        guard let sub = source.cropping(to: rect) else { return nil }
+        let out = 256
+        guard let context = CGContext(
+            data: nil, width: out, height: out, bitsPerComponent: 8,
+            bytesPerRow: out * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        context.interpolationQuality = .high
+        context.draw(sub, in: CGRect(x: 0, y: 0, width: out, height: out))
+        guard let image = context.makeImage() else { return nil }
+        return UIImage(cgImage: image).pngData()
     }
 
     private static func recolor(_ data: Data) -> Data? {

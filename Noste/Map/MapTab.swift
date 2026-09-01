@@ -355,6 +355,9 @@ struct SpotMapView: UIViewRepresentable {
         map.delegate = context.coordinator
         map.showsUserLocation = true
         map.showsCompass = true
+        // Zoomikatto ~z20: syvemmällä mikään tiililähde (Apple mukaan lukien)
+        // ei näytä enää mitään — käyttäjä ei voi zoomata tyhjään.
+        map.cameraZoomRange = MKMapView.CameraZoomRange(minCenterCoordinateDistance: 400)
         // Aloitusnäkymä: Suomi.
         map.region = MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 62.5, longitude: 26.0),
@@ -418,7 +421,7 @@ struct SpotMapView: UIViewRepresentable {
             }
         case .marine:
             map.addOverlay(TileOverlays.overlay(template: marineTemplate, replacesContent: false,
-                                                minimumZ: 5, maximumZ: 15), level: .aboveLabels)
+                                                minimumZ: 5, sourceMaxZ: 15), level: .aboveLabels)
         case .aerial:
             // Ilmakuva sellaisenaan — kivet ja breikkaavat rannat näkyvät.
             map.addOverlay(TileOverlays.overlay(
