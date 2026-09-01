@@ -19,10 +19,12 @@ struct SpotEditorView: View {
 
     private static let compassNames = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 
-    init(draft: SpotData, onDone: @escaping (Action) -> Void) {
+    /// isNew: kutsuja tietää, onko spotti jo tallennettu — nimestä ei voi
+    /// päätellä (rantakohteesta luotu spotti tulee nimen kanssa).
+    init(draft: SpotData, isNew: Bool? = nil, onDone: @escaping (Action) -> Void) {
         _draft = State(initialValue: draft)
         self.onDone = onDone
-        self.isNew = draft.name.isEmpty
+        self.isNew = isNew ?? draft.name.isEmpty
         _hasWindLimits = State(initialValue: draft.minWind != nil || draft.maxWind != nil)
         _minWind = State(initialValue: draft.minWind ?? 6)
         _maxWind = State(initialValue: draft.maxWind ?? 15)
@@ -60,7 +62,9 @@ struct SpotEditorView: View {
                     Text("Toimivat suunnat ja voimakkuus. Ennusteesta korostetaan ikkunaan osuvat tunnit — myös kellossa.")
                 }
 
-                if ServerSettings.current != nil {
+                // Vain oma palvelin: spottien synkka (ja siten kelivahti) vaatii
+                // täyden tokenin, sisäänrakennettu client-token ei riitä.
+                if ServerSettings.userConfigured != nil {
                     Section {
                         Toggle("Kelivahti", isOn: alertBinding)
                             .disabled(!windowDefined)

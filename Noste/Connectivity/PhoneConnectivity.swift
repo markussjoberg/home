@@ -55,12 +55,24 @@ final class PhoneConnectivity: NSObject, ObservableObject {
             }
         }
 
-        let record = SessionRecord(summary: payload.summary, track: payload.track, spotName: spotName)
+        // Kellon uusintalähetys (WC-siirto tai palautus) ei saa duplikoida:
+        // sama alkuhetki ±2 s = sama sessio, päivitetään olemassa oleva.
+        let startDate = payload.summary.startDate
+        let record: SessionRecord
+        if let existing = ((try? context.fetch(FetchDescriptor<SessionRecord>())) ?? [])
+            .first(where: { abs($0.startDate.timeIntervalSince(startDate)) < 2 }) {
+            record = existing
+            record.summaryData = (try? WatchSync.encode(payload.summary)) ?? record.summaryData
+            record.trackData = (try? WatchSync.encode(payload.track)) ?? record.trackData
+            if record.spotName == nil { record.spotName = spotName }
+        } else {
+            record = SessionRecord(summary: payload.summary, track: payload.track, spotName: spotName)
+            context.insert(record)
+        }
         // Ehtikö raakadata perille ensin?
-        if let key = pendingMotion.keys.first(where: { abs($0 - payload.summary.startDate.timeIntervalSince1970) < 2 }) {
+        if let key = pendingMotion.keys.first(where: { abs($0 - startDate.timeIntervalSince1970) < 2 }) {
             record.motionData = pendingMotion.removeValue(forKey: key)
         }
-        context.insert(record)
         try? context.save()
 
         // Varmuuskopio palvelimelle (best effort — paikallinen talletus on jo tehty).

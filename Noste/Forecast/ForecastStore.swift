@@ -27,7 +27,9 @@ final class ForecastStore: ObservableObject {
     }
 
     /// Hakee ennusteen, jos välimuistissa oleva on yli 30 min vanha (tai force).
-    func refresh(spot: SpotData, force: Bool = false, allSpots: [SpotData] = []) async {
+    /// ephemeral: tilapäinen piste (kartan napautus, julkinen spotti) — ennuste
+    /// näytetään mutta ei talleteta eikä työnnetä kelloon suosikkien tilalle.
+    func refresh(spot: SpotData, force: Bool = false, allSpots: [SpotData] = [], ephemeral: Bool = false) async {
         if !force, let cached = forecasts[spot.id], Date().timeIntervalSince(cached.fetchedAt) < 1800 {
             return
         }
@@ -38,6 +40,7 @@ final class ForecastStore: ObservableObject {
             let forecast = try await client.forecast(for: spot)
             forecasts[spot.id] = forecast
             lastError = nil
+            guard !ephemeral else { return }
             persist()
             pushToWatch(allSpots: allSpots.isEmpty ? [spot] : allSpots)
         } catch {

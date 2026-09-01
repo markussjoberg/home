@@ -400,6 +400,7 @@ struct MapTab: View {
                         showSearch = true
                     } label: {
                         Image(systemName: "magnifyingglass")
+                            .accessibilityLabel("Hae paikkaa")
                             .font(.title3)
                             .frame(width: 40, height: 40)
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
@@ -424,6 +425,7 @@ struct MapTab: View {
                         }
                     } label: {
                         Image(systemName: seaStateEnabled ? "water.waves" : "water.waves")
+                            .accessibilityLabel("Merisää-kerros")
                             .font(.title3)
                             .frame(width: 40, height: 40)
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
@@ -435,6 +437,7 @@ struct MapTab: View {
                         centerTick += 1
                     } label: {
                         Image(systemName: "location")
+                            .accessibilityLabel("Oma sijainti")
                             .font(.title3)
                             .frame(width: 40, height: 40)
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
@@ -449,6 +452,7 @@ struct MapTab: View {
                         )
                     } label: {
                         Image(systemName: "plus")
+                            .accessibilityLabel("Lisää spotti")
                             .font(.title3.weight(.semibold))
                             .frame(width: 40, height: 40)
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
@@ -462,6 +466,7 @@ struct MapTab: View {
                         }
                     } label: {
                         Image(systemName: placesEnabled ? "beach.umbrella.fill" : "beach.umbrella")
+                            .accessibilityLabel("Rantainfra")
                             .font(.title3)
                             .frame(width: 40, height: 40)
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
@@ -491,7 +496,7 @@ struct MapTab: View {
                 ))
             }
             .sheet(item: $editingSpot) { spot in
-                SpotEditorView(draft: spot) { action in
+                SpotEditorView(draft: spot, isNew: !spots.contains { $0.id == spot.id }) { action in
                     handle(action, original: spot)
                 }
             }

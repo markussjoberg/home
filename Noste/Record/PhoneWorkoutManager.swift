@@ -61,8 +61,9 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
 
     override init() {
         super.init()
+        // Recovery-tiedosto poistetaan vasta kun käyttäjä tallettaa session —
+        // muuten näkymän sulkeminen hävittäisi sen lopullisesti.
         if let state = SessionRecovery.load() {
-            SessionRecovery.clear()
             if state.points.count >= 2 {
                 recoveredPayload = WatchSync.SessionPayload(
                     summary: SessionRecovery.summarize(state),

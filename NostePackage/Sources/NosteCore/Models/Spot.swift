@@ -92,3 +92,9 @@ public struct SpotData: Codable, Sendable, Equatable, Identifiable {
         return (index + 8) % 8
     }
 }
+
+public extension SpotData {
+    /// Avoimuuskynnys (0–1): tästä ylöspäin suunta on "avoin" — sama raja
+    /// surffi-ikkunan osumille ja Avoin-suuntien listalle.
+    static let openExposure = 0.7
+}

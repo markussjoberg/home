@@ -42,6 +42,7 @@ struct RecordSessionView: View {
                 Section {
                     Button {
                         store(payload: recovered)
+                        SessionRecovery.clear()
                         workout.recoveredPayload = nil
                     } label: {
                         Label("Talleta kesken jäänyt \(recovered.summary.sport.displayName)-sessio (\(Format.duration(recovered.summary.duration)))",

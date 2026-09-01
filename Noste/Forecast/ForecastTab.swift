@@ -301,7 +301,7 @@ struct SpotForecastView: View {
             HStack {
                 Image(systemName: "graduationcap.fill")
                     .foregroundStyle(.cyan)
-                Text("\(profile.sessionCount) reittattua sessiota")
+                Text("\(profile.sessionCount) reitattua sessiota")
                     .font(.subheadline)
                 Spacer()
                 if !profile.goodOctants.isEmpty {
@@ -364,11 +364,13 @@ struct SpotForecastView: View {
               let exposure = spot.exposureByOctant, exposure.count == 8,
               let direction = hour.direction, hour.height >= 0.5 else { return false }
         let octant = Int((direction + 22.5).truncatingRemainder(dividingBy: 360) / 45)
-        return exposure[octant] >= 0.6
+        return exposure[octant] >= SpotData.openExposure
     }
 
     private func refresh(force: Bool) async {
-        await forecastStore.refresh(spot: spot, force: force, allSpots: allSpots)
+        // Tilapäinen piste (allSpots tyhjä) ei saa ylikirjoittaa kellon snapshotia
+        // eikä kasvattaa ennustecachea.
+        await forecastStore.refresh(spot: spot, force: force, allSpots: allSpots, ephemeral: allSpots.isEmpty)
         observation = await ServerClient.shared.observation(latitude: spot.latitude, longitude: spot.longitude)
         if spot.waterType == .sea, fmiWave == nil {
             fmiWave = await ServerClient.shared.wave(latitude: spot.latitude, longitude: spot.longitude)
@@ -398,7 +400,7 @@ struct SpotForecastView: View {
     private var exposureText: String? {
         guard let exposure = spot.exposureByOctant, exposure.count == 8 else { return nil }
         let name = { (i: Int) in GeoMath.compassName(degrees: Double(i) * 45) }
-        let open = (0..<8).filter { exposure[$0] >= 0.7 }.map(name)
+        let open = (0..<8).filter { exposure[$0] >= SpotData.openExposure }.map(name)
         let sheltered = (0..<8).filter { exposure[$0] <= 0.3 }.map(name)
         var parts: [String] = []
         if !open.isEmpty { parts.append("Avoin: \(open.joined(separator: ", "))") }

@@ -300,12 +300,20 @@ final class WorkoutManager: NSObject, ObservableObject {
 
     private func recoverInterruptedSessionIfAny() {
         guard let state = SessionRecovery.load() else { return }
-        SessionRecovery.clear()
-        guard state.points.count >= 2 else { return }
+        guard state.points.count >= 2 else {
+            SessionRecovery.clear() // ei mitään palautettavaa
+            return
+        }
 
+        // Recovery-tiedosto poistetaan vasta kun siirto puhelimeen on varmistunut —
+        // WCSession ei ole vielä aktivoitunut tässä vaiheessa, ja epäonnistunut
+        // lähetys hävittäisi muuten juuri sen session, jota suoja on varten.
         let recovered = SessionRecovery.summarize(state)
-        WatchConnectivityManager.shared.send(payload: WatchSync.SessionPayload(summary: recovered, track: state.points))
-        notice = "Kesken jäänyt \(state.sport.displayName)-sessio (\(Format.duration(recovered.duration))) palautettiin ja siirrettiin puhelimeen."
+        summary = recovered
+        WatchConnectivityManager.shared.send(payload: WatchSync.SessionPayload(summary: recovered, track: state.points)) {
+            SessionRecovery.clear()
+        }
+        notice = "Kesken jäänyt \(state.sport.displayName)-sessio (\(Format.duration(recovered.duration))) palautettiin ja siirretään puhelimeen."
     }
 
     // MARK: - HealthKit

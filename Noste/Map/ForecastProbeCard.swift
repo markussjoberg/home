@@ -42,7 +42,8 @@ struct ForecastProbeCard: View {
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
-                HStack(spacing: 10) {
+                // Tuuli ja aallokko omilla riveillään — yhdellä rivillä arvot rivittyivät rumasti.
+                VStack(alignment: .leading, spacing: 2) {
                     if let wind {
                         Label {
                             Text("\(wind.speed, specifier: "%.0f") m/s")
@@ -67,6 +68,7 @@ struct ForecastProbeCard: View {
                     }
                 }
                 .font(.subheadline.monospacedDigit())
+                .fixedSize(horizontal: true, vertical: false)
                 Text(String(format: "%.3f°N %.3f°E", coordinate.latitude, coordinate.longitude))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)

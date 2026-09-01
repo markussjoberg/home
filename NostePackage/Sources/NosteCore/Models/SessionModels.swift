@@ -235,10 +235,12 @@ public struct SessionSummary: Codable, Sendable, Equatable {
         self.turns = turns
     }
 
-    /// Foiliajan osuus koko sessiosta (0–1).
+    /// Foiliajan osuus vesillä vietetystä ajasta (0–1) — maissa olo ja
+    /// siirtymät eivät laimenna lukua.
     public var rideFraction: Double {
-        guard duration > 0 else { return 0 }
-        return min(1, rides.totalDuration / duration)
+        let base = waterDuration
+        guard base > 0 else { return 0 }
+        return min(1, rides.totalDuration / base)
     }
 
     /// Vesillä vietetty aika (s). Ilman segmenttejä = koko kesto.

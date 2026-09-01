@@ -48,11 +48,13 @@ struct SessionsTab: View {
                 } label: {
                     Image(systemName: "backpack")
                 }
+                .accessibilityLabel("Kalusto")
                 Button {
                     showRecorder = true
                 } label: {
                     Image(systemName: "plus.circle")
                 }
+                .accessibilityLabel("Tallenna sessio")
             }
             .sheet(isPresented: $showRecorder) {
                 RecordSessionView()
@@ -352,14 +354,6 @@ struct SessionDetailView: View {
                         Text("Napauta suoritusta — sen reitti korostuu kartalla.")
                     }
                 }
-                if summary.sport == .surf {
-                    Section("Aallot") {
-                        row("Aaltoja", "\(summary.rides.count)")
-                        if let longest = summary.rides.longestByDuration {
-                            row("Pisin aalto", "\(Format.duration(longest.duration)) · \(Format.distance(longest.distance))")
-                        }
-                    }
-                }
             }
         }
         .navigationTitle(record.startDate.formatted(.dateTime.day().month()))
@@ -369,11 +363,13 @@ struct SessionDetailView: View {
                 ShareLink(item: url) {
                     Image(systemName: "square.and.arrow.up")
                 }
+                .accessibilityLabel("Jaa GPX-jälki")
             }
             if let url = rawExportURL() {
                 ShareLink(item: url) {
                     Image(systemName: "waveform.path")
                 }
+                .accessibilityLabel("Jaa raakadata")
             }
         }
     }

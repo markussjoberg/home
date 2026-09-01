@@ -18,6 +18,7 @@ struct RatingControl: View {
                             .foregroundStyle(.yellow)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("\(star) tähteä")
                 }
             }
             Button {

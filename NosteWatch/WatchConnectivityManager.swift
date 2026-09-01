@@ -59,17 +59,37 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
         }
     }
 
+    /// Session lähetykset, jotka odottavat WCSessionin aktivoitumista.
+    private var pendingPayloads: [(WatchSync.SessionPayload, (() -> Void)?)] = []
+    /// Siirron valmistumisesta kiinnostuneet (esim. recovery-tiedoston poisto).
+    private var deliveryHandlers: [URL: () -> Void] = [:]
+
     /// Lähettää session puhelimeen tiedostona (jälki voi olla iso).
     /// transferFile jonottaa siirron ja hoitaa sen kun puhelin on taas saatavilla.
-    func send(payload: WatchSync.SessionPayload) {
+    /// Ennen aktivoitumista lähetys jää odottamaan; onDelivered kutsutaan kun
+    /// siirto on varmistunut onnistuneeksi.
+    func send(payload: WatchSync.SessionPayload, onDelivered: (() -> Void)? = nil) {
+        guard WCSession.default.activationState == .activated else {
+            pendingPayloads.append((payload, onDelivered))
+            return
+        }
         do {
             let data = try WatchSync.encode(payload)
             let url = FileManager.default.temporaryDirectory
                 .appendingPathComponent("session-\(Int(payload.summary.startDate.timeIntervalSince1970)).json")
             try data.write(to: url)
+            if let onDelivered { deliveryHandlers[url] = onDelivered }
             WCSession.default.transferFile(url, metadata: ["type": "session"])
         } catch {
             // Sessio jää HealthKitiin vaikka siirto epäonnistuisi.
+        }
+    }
+
+    private func flushPendingPayloads() {
+        let pending = pendingPayloads
+        pendingPayloads = []
+        for (payload, handler) in pending {
+            send(payload: payload, onDelivered: handler)
         }
     }
 
@@ -131,6 +151,19 @@ extension WatchConnectivityManager: WCSessionDelegate {
         let context = session.receivedApplicationContext
         if let data = context[WatchSync.snapshotKey] as? Data {
             store(snapshotData: data)
+        }
+        if activationState == .activated {
+            DispatchQueue.main.async { self.flushPendingPayloads() }
+        }
+    }
+
+    func session(_ session: WCSession, didFinish fileTransfer: WCSessionFileTransfer, error: Error?) {
+        let url = fileTransfer.file.fileURL
+        DispatchQueue.main.async {
+            guard let handler = self.deliveryHandlers.removeValue(forKey: url) else { return }
+            // Virheessä käsittelijää ei kutsuta: recovery-tiedosto säilyy ja
+            // seuraava käynnistys yrittää uudelleen.
+            if error == nil { handler() }
         }
     }
 

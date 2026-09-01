@@ -67,7 +67,7 @@ struct SettingsTab: View {
                 } header: {
                     Text("Omat lajit ja stanssi")
                 } footer: {
-                    Text("Valitut lajit näkyvät tallennusvalikoissa (tyhjä valinta = kaikki). Stanssia käytetään jatkossa käännösten analyysiin (heelside/toeside).")
+                    Text("Valitut lajit näkyvät tallennusvalikoissa (tyhjä valinta = kaikki). Stanssi ei ole vielä käytössä — se on varattu käännösten analyysiin (heelside/toeside).")
                 }
 
                 Section {
