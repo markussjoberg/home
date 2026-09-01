@@ -8,11 +8,15 @@ public enum WatchSync {
         public var updatedAt: Date
         public var spots: [SpotData]
         public var forecasts: [SpotForecast]
+        /// Käyttäjän valitsemat lajit (rawValuet) — kello suodattaa aloitusvalikon.
+        /// nil/tyhjä = kaikki. Valinnainen: vanha snapshot dekoodautuu yhä.
+        public var preferredSports: [String]?
 
-        public init(updatedAt: Date = Date(), spots: [SpotData], forecasts: [SpotForecast]) {
+        public init(updatedAt: Date = Date(), spots: [SpotData], forecasts: [SpotForecast], preferredSports: [String]? = nil) {
             self.updatedAt = updatedAt
             self.spots = spots
             self.forecasts = forecasts
+            self.preferredSports = preferredSports
         }
     }
 

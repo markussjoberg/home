@@ -24,6 +24,20 @@ public enum GeoMath {
     }
 
     /// Tuulen/kulkusuunnan nimi kahdeksalla ilmansuunnalla.
+    /// Suuntien lyhin kulmaero (0–180°).
+    public static func angularDistance(_ a: Double, _ b: Double) -> Double {
+        let diff = abs(a - b).truncatingRemainder(dividingBy: 360)
+        return diff > 180 ? 360 - diff : diff
+    }
+
+    /// Etumerkillinen kulmamuutos suunnasta toiseen (−180…180°, + = myötäpäivään).
+    public static func signedAngleDelta(from: Double, to: Double) -> Double {
+        var delta = (to - from).truncatingRemainder(dividingBy: 360)
+        if delta > 180 { delta -= 360 }
+        if delta < -180 { delta += 360 }
+        return delta
+    }
+
     public static func compassName(degrees: Double) -> String {
         let names = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
         let index = Int((degrees / 45).rounded()) % 8

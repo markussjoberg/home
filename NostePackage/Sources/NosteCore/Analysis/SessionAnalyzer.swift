@@ -131,6 +131,13 @@ public enum SessionAnalyzer {
             bouts: pumps?.bouts ?? []
         )
 
+        // Käännökset (jiipit/tackit): tuulilajit, vauhdissa kääntyminen.
+        var turns: TurnAnalysis?
+        if sport.countsJumps {
+            let analysis = TurnDetector.analyze(points: points, config: .init(sport: sport))
+            turns = analysis.turns.isEmpty ? nil : analysis
+        }
+
         // Hypyt: vapaapudotus kelpaa vain vauhdissa — kaatumisen mätkähdys
         // paikaltaan ei ole hyppy.
         var jumps: JumpAnalysis?
@@ -156,7 +163,8 @@ public enum SessionAnalyzer {
             flights: flights,
             speedRecords: SpeedRecords.compute(points: points, maxPlausibleSpeed: speedCap),
             segments: segments,
-            jumps: jumps
+            jumps: jumps,
+            turns: turns
         )
     }
 
@@ -190,6 +198,7 @@ public enum SessionAnalyzer {
         var hasSwim = false
         var records: SpeedRecords?
         var allJumps: [Jump] = []
+        var allTurns: [Turn] = []
         var waterPoints: [TrackPoint] = []
         let speedCap = config.maxPlausibleSpeed ?? sport.maxPlausibleSpeed
 
@@ -224,6 +233,9 @@ public enum SessionAnalyzer {
             }
             if let partJumps = part.jumps {
                 allJumps.append(contentsOf: partJumps.jumps)
+            }
+            if let partTurns = part.turns {
+                allTurns.append(contentsOf: partTurns.turns)
             }
             if let partRecords = part.speedRecords {
                 records = SpeedRecords(
@@ -280,7 +292,8 @@ public enum SessionAnalyzer {
             flights: flights,
             speedRecords: records,
             segments: segments,
-            jumps: allJumps.isEmpty ? nil : JumpAnalysis(jumps: allJumps)
+            jumps: allJumps.isEmpty ? nil : JumpAnalysis(jumps: allJumps),
+            turns: allTurns.isEmpty ? nil : TurnAnalysis(turns: allTurns)
         )
     }
 

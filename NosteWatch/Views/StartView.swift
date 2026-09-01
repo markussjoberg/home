@@ -5,6 +5,12 @@ struct StartView: View {
     @EnvironmentObject private var workout: WorkoutManager
     @EnvironmentObject private var connectivity: WatchConnectivityManager
 
+    /// Puhelimen profiilissa valitut lajit; tyhjä valinta = kaikki.
+    private var availableSports: [Sport] {
+        let chosen = connectivity.snapshot?.preferredSports?.compactMap(Sport.init(rawValue:)) ?? []
+        return chosen.isEmpty ? Sport.allCases : chosen
+    }
+
     var body: some View {
         List {
             if let notice = workout.notice {
@@ -16,7 +22,7 @@ struct StartView: View {
             }
 
             Section {
-                ForEach(Sport.allCases) { sport in
+                ForEach(availableSports) { sport in
                     Button {
                         workout.start(sport: sport)
                     } label: {

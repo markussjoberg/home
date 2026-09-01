@@ -53,7 +53,7 @@ struct RecordSessionView: View {
             }
             Section {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-                    ForEach(Sport.allCases) { sport in
+                    ForEach(UserProfile.sports) { sport in
                         Button {
                             workout.start(sport: sport)
                         } label: {

@@ -290,6 +290,23 @@ struct SessionDetailView: View {
                     }
                 }
 
+                if let turns = summary.turns, turns.count > 0 {
+                    Section("Käännökset") {
+                        if let wind = record.sessionWind {
+                            let jibes = turns.jibes(windDirection: wind.direction)
+                            let tacks = turns.tacks(windDirection: wind.direction)
+                            row("Jiipit", "\(jibes.count) (\(jibes.filter(\.onFoil).count) foilattua)")
+                            row("Tackit", "\(tacks.count) (\(tacks.filter(\.onFoil).count) foilattua)")
+                        } else {
+                            row("Käännöksiä", "\(turns.count)")
+                            row("Foilattuja läpi", "\(turns.foiledCount)")
+                        }
+                        if turns.count > 0 {
+                            row("Foilattu läpi", Format.percent(Double(turns.foiledCount) / Double(turns.count)))
+                        }
+                    }
+                }
+
                 if let jumps = summary.jumps, let longest = jumps.longest {
                     Section("Hypyt") {
                         row("Hyppyjä", "\(jumps.count)")

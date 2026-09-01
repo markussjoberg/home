@@ -28,9 +28,11 @@ final class PhoneConnectivity: NSObject, ObservableObject {
     func pushSnapshot(spots: [SpotData], forecasts: [SpotForecast]) {
         guard WCSession.isSupported(), WCSession.default.activationState == .activated else { return }
         let favorites = spots.filter(\.isFavorite)
+        let chosen = UserDefaults.standard.string(forKey: "mySports") ?? ""
         let snapshot = WatchSync.Snapshot(
             spots: favorites.isEmpty ? spots : favorites,
-            forecasts: forecasts
+            forecasts: forecasts,
+            preferredSports: chosen.isEmpty ? nil : chosen.split(separator: ",").map(String.init)
         )
         guard let data = try? WatchSync.encode(snapshot) else { return }
         try? WCSession.default.updateApplicationContext([WatchSync.snapshotKey: data])

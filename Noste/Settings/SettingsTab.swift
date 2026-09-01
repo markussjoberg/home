@@ -1,19 +1,72 @@
 import SwiftUI
 import NosteCore
 
+/// Käyttäjän profiili: omat lajit (suodattaa valitsimet) ja stanssi.
+enum UserProfile {
+    static let sportsKey = "mySports"
+    static let stanceKey = "stance"
+
+    static var sports: [Sport] {
+        let raw = UserDefaults.standard.string(forKey: sportsKey) ?? ""
+        let chosen = raw.split(separator: ",").compactMap { Sport(rawValue: String($0)) }
+        return chosen.isEmpty ? Sport.allCases : chosen
+    }
+}
+
 struct SettingsTab: View {
     @AppStorage(ServerSettings.baseURLKey) private var serverBase = ""
     @AppStorage(ServerSettings.tokenKey) private var serverToken = ""
     @AppStorage("mmlApiKey") private var mmlApiKey = ""
     @AppStorage("marineTemplate") private var marineTemplate = TileOverlays.defaultMarineTemplate
 
+    @AppStorage(UserProfile.sportsKey) private var mySportsRaw = ""
+    @AppStorage(UserProfile.stanceKey) private var stance = ""
+
     private var serverConfigured: Bool {
         ServerSettings.config(base: serverBase, token: serverToken) != nil
+    }
+
+    private var mySports: Set<String> {
+        Set(mySportsRaw.split(separator: ",").map(String.init))
+    }
+
+    private func toggleSport(_ sport: Sport) {
+        var set = mySports
+        if !set.insert(sport.rawValue).inserted { set.remove(sport.rawValue) }
+        mySportsRaw = Sport.allCases.filter { set.contains($0.rawValue) }.map(\.rawValue).joined(separator: ",")
     }
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    ForEach(Sport.allCases) { sport in
+                        Button {
+                            toggleSport(sport)
+                        } label: {
+                            HStack {
+                                Label { Text(sport.displayName).foregroundStyle(.primary) } icon: {
+                                    SportIcon(sport: sport, size: 22).foregroundStyle(.tint)
+                                }
+                                Spacer()
+                                if mySports.isEmpty || mySports.contains(sport.rawValue) {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(.tint)
+                                }
+                            }
+                        }
+                    }
+                    Picker("Stanssi", selection: $stance) {
+                        Text("–").tag("")
+                        Text("Regular").tag("regular")
+                        Text("Goofy").tag("goofy")
+                    }
+                } header: {
+                    Text("Omat lajit ja stanssi")
+                } footer: {
+                    Text("Valitut lajit näkyvät tallennusvalikoissa (tyhjä valinta = kaikki). Stanssia käytetään jatkossa käännösten analyysiin (heelside/toeside).")
+                }
+
                 Section {
                     LabeledContent("Kartat ja ennusteet", value: "Nosten palvelin")
                     LabeledContent("Ennustemalli", value: "Open-Meteo")

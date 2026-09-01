@@ -37,6 +37,11 @@ struct SummaryView: View {
                             row("Keskilento", Format.duration(summary.rides.averageDuration))
                         }
                     }
+                    if let turns = summary.turns, turns.count > 0 {
+                        Divider()
+                        row("Käännökset", "\(turns.count)")
+                        row("Foilattu läpi", "\(turns.foiledCount)/\(turns.count)")
+                    }
                     if let jumps = summary.jumps, let longest = jumps.longest {
                         Divider()
                         row("Hypyt", "\(jumps.count)")

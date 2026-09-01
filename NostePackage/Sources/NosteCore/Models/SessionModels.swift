@@ -214,8 +214,10 @@ public struct SessionSummary: Codable, Sendable, Equatable {
     public var jumps: JumpAnalysis?
     /// Sukellukset (kellon syvyysanturi, Ultra). nil = ei dataa.
     public var dives: DiveAnalysis?
+    /// Käännökset vauhdissa (jiipit/tackit — luokittelu tuulensuunnalla).
+    public var turns: TurnAnalysis?
 
-    public init(sport: Sport, startDate: Date, duration: TimeInterval, distance: Double, maxSpeed: Double, averageMovingSpeed: Double, rides: RideAnalysis, pumps: PumpAnalysis?, heartRate: HeartRateStats? = nil, flights: [FlightDetail]? = nil, speedRecords: SpeedRecords? = nil, segments: [SessionSegment]? = nil, jumps: JumpAnalysis? = nil, dives: DiveAnalysis? = nil) {
+    public init(sport: Sport, startDate: Date, duration: TimeInterval, distance: Double, maxSpeed: Double, averageMovingSpeed: Double, rides: RideAnalysis, pumps: PumpAnalysis?, heartRate: HeartRateStats? = nil, flights: [FlightDetail]? = nil, speedRecords: SpeedRecords? = nil, segments: [SessionSegment]? = nil, jumps: JumpAnalysis? = nil, dives: DiveAnalysis? = nil, turns: TurnAnalysis? = nil) {
         self.sport = sport
         self.startDate = startDate
         self.duration = duration
@@ -230,6 +232,7 @@ public struct SessionSummary: Codable, Sendable, Equatable {
         self.segments = segments
         self.jumps = jumps
         self.dives = dives
+        self.turns = turns
     }
 
     /// Foiliajan osuus koko sessiosta (0–1).
