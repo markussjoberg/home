@@ -37,11 +37,15 @@ enum TileOverlays {
     static let defaultMarineTemplate =
         "https://julkinen.traficom.fi/rasteripalvelu/wmts?service=WMTS&request=GetTile&version=1.0.0&layer=Traficom:Merikarttasarjat%20public&style=default&tilematrixset=WGS84_Pseudo-Mercator&format=image/png&TileMatrix=WGS84_Pseudo-Mercator:{z}&TileRow={y}&TileCol={x}"
 
-    static func overlay(template: String, replacesContent: Bool, muted: Bool = false) -> MKTileOverlay {
+    /// Lähteiden todelliset zoomialueet (mitattu proxyn läpi 2026-09):
+    /// maasto ja ilmakuva vastaavat z2–18, merikartta vain z5–15. Maksimin
+    /// yläpuolella MapKit skaalaa ylimmän tason tiiliä — taso ei katoa.
+    static func overlay(template: String, replacesContent: Bool, muted: Bool = false,
+                        minimumZ: Int = 2, maximumZ: Int = 18) -> MKTileOverlay {
         let overlay = muted ? MutedTileOverlay(urlTemplate: template) : MKTileOverlay(urlTemplate: template)
         overlay.canReplaceMapContent = replacesContent
-        overlay.maximumZ = 18
-        overlay.minimumZ = 4
+        overlay.maximumZ = maximumZ
+        overlay.minimumZ = minimumZ
         return overlay
     }
 }

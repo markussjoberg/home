@@ -417,7 +417,8 @@ struct SpotMapView: UIViewRepresentable {
                 map.addOverlay(TileOverlays.overlay(template: template, replacesContent: true, muted: true), level: .aboveLabels)
             }
         case .marine:
-            map.addOverlay(TileOverlays.overlay(template: marineTemplate, replacesContent: false), level: .aboveLabels)
+            map.addOverlay(TileOverlays.overlay(template: marineTemplate, replacesContent: false,
+                                                minimumZ: 5, maximumZ: 15), level: .aboveLabels)
         case .aerial:
             // Ilmakuva sellaisenaan — kivet ja breikkaavat rannat näkyvät.
             map.addOverlay(TileOverlays.overlay(
