@@ -349,7 +349,7 @@ struct SpotMapView: UIViewRepresentable {
             break
         case .terrain:
             if let template = terrainTemplate {
-                map.addOverlay(TileOverlays.overlay(template: template, replacesContent: true), level: .aboveLabels)
+                map.addOverlay(TileOverlays.overlay(template: template, replacesContent: true, muted: true), level: .aboveLabels)
             }
         case .marine:
             map.addOverlay(TileOverlays.overlay(template: marineTemplate, replacesContent: false), level: .aboveLabels)
