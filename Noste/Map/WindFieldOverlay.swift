@@ -20,7 +20,17 @@ final class WindParticleModel {
         var latitude: Double
         var longitude: Double
         var age: Int
+        /// Elinikä frameina; vaihtelee jotta partikkelit eivät kuole tahdissa.
+        var lifetime: Int
         var trail: [(Double, Double)] = []
+
+        /// Häivytys syntyessä ja kuollessa (0…1) — ilman tätä viivat
+        /// ilmestyisivät ja katoaisivat kesken kaiken kuin katkaistuina.
+        var fade: Double {
+            let fadeIn = min(1, Double(age) / 18)
+            let fadeOut = min(1, Double(lifetime - age) / 30)
+            return max(0, min(fadeIn, fadeOut))
+        }
     }
 
     private(set) var particles: [Particle] = []
@@ -37,7 +47,8 @@ final class WindParticleModel {
         maxLat = region.center.latitude + region.span.latitudeDelta / 2
         minLon = region.center.longitude - region.span.longitudeDelta / 2
         maxLon = region.center.longitude + region.span.longitudeDelta / 2
-        particles = (0..<220).map { _ in spawn() }
+        // Alkutäytössä iät hajautetaan, ettei koko kenttä syty ja sammu yhtä aikaa.
+        particles = (0..<220).map { _ in spawn(initialAge: Int(random01() * 120)) }
     }
 
     /// Kevyt deterministinen satunnaisuus (Date/random ei tarpeen).
@@ -46,11 +57,12 @@ final class WindParticleModel {
         return Double((seed >> 11) & 0xFFFFF) / Double(0xFFFFF)
     }
 
-    private func spawn() -> Particle {
+    private func spawn(initialAge: Int = 0) -> Particle {
         Particle(
             latitude: minLat + random01() * (maxLat - minLat),
             longitude: minLon + random01() * (maxLon - minLon),
-            age: Int(random01() * 120)
+            age: initialAge,
+            lifetime: 120 + Int(random01() * 80)
         )
     }
 
@@ -90,7 +102,7 @@ final class WindParticleModel {
             p.age += 1
             let outside = p.latitude < minLat || p.latitude > maxLat
                 || p.longitude < minLon || p.longitude > maxLon
-            particles[i] = (p.age > 160 || outside) ? spawn() : p
+            particles[i] = (p.age >= p.lifetime || outside) ? spawn() : p
         }
     }
 }
@@ -127,7 +139,7 @@ struct WindFieldOverlay: View {
                     path.addLine(to: project(particle.latitude, particle.longitude))
                     // Väri nopeudella: tyyni valkoinen → navakka syaani → kova kulta.
                     let color: Color = speed < 4 ? .white : (speed < 9 ? .cyan : .yellow)
-                    context.stroke(path, with: .color(color.opacity(0.55)), lineWidth: 1.4)
+                    context.stroke(path, with: .color(color.opacity(0.55 * particle.fade)), lineWidth: 1.4)
                 }
             }
         }

@@ -261,6 +261,22 @@ struct ServerClient {
         }
     }
 
+    /// Aaltohila (korkeus, suunta, periodi) merialueen värjäykseen; maapisteet
+    /// karsittu palvelimella.
+    func waveField(minLat: Double, minLon: Double, maxLat: Double, maxLon: Double) async -> WaveField? {
+        /// bbox = palvelimen todella hakema alue [minLon, minLat, maxLon, maxLat].
+        struct FieldResponse: Codable { var cells: [WaveCell]; var bbox: [Double] }
+        guard let request = request(path: "api/wavefield", query: [
+            URLQueryItem(name: "bbox", value: String(format: "%.2f,%.2f,%.2f,%.2f", minLon, minLat, maxLon, maxLat))
+        ]) else { return nil }
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let decoded = try? JSONDecoder().decode(FieldResponse.self, from: data),
+              decoded.bbox.count == 4
+        else { return nil }
+        return WaveField(cells: decoded.cells, spanLat: decoded.bbox[3] - decoded.bbox[1], spanLon: decoded.bbox[2] - decoded.bbox[0])
+    }
+
     // MARK: - Julkiset spotit ja kommentit
 
     struct PublicSpot: Codable, Identifiable {

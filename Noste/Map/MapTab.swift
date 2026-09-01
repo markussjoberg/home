@@ -31,6 +31,10 @@ struct MapTab: View {
     @State private var seaState: ServerClient.SeaState?
     @State private var seaStateTask: Task<Void, Never>?
     @State private var windModel = WindParticleModel()
+    @State private var waveField: WaveField?
+    /// Panoroinnin/zoomin aikana tuulipartikkelit piilotetaan: SwiftUI-kerros
+    /// ei seuraa karttaa liikkeen aikana, joten ne hyppäisivät lopussa.
+    @State private var isMapMoving = false
     @State private var currentRegion: MKCoordinateRegion?
 
     // Julkiset spotit: yhteinen pooli palvelimelta, kaikkien nähtävillä.
@@ -82,15 +86,19 @@ struct MapTab: View {
                 maxLat: region.center.latitude + halfLat,
                 maxLon: region.center.longitude + halfLon
             )
-            let (state, field) = await (stateTask, fieldTask)
+            async let waveTask = ServerClient.shared.waveField(
+                minLat: region.center.latitude - halfLat,
+                minLon: region.center.longitude - halfLon,
+                maxLat: region.center.latitude + halfLat,
+                maxLon: region.center.longitude + halfLon
+            )
+            let (state, field, waves) = await (stateTask, fieldTask, waveTask)
             guard !Task.isCancelled else { return }
             if let state { seaState = state }
             if let field {
-                windModel.update(
-                    cells: field.map { WindCell(latitude: $0.latitude, longitude: $0.longitude, speed: $0.speed, direction: $0.direction) },
-                    region: region
-                )
+                windModel.update(cells: field, region: region)
             }
+            if let waves { waveField = waves }
         }
     }
 
@@ -154,6 +162,7 @@ struct MapTab: View {
                     places: visiblePlaces,
                     publicSpots: visiblePublicSpots,
                     seaState: seaStateEnabled ? seaState : nil,
+                    waveField: seaStateEnabled ? waveField : nil,
                     onLongPress: { coordinate in
                         editingSpot = SpotData(
                             name: "",
@@ -170,15 +179,20 @@ struct MapTab: View {
                     onSelectPublicSpot: { spot in
                         selectedPublicSpot = spot
                     },
-                    onRegionChange: regionChanged,
+                    onRegionWillChange: { withAnimation(.easeOut(duration: 0.15)) { isMapMoving = true } },
+                    onRegionChange: { region in
+                        withAnimation(.easeIn(duration: 0.4)) { isMapMoving = false }
+                        regionChanged(region)
+                    },
                     centerTick: centerTick,
                     centerCoordinate: centerCoordinate
                 )
                 .ignoresSafeArea(edges: .top)
 
-                if seaStateEnabled, let region = currentRegion, windModel.isReady {
+                if seaStateEnabled, !isMapMoving, let region = currentRegion, windModel.isReady {
                     WindFieldOverlay(model: windModel, region: region)
                         .ignoresSafeArea(edges: .top)
+                        .transition(.opacity)
                 }
 
                 VStack(spacing: 8) {
@@ -232,7 +246,14 @@ struct MapTab: View {
                     }
                     Button {
                         seaStateEnabled.toggle()
-                        if !seaStateEnabled { seaState = nil }
+                        if seaStateEnabled {
+                            // Haetaan heti — muuten kerros ilmestyisi vasta panoroinnin jälkeen.
+                            if let region = currentRegion { refreshSeaState(region) }
+                        } else {
+                            seaStateTask?.cancel()
+                            seaState = nil
+                            waveField = nil
+                        }
                     } label: {
                         Image(systemName: seaStateEnabled ? "water.waves" : "water.waves")
                             .font(.title3)
@@ -400,10 +421,13 @@ struct SpotMapView: UIViewRepresentable {
     var publicSpots: [ServerClient.PublicSpot] = []
     /// Merisää (poijut + tuuliasemat); nil = kerros pois.
     var seaState: ServerClient.SeaState?
+    /// Aaltokenttä värjättynä merelle (osa Merisää-kerrosta); nil = pois.
+    var waveField: WaveField?
     var onLongPress: (CLLocationCoordinate2D) -> Void
     var onSelectSpot: (SpotData) -> Void
     var onSelectPlace: (ServerClient.Place?) -> Void = { _ in }
     var onSelectPublicSpot: (ServerClient.PublicSpot) -> Void = { _ in }
+    var onRegionWillChange: () -> Void = {}
     var onRegionChange: (MKCoordinateRegion) -> Void = { _ in }
     /// Keskityskomento: tick kasvaa → keskitä (nil koordinaatti = oma sijainti).
     var centerTick = 0
@@ -430,6 +454,7 @@ struct SpotMapView: UIViewRepresentable {
     func updateUIView(_ map: MKMapView, context: Context) {
         context.coordinator.parent = self
         updateOverlay(map, context: context)
+        updateWaveOverlay(map, context: context)
         updateAnnotations(map)
         updatePlaceAnnotations(map, context: context)
         if centerTick != context.coordinator.lastCenterTick {
@@ -439,6 +464,8 @@ struct SpotMapView: UIViewRepresentable {
                     center: target,
                     span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.09)
                 ), animated: true)
+            } else if centerCoordinate == nil {
+                context.coordinator.pendingCenterOnUser = true
             }
         }
     }
@@ -480,6 +507,7 @@ struct SpotMapView: UIViewRepresentable {
         context.coordinator.overlaySignature = signature
 
         map.removeOverlays(map.overlays)
+        context.coordinator.waveSignature = "" // aaltokenttä lisätään uudelleen tiilien päälle
         // Ilma käyttää Applen satelliittikuvastoa (tarkempi ja globaali kuin
         // MML-ortot); muut tasot normaalia pohjakarttaa + tiilioverlayta.
         map.preferredConfiguration = layer == .aerial
@@ -497,6 +525,19 @@ struct SpotMapView: UIViewRepresentable {
                                                 minimumZ: 5, sourceMaxZ: 15), level: .aboveLabels)
         case .aerial:
             break // Applen kuvasto tulee preferredConfigurationista.
+        }
+    }
+
+    /// Aaltokenttä vaihdetaan könttänä kun data vaihtuu (tai tiilet luotiin uudelleen).
+    private func updateWaveOverlay(_ map: MKMapView, context: Context) {
+        let signature = waveField.map { field in
+            "\(field.cells.count):\(field.spacingLat):\(field.cells.first.map { "\($0.latitude),\($0.longitude),\($0.height)" } ?? "")"
+        } ?? "off"
+        guard signature != context.coordinator.waveSignature else { return }
+        context.coordinator.waveSignature = signature
+        map.removeOverlays(map.overlays.filter { $0 is WaveFieldMapOverlay })
+        if let waveField, !waveField.isEmpty {
+            map.addOverlay(WaveFieldMapOverlay(field: waveField), level: .aboveLabels)
         }
     }
 
@@ -526,14 +567,31 @@ struct SpotMapView: UIViewRepresentable {
         var placesSignature = ""
         var publicSpotsSignature = ""
         var seaStateSignature = ""
+        var waveSignature = ""
         var lastCenterTick = 0
+        var pendingCenterOnUser = false
 
         init(parent: SpotMapView) {
             self.parent = parent
         }
 
+        func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
+            parent.onRegionWillChange()
+        }
+
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             parent.onRegionChange(mapView.region)
+        }
+
+        /// Sijaintinappi ennen ensimmäistä paikannusta (esim. lupakysely
+        /// kesken): keskitetään heti kun sijainti saapuu.
+        func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
+            guard pendingCenterOnUser, let coordinate = userLocation.location?.coordinate else { return }
+            pendingCenterOnUser = false
+            mapView.setRegion(MKCoordinateRegion(
+                center: coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.09)
+            ), animated: true)
         }
 
         func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
@@ -568,6 +626,9 @@ struct SpotMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let tiles = overlay as? MKTileOverlay {
                 return MKTileOverlayRenderer(tileOverlay: tiles)
+            }
+            if overlay is WaveFieldMapOverlay {
+                return WaveFieldRenderer(overlay: overlay)
             }
             return MKOverlayRenderer(overlay: overlay)
         }

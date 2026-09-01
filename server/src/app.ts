@@ -5,6 +5,7 @@ import { fetchSpotMeta, type SpotMeta } from "./elevation.js";
 import { fetchLatestObservation, type WindObservation } from "./fmi.js";
 import { type SeaStateStation, type WaveBuoyObservation, type WaveForecastHour, fetchSeaState, fetchWaveData } from "./wave.js";
 import { type WindCell, fetchWindField } from "./windfield.js";
+import { type WaveFieldResult, expandWaveBBox, fetchWaveField } from "./wavefield.js";
 import { fetchLipasPlaces, fetchOsmPlaces, nearestPerCategory, type Place } from "./places.js";
 import { LipasMirror, lipasNearby } from "./lipas.js";
 import { LAPPIS_STORE_API, type ShopCatalog, fetchShopCatalog } from "./shop.js";
@@ -86,7 +87,7 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
   // varten). Kaksi tasoa: NOSTE_TOKEN = kaikki reitit; CLIENT_TOKEN (appiin
   // sisäänrakennettu) = vain lukureitit — synkka ja kelivahti pysyvät yksityisinä.
   // Mahdollinen premium-rajaus tehdään myöhemmin tähän väliin.
-  const readOnlyPaths = /^\/api\/(tiles|forecast|observation|openmeteo|spotmeta|places|shop|wave|seastate|windfield)\b/;
+  const readOnlyPaths = /^\/api\/(tiles|forecast|observation|openmeteo|spotmeta|places|shop|wave|seastate|windfield|wavefield)\b/;
   // Yhteisöreitit (julkiset spotit + kommentit): myös kirjoitus onnistuu appiin
   // upotetulla tokenilla — omistajuus varmistetaan laitekohtaisella avaimella.
   const communityPaths = /^\/api\/public\//;
@@ -213,6 +214,26 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
         fetchWindField(parts[0]!, parts[1]!, parts[2]!, parts[3]!, fetchImpl),
       );
       return c.json({ cells });
+    } catch (error) {
+      return c.json({ error: String(error) }, 502);
+    }
+  });
+
+  // Aaltokenttä (korkeus, suunta, periodi) samalla reseptillä Open-Meteon
+  // marine-mallista; maapisteet karsittu jo palvelimella.
+  const waveFieldCache = new TtlCache<WaveFieldResult>(1800);
+  app.get("/api/wavefield", async (c) => {
+    const parts = (c.req.query("bbox") ?? "").split(",").map(Number);
+    if (parts.length !== 4 || parts.some((v) => !Number.isFinite(v))) {
+      return c.json({ error: "bbox=minLon,minLat,maxLon,maxLat vaaditaan" }, 400);
+    }
+    // Avain laajennetusta alueesta: lähekkäiset pienet näkymät jakavat tuloksen.
+    const key = expandWaveBBox(parts[0]!, parts[1]!, parts[2]!, parts[3]!).map((v) => v.toFixed(1)).join(",");
+    try {
+      const result = await waveFieldCache.getOrSet(key, () =>
+        fetchWaveField(parts[0]!, parts[1]!, parts[2]!, parts[3]!, fetchImpl),
+      );
+      return c.json(result);
     } catch (error) {
       return c.json({ error: String(error) }, 502);
     }
