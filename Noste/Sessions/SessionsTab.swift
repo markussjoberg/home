@@ -187,7 +187,8 @@ struct SessionDetailView: View {
                                     selectedStart: selectedFlightStart,
                                     mode: colorMode,
                                     strokeTimes: record.summary?.pumps?.strokeTimes ?? [],
-                                    maxSpeed: max(1, record.summary?.maxSpeed ?? 10))
+                                    maxSpeed: max(1, record.summary?.maxSpeed ?? 10),
+                                    plausibleSpeedCap: record.sport.maxPlausibleSpeed)
                         .frame(height: 260)
                         .listRowInsets(EdgeInsets())
                     VStack(alignment: .leading, spacing: 4) {
@@ -493,6 +494,13 @@ struct SessionTrackMap: View {
     var mode: ColorMode = .foil
     var strokeTimes: [TimeInterval] = []
     var maxSpeed: Double = 10
+    /// Lajin uskottava maksiminopeus häiriöpisteiden siivoukseen.
+    var plausibleSpeedCap: Double = 20
+
+    /// GPS-häiriöt pois piirrosta — villit fixit piirtyisivät piikkeinä.
+    private var cleanTrack: [TrackPoint] {
+        TrackCleaner.clean(track, maxPlausibleSpeed: plausibleSpeedCap)
+    }
 
     /// Sekventiaalinen yhden sävyn asteikko (vaalea → tumma).
     private static let speedColors: [Color] = [
@@ -506,10 +514,10 @@ struct SessionTrackMap: View {
         Map {
             switch mode {
             case .foil:
-                MapPolyline(coordinates: coordinates(of: track))
+                MapPolyline(coordinates: coordinates(of: cleanTrack))
                     .stroke(.gray, lineWidth: 3)
                 ForEach(Array(rides.enumerated()), id: \.offset) { _, ride in
-                    let points = track.filter { $0.t >= ride.start && $0.t <= ride.end }
+                    let points = cleanTrack.filter { $0.t >= ride.start && $0.t <= ride.end }
                     let selected = selectedStart == ride.start
                     MapPolyline(coordinates: coordinates(of: points))
                         .stroke(selected ? Color.orange : Color.green, lineWidth: selected ? 6 : 4)
@@ -520,7 +528,7 @@ struct SessionTrackMap: View {
                         .stroke(Self.speedColors[chunk.bucket], lineWidth: 4)
                 }
                 if let selectedStart, let ride = rides.first(where: { $0.start == selectedStart }) {
-                    let points = track.filter { $0.t >= ride.start && $0.t <= ride.end }
+                    let points = cleanTrack.filter { $0.t >= ride.start && $0.t <= ride.end }
                     MapPolyline(coordinates: coordinates(of: points))
                         .stroke(.orange, lineWidth: 2)
                 }
@@ -549,7 +557,7 @@ struct SessionTrackMap: View {
         var chunks: [(id: Int, points: [TrackPoint], bucket: Int)] = []
         var current: [TrackPoint] = []
         var currentBucket = -1
-        for point in track {
+        for point in cleanTrack {
             let speed = max(0, min(point.speed, maxSpeed))
             let bucket = min(Self.speedColors.count - 1, Int(speed / maxSpeed * Double(Self.speedColors.count)))
             if bucket != currentBucket {
@@ -570,7 +578,7 @@ struct SessionTrackMap: View {
 
     /// Pumppuiskujen sijainnit suorituksen sisällä (lähin jälkipiste).
     private func strokePositions(in ride: RideSegment) -> [(t: TimeInterval, coordinate: CLLocationCoordinate2D)] {
-        let points = track.filter { $0.t >= ride.start && $0.t <= ride.end }
+        let points = cleanTrack.filter { $0.t >= ride.start && $0.t <= ride.end }
         guard !points.isEmpty else { return [] }
         return strokeTimes
             .filter { $0 >= ride.start && $0 <= ride.end }
