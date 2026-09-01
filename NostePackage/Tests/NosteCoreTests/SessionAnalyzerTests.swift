@@ -168,3 +168,37 @@ final class SessionAnalyzerTests: XCTestCase {
         XCTAssertEqual(segmented.rides.count, plain.rides.count)
     }
 }
+
+extension SessionAnalyzerTests {
+
+    /// Surffi: aalto vaatii punnerruksen. Sama nopeusprofiili ilman
+    /// pop-up-piikkiä (tuuliajelehdinta) ei ole aalto.
+    func testSurfWaveRequiresPopup() {
+        // 30 s melontaa 1 m/s + 20 s laskua 4 m/s + 10 s melontaa.
+        let speeds = [Double](repeating: 1.0, count: 30)
+            + [Double](repeating: 4.0, count: 20)
+            + [Double](repeating: 1.0, count: 10)
+        let points = makeTrack(speeds: speeds)
+
+        // Melontakohinaa + punnerruspiikki juuri ennen irtoamista (t=29).
+        var withPopup: [MotionSample] = []
+        for i in 0..<(60 * 50) {
+            let t = Double(i) / 50
+            var value = sin(t * 4) * 0.8
+            if t >= 28.6 && t < 29.0 { value = 7.5 } // pop-up + ponnistus
+            withPopup.append(MotionSample(t: t, verticalAcceleration: value))
+        }
+        let surf = SessionAnalyzer.summarize(sport: .surf, startDate: .now, points: points, motion: withPopup)
+        XCTAssertEqual(surf.rides.count, 1, "punnerrus vahvistaa aallon")
+        XCTAssertEqual(surf.rides.totalDuration, 20, accuracy: 3, "aaltoaika")
+
+        // Sama ilman piikkiä → ei aaltoa.
+        let calm = (0..<(60 * 50)).map { MotionSample(t: Double($0) / 50, verticalAcceleration: sin(Double($0) / 50 * 4) * 0.8) }
+        let drift = SessionAnalyzer.summarize(sport: .surf, startDate: .now, points: points, motion: calm)
+        XCTAssertEqual(drift.rides.count, 0, "ajelehdinta ilman punnerrusta ei ole aalto")
+
+        // Ilman kiihtyvyysdataa nopeus riittää (ei voida vahvistaa).
+        let noMotion = SessionAnalyzer.summarize(sport: .surf, startDate: .now, points: points)
+        XCTAssertEqual(noMotion.rides.count, 1)
+    }
+}

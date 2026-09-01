@@ -65,6 +65,9 @@ struct SummaryView: View {
                     if summary.sport == .surf || summary.sport == .sup {
                         Divider()
                         row(summary.sport == .surf ? "Aaltoja" : "Vetoja", "\(summary.rides.count)")
+                        if summary.sport == .surf {
+                            row("Aaltoaika", Format.duration(summary.rides.totalDuration))
+                        }
                         if let longest = summary.rides.longestByDuration {
                             row("Pisin", "\(Format.duration(longest.duration)) · \(Format.distance(longest.distance))")
                         }

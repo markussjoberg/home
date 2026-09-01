@@ -279,6 +279,17 @@ struct SessionDetailView: View {
                         }
                     }
                 }
+                if summary.sport == .surf, summary.rides.count > 0 {
+                    Section("Aallot") {
+                        row("Aaltoja", "\(summary.rides.count)")
+                        row("Aaltoaika", Format.duration(summary.rides.totalDuration))
+                        if let longest = summary.rides.longestByDuration {
+                            row("Pisin aalto", "\(Format.duration(longest.duration)) · \(Format.distance(longest.distance))")
+                        }
+                        row("Keskinopeus aallossa", Format.speedKmh(summary.rides.averageSpeed))
+                    }
+                }
+
                 if let jumps = summary.jumps, let longest = jumps.longest {
                     Section("Hypyt") {
                         row("Hyppyjä", "\(jumps.count)")

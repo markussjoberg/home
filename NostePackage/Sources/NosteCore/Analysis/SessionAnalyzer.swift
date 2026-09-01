@@ -18,6 +18,11 @@ public enum SessionAnalyzer {
         public var swimSpeedRange: ClosedRange<Double> = 0.2...1.4
         /// Käsiliikkeen kynnys uinnille (kiihtyvyyden liukuva keskihajonta, m/s²).
         public var swimRoughness: Double = 1.0
+        /// Surffin punnerrusvahvistus: aallon irtoamista edeltävä iskupiikki
+        /// (m/s²) — pop-up + ponnistus. Erottaa aallon tuuliajelehdinnasta.
+        public var surfPopupImpact: Double = 5.0
+        /// Ikkuna ennen irtoamista, jolta punnerrus haetaan (s).
+        public var surfPopupWindow: TimeInterval = 5.0
 
         public init() {}
     }
@@ -92,11 +97,18 @@ public enum SessionAnalyzer {
         }
 
         let roughness = motion.isEmpty ? [] : RideSegmenter.roughness(of: motion)
-        let rides = RideSegmenter.analyze(
+        var rides = RideSegmenter.analyze(
             points: points,
             roughness: roughness,
             config: rideConfig ?? .forSport(sport)
         )
+        // Surffi: aalto vaatii punnerruksen (pop-up-piikki juuri ennen
+        // irtoamista) — muuten nopea ajelehdinta/melonta myötätuuleen
+        // laskettaisiin aalloksi. Melonta on hidasta, lasku nopeaa: nopeus
+        // erottaa jakson, punnerrus vahvistaa sen aalloksi.
+        if sport == .surf, !motion.isEmpty {
+            rides = Self.confirmSurfWaves(rides, motion: motion, config: config)
+        }
         var pumps: PumpAnalysis?
         if sport.countsPumps {
             // Raakatunnistus koko signaalista, sitten nopeusportti: uinnin
@@ -269,6 +281,28 @@ public enum SessionAnalyzer {
             speedRecords: records,
             segments: segments,
             jumps: allJumps.isEmpty ? nil : JumpAnalysis(jumps: allJumps)
+        )
+    }
+
+    /// Suodattaa surffijaksot: mukaan vain ne, joita edeltää punnerruspiikki.
+    static func confirmSurfWaves(_ rides: RideAnalysis, motion: [MotionSample], config: Config) -> RideAnalysis {
+        let confirmed = rides.segments.filter { segment in
+            let windowStart = segment.start - config.surfPopupWindow
+            let windowEnd = segment.start + 1.0
+            return motion.contains { sample in
+                sample.t >= windowStart && sample.t <= windowEnd
+                    && abs(sample.verticalAcceleration) >= config.surfPopupImpact
+            }
+        }
+        let totalDuration = confirmed.reduce(0) { $0 + $1.duration }
+        let totalDistance = confirmed.reduce(0) { $0 + $1.distance }
+        return RideAnalysis(
+            segments: confirmed,
+            totalDuration: totalDuration,
+            totalDistance: totalDistance,
+            longestByDuration: confirmed.max { $0.duration < $1.duration },
+            averageSpeed: totalDuration > 0 ? totalDistance / totalDuration : 0,
+            attemptCount: rides.attemptCount
         )
     }
 
