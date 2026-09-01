@@ -41,6 +41,9 @@ struct MapTab: View {
     @State private var timelineOffset: Double = 0
     /// Ennustepiste (Windy-tyyliin): napautettu kohta, jonka arvot luetaan kentistä.
     @State private var probeCoordinate: CLLocationCoordinate2D?
+    /// Merisää-kerroksen tila käyttäjälle: nil = kaikki hyvin, muuten lyhyt syy
+    /// (haku kesken / ei yhteyttä). Hiljaa tyhjänä oleva kerros näyttäisi rikkinäiseltä.
+    @State private var seaStateStatus: String?
     /// Panoroinnin/zoomin aikana tuulipartikkelit piilotetaan: SwiftUI-kerros
     /// ei seuraa karttaa liikkeen aikana, joten ne hyppäisivät lopussa.
     @State private var isMapMoving = false
@@ -78,6 +81,7 @@ struct MapTab: View {
     private func refreshSeaState(_ region: MKCoordinateRegion) {
         guard seaStateEnabled else { return }
         seaStateTask?.cancel()
+        if windSeries == nil && waveSeries == nil { seaStateStatus = "Haetaan merisäätä…" }
         seaStateTask = Task {
             try? await Task.sleep(nanoseconds: 600_000_000)
             guard !Task.isCancelled else { return }
@@ -103,6 +107,16 @@ struct MapTab: View {
             )
             let (state, wind, waves) = await (stateTask, fieldTask, waveTask)
             guard !Task.isCancelled else { return }
+            if state == nil && wind == nil && waves == nil {
+                seaStateStatus = (windSeries == nil && waveSeries == nil)
+                    ? "Merisäätä ei saatu — tarkista verkkoyhteys."
+                    : "Merisään päivitys epäonnistui, näytetään edellinen."
+            } else if wind == nil && waves == nil && windSeries == nil && waveSeries == nil {
+                // Chipit tulivat mutta kentät eivät (palvelin vanha tai Open-Meteo alhaalla).
+                seaStateStatus = "Tuuli- ja aaltokenttä ei ole saatavilla juuri nyt."
+            } else {
+                seaStateStatus = nil
+            }
             if let state { seaState = state }
             if let wind, !wind.isEmpty {
                 windSeries = wind
@@ -357,6 +371,13 @@ struct MapTab: View {
                             .padding(.vertical, 6)
                             .background(.thinMaterial, in: Capsule())
                     }
+                    if seaStateEnabled, let status = seaStateStatus, timelineHours == 0 {
+                        Text(status)
+                            .font(.caption)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(.thinMaterial, in: Capsule())
+                    }
                     if seaStateEnabled, timelineHours > 0 {
                         VStack(spacing: 2) {
                             HStack {
@@ -422,6 +443,7 @@ struct MapTab: View {
                             waterMask = nil
                             timelineOffset = 0
                             probeCoordinate = nil
+                            seaStateStatus = nil
                         }
                     } label: {
                         Image(systemName: seaStateEnabled ? "water.waves" : "water.waves")
