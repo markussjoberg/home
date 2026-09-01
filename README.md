@@ -38,31 +38,37 @@ Xcodessa:
 
 ```bash
 cd server
-cp .env.example .env      # täytä NOSTE_TOKEN ja MML_API_KEY
-docker compose up -d --build
+cp .env.example .env      # NOSTE_TOKEN, CLIENT_TOKEN, MML_API_KEY, NTFY_URL
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-Caddyyn (palvelimella on jo Caddy ajossa):
+Tuotannossa reverse proxy on **Traefik** (`docker-compose.prod.yml`, verkko
+`wp_web`; polkureitti `aihiolabs.com/noste` tarvitsee `priority: 1000`).
+Paikalliseen kehitykseen `docker-compose.yml` tai `pnpm dev`. Deploy:
+`rsync` `server/`-kansio palvelimelle (`--exclude node_modules --exclude data
+--exclude .env`) ja aja compose uudelleen.
 
-```
-noste.esimerkki.fi {
-    reverse_proxy 127.0.0.1:8080
-}
-```
+Appiin on upotettu palvelimen osoite ja lukutoken (`ServerSettings.builtIn`),
+joten kartat ja ennusteet toimivat ilman asetuksia. Oma palvelin + täysi
+`NOSTE_TOKEN` asetuksissa avaa synkan ja kelivahdin.
 
-Appin asetuksiin palvelimen osoite + token → kartat ja ennusteet kulkevat
-palvelimen kautta, eikä appiin tarvita mitään avaimia.
-
-API (kaikki vaativat `Authorization: Bearer <token>` tai `?token=`):
+API (kaikki vaativat `Authorization: Bearer <token>` tai `?token=`; lukureitit
+toimivat `CLIENT_TOKEN`illa, synkka ja kelivahti vain `NOSTE_TOKEN`illa):
 `/api/forecast?lat&lon&sea=1` koottu ennuste · `/api/observation?lat&lon`
 FMI-havainto · `/api/openmeteo/{forecast,marine}` läpisyöttö välimuistilla
 (myös ECMWF-keskipitkä `models=ecmwf_ifs025` ja historia `past_days`) ·
+`/api/wave?lat&lon` FMI:n aaltopoiju + WAM-ennuste ·
+`/api/seastate?bbox` poijut ja tuuliasemat alueelta ·
+`/api/windfield?bbox` ja `/api/wavefield?bbox` 9×9-hilat Open-Meteosta
+kaikille ennustetunneille (kartan tuulipartikkelit ja aaltokenttä) ·
 `/api/spotmeta?lat&lon` maastoanalyysi (avoimuus + fetch ilmansuunnittain) ·
 `/api/places?lat&lon` rantainfo (OSM + Lipas) ·
-`/api/tiles/{terrain,marine}/{z}/{x}/{y}.png` tiilet · `/api/spots`,
-`/api/sessions` synkka · `/api/alerts`, `/api/alerts/matches` kelivahti.
+`/api/tiles/{terrain,marine,aerial}/{z}/{x}/{y}.png` tiilet ·
+`/api/shop/catalog` Lappis-katalogi · `/api/public/spots`, `/api/public/spots/:id/comments`
+yhteisön spotit ja kommentit · `/api/spots`, `/api/sessions` synkka ·
+`/api/alerts`, `/api/alerts/matches` kelivahti · `/healthz`.
 
-Kehitys: `pnpm install && pnpm test && pnpm dev` (31 testiä, vitest).
+Kehitys: `pnpm install && pnpm test && pnpm dev` (85 testiä, vitest).
 
 ## Kartat
 
