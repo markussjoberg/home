@@ -57,7 +57,7 @@ describe("buildObservationUrl", () => {
     const url = new URL(buildObservationUrl(60.15, 24.9, now));
     expect(url.hostname).toBe("opendata.fmi.fi");
     expect(url.searchParams.get("latlon")).toBe("60.1500,24.9000");
-    expect(url.searchParams.get("parameters")).toBe("ws_10min,wg_10min,wd_10min");
+    expect(url.searchParams.get("parameters")).toBe("ws_10min,wg_10min,wd_10min,t2m");
     expect(url.searchParams.get("starttime")).toBe("2026-08-21T11:00:00.000Z");
   });
 });

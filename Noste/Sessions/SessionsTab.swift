@@ -205,20 +205,34 @@ struct SessionDetailView: View {
                     }
                 }
             }
-            Section {
-                RatingControl(rating: record.rating) { rating in
-                    Task {
-                        await RatingService.apply(rating: rating, to: record, context: modelContext)
+            if record.sport.countsPumps {
+                // Pumpparille tuuli ei ole se juttu — sää haetaan automaattisesti.
+                if record.airTemp != nil || record.sessionWind != nil {
+                    Section("Sää sessiossa") {
+                        if let temp = record.airTemp {
+                            LabeledContent("Lämpötila", value: String(format: "%.0f °C", temp))
+                        }
+                        if let wind = record.sessionWind {
+                            LabeledContent("Tuuli", value: "\(Format.speedMs(wind.speed)) \(GeoMath.compassName(degrees: wind.direction))")
+                        }
                     }
                 }
-                if let wind = record.sessionWind {
-                    LabeledContent("Tuuli sessiossa",
-                                   value: "\(Format.speedMs(wind.speed)) (\(Format.speedMs(wind.gust))) \(GeoMath.compassName(degrees: wind.direction))")
+            } else {
+                Section {
+                    RatingControl(rating: record.rating) { rating in
+                        Task {
+                            await RatingService.apply(rating: rating, to: record, context: modelContext)
+                        }
+                    }
+                    if let wind = record.sessionWind {
+                        LabeledContent("Tuuli sessiossa",
+                                       value: "\(Format.speedMs(wind.speed)) (\(Format.speedMs(wind.gust))) \(GeoMath.compassName(degrees: wind.direction))")
+                    }
+                } header: {
+                    Text("Millainen tuuli oli?")
+                } footer: {
+                    Text("Arvosanoista spotti oppii sopivat suunnat ja voimakkuudet — ja lopulta ennuste saa tähdet.")
                 }
-            } header: {
-                Text("Millainen tuuli oli?")
-            } footer: {
-                Text("Arvosanoista spotti oppii sopivat suunnat ja voimakkuudet — ja lopulta ennuste saa tähdet.")
             }
 
             GearTagSection(record: record)

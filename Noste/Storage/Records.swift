@@ -136,6 +136,8 @@ final class SessionRecord {
     var windSpeed: Double?
     var windGust: Double?
     var windDirection: Double?
+    /// Ilman lämpötila session aikaan (°C) — pumppisessioille sää tuulen sijaan.
+    var airTemp: Double?
 
     init(id: UUID = UUID(), summary: SessionSummary, track: [TrackPoint], spotName: String? = nil) {
         self.id = id

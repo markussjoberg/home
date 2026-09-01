@@ -67,6 +67,23 @@ final class PhoneConnectivity: NSObject, ObservableObject {
         Task {
             await ServerClient.shared.backupSession(payload, id: recordID, motion: motion)
         }
+
+        // Pumppisessiolle tuuli ei ole se kiinnostava — haetaan sää (lämpötila +
+        // toteutunut tuuli) automaattisesti FMI:ltä, ei kysytä käyttäjältä mitään.
+        if payload.summary.sport.countsPumps, let first = payload.track.first {
+            Task { @MainActor in
+                if let observation = await ServerClient.shared.observation(
+                    latitude: first.latitude, longitude: first.longitude
+                ) {
+                    record.airTemp = observation.airTemp
+                    if let speed = observation.windSpeed, let gust = observation.windGust,
+                       let direction = observation.windDirection {
+                        record.sessionWind = RatedWind(speed: speed, gust: gust, direction: direction)
+                    }
+                    try? context.save()
+                }
+            }
+        }
     }
 
     /// Kellolta saapunut kiihtyvyysraakadata: liitä sessioon ja vie palvelimelle.

@@ -29,7 +29,13 @@ struct MapTab: View {
     // Julkiset spotit: yhteinen pooli palvelimelta, kaikkien nähtävillä.
     @State private var publicSpots: [ServerClient.PublicSpot] = []
     @State private var selectedPublicSpot: ServerClient.PublicSpot?
+    /// Ennuste mille tahansa pisteelle (rantakohde tms.) ilman spotin luontia.
+    @State private var forecastPoint: SpotData?
     @State private var mapCenter = CLLocationCoordinate2D(latitude: 62.5, longitude: 26.0)
+    // Keskityskomento kartalle: nil koordinaatti = oma sijainti.
+    @State private var centerTick = 0
+    @State private var centerCoordinate: CLLocationCoordinate2D?
+    @State private var showSearch = false
 
     private var layer: MapLayer { MapLayer(rawValue: layerRaw) ?? .standard }
 
@@ -122,13 +128,23 @@ struct MapTab: View {
                     onSelectPublicSpot: { spot in
                         selectedPublicSpot = spot
                     },
-                    onRegionChange: regionChanged
+                    onRegionChange: regionChanged,
+                    centerTick: centerTick,
+                    centerCoordinate: centerCoordinate
                 )
                 .ignoresSafeArea(edges: .top)
 
                 VStack(spacing: 8) {
                     if let place = selectedPlace {
-                        PlaceCard(place: place, onMakeSpot: {
+                        PlaceCard(place: place, onForecast: {
+                            forecastPoint = SpotData(
+                                name: place.name ?? place.category,
+                                latitude: place.latitude,
+                                longitude: place.longitude,
+                                waterType: .lake
+                            )
+                            selectedPlace = nil
+                        }, onMakeSpot: {
                             editingSpot = SpotData(
                                 name: place.name ?? place.category,
                                 latitude: place.latitude,
@@ -158,6 +174,26 @@ struct MapTab: View {
             }
             .overlay(alignment: .topTrailing) {
                 VStack(spacing: 10) {
+                    Button {
+                        showSearch = true
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                            .font(.title3)
+                            .frame(width: 40, height: 40)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    Button {
+                        MapLocation.requestPermission()
+                        centerCoordinate = nil
+                        centerTick += 1
+                    } label: {
+                        Image(systemName: "location")
+                            .font(.title3)
+                            .frame(width: 40, height: 40)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                            .foregroundStyle(Color.accentColor)
+                    }
                     // Eksplisiittinen spotin lisäys: kartan keskipisteeseen.
                     Button {
                         editingSpot = SpotData(
@@ -215,6 +251,22 @@ struct MapTab: View {
             }
             .sheet(item: $selectedPublicSpot) { spot in
                 PublicSpotView(spot: spot)
+            }
+            .sheet(isPresented: $showSearch) {
+                MapSearchSheet(near: mapCenter) { coordinate in
+                    centerCoordinate = coordinate
+                    centerTick += 1
+                }
+            }
+            .sheet(item: $forecastPoint) { point in
+                NavigationStack {
+                    SpotForecastView(spot: point, allSpots: [])
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Sulje") { forecastPoint = nil }
+                            }
+                        }
+                }
             }
             .task {
                 if let shared = await ServerClient.shared.publicSpots() {
@@ -294,6 +346,9 @@ struct SpotMapView: UIViewRepresentable {
     var onSelectPlace: (ServerClient.Place?) -> Void = { _ in }
     var onSelectPublicSpot: (ServerClient.PublicSpot) -> Void = { _ in }
     var onRegionChange: (MKCoordinateRegion) -> Void = { _ in }
+    /// Keskityskomento: tick kasvaa → keskitä (nil koordinaatti = oma sijainti).
+    var centerTick = 0
+    var centerCoordinate: CLLocationCoordinate2D?
 
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
@@ -315,6 +370,15 @@ struct SpotMapView: UIViewRepresentable {
         updateOverlay(map, context: context)
         updateAnnotations(map)
         updatePlaceAnnotations(map, context: context)
+        if centerTick != context.coordinator.lastCenterTick {
+            context.coordinator.lastCenterTick = centerTick
+            if let target = centerCoordinate ?? map.userLocation.location?.coordinate {
+                map.setRegion(MKCoordinateRegion(
+                    center: target,
+                    span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.09)
+                ), animated: true)
+            }
+        }
     }
 
     /// Rantainfran merkit vaihdetaan könttänä, kun haettu joukko vaihtuu.
@@ -339,6 +403,7 @@ struct SpotMapView: UIViewRepresentable {
         case .standard: signature = "standard"
         case .terrain: signature = "terrain:\(terrainTemplate ?? "")"
         case .marine: signature = "marine:\(marineTemplate)"
+        case .aerial: signature = "aerial"
         }
         guard signature != context.coordinator.overlaySignature else { return }
         context.coordinator.overlaySignature = signature
@@ -353,6 +418,12 @@ struct SpotMapView: UIViewRepresentable {
             }
         case .marine:
             map.addOverlay(TileOverlays.overlay(template: marineTemplate, replacesContent: false), level: .aboveLabels)
+        case .aerial:
+            // Ilmakuva sellaisenaan — kivet ja breikkaavat rannat näkyvät.
+            map.addOverlay(TileOverlays.overlay(
+                template: ServerSettings.tileTemplate(layer: "aerial", server: ServerSettings.current ?? ServerSettings.builtIn),
+                replacesContent: true
+            ), level: .aboveLabels)
         }
     }
 
@@ -381,6 +452,7 @@ struct SpotMapView: UIViewRepresentable {
         var overlaySignature = ""
         var placesSignature = ""
         var publicSpotsSignature = ""
+        var lastCenterTick = 0
 
         init(parent: SpotMapView) {
             self.parent = parent

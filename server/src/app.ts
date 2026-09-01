@@ -13,7 +13,7 @@ import {
 import { type Alert, type AlertWindow, matchAlert } from "./kelivahti.js";
 import { type CombinedForecast, fetchCombinedForecast } from "./openmeteo.js";
 import { JsonStore } from "./store.js";
-import { TileProxy, marineTileUrl, terrainTileUrl, validTile } from "./tiles.js";
+import { TileProxy, aerialTileUrl, marineTileUrl, terrainTileUrl, validTile } from "./tiles.js";
 
 export interface SpotSync {
   id: string;
@@ -343,6 +343,9 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
     if (layer === "terrain") {
       if (!config.mmlApiKey) return c.json({ error: "MML_API_KEY puuttuu" }, 503);
       sourceUrl = terrainTileUrl(z, x, y, config.mmlApiKey);
+    } else if (layer === "aerial") {
+      if (!config.mmlApiKey) return c.json({ error: "MML_API_KEY puuttuu" }, 503);
+      sourceUrl = aerialTileUrl(z, x, y, config.mmlApiKey);
     } else if (layer === "marine") {
       sourceUrl = marineTileUrl(config.marineTileTemplate || DEFAULT_MARINE_TEMPLATE, z, x, y);
     } else {

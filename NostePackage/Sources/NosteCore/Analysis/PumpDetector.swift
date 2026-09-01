@@ -4,10 +4,12 @@ import Foundation
 ///
 /// Menetelmä: signaali tasoitetaan vähentämällä liukuva keskiarvo (poistaa aallokon
 /// keinunnan ja hitaan ryömin), minkä jälkeen lasketaan huippu–pohja-vuorottelu
-/// hystereesikaistalla. Pumpuksi lasketaan huippu, jonka amplitudi edellisestä
-/// pohjasta on riittävä ja joka ei tule liian nopeasti edellisen pumpun perään.
-/// Toimii virtaavasti (näyte kerrallaan), joten sama koodi käy kellossa liveksi
-/// ja jälkianalyysiin.
+/// hystereesikaistalla. Pumpuksi lasketaan POHJA (alaspäin menevä työntö) —
+/// kenttätesti 2026-09: ranteen signaalissa yksi fyysinen pumppu tuottaa sekä
+/// ylä- että alapiikin, ja huippujen laskenta tuplasi määrän koettuun nähden.
+/// Pohjan amplitudin edellisestä huipusta pitää riittää, eikä pumppu saa tulla
+/// liian nopeasti edellisen perään. Toimii virtaavasti (näyte kerrallaan),
+/// joten sama koodi käy kellossa liveksi ja jälkianalyysiin.
 public final class PumpDetector {
 
     public struct Config: Sendable {
@@ -15,10 +17,11 @@ public final class PumpDetector {
         public var detrendWindow: TimeInterval = 3.0
         /// Suunnanvaihdon vahvistuskaista (m/s²).
         public var hysteresis: Double = 1.0
-        /// Vaadittu huippu–pohja-amplitudi (m/s²), jotta huippu lasketaan pumpuksi.
+        /// Vaadittu huippu–pohja-amplitudi (m/s²), jotta pohja lasketaan pumpuksi.
         public var minAmplitude: Double = 2.5
-        /// Kahden pumpun minimiväli sekunteina (~max 130 pumppua/min).
-        public var minStrokeInterval: TimeInterval = 0.45
+        /// Kahden pumpun minimiväli sekunteina (~max 90 pumppua/min) — hylkää
+        /// saman pumpun jälkiheilahduksen.
+        public var minStrokeInterval: TimeInterval = 0.65
         /// Suurin pumppujen väli, jolla ne kuuluvat samaan pumppausjaksoon.
         public var boutGap: TimeInterval = 2.5
 
@@ -34,7 +37,7 @@ public final class PumpDetector {
     private var direction: Direction = .unknown
     private var candidateMax: (t: TimeInterval, v: Double)?
     private var candidateMin: (t: TimeInterval, v: Double)?
-    private var lastTroughValue: Double = 0
+    private var lastPeakValue: Double = 0
     private var strokeTimes: [TimeInterval] = []
 
     public init(config: Config = Config()) {
@@ -62,29 +65,29 @@ public final class PumpDetector {
             if candidateMin == nil || x < candidateMin!.v { candidateMin = (t, x) }
             if let mx = candidateMax, x < mx.v - config.hysteresis {
                 direction = .down
-                lastTroughValue = x
+                lastPeakValue = mx.v
                 candidateMin = (t, x)
             } else if let mn = candidateMin, x > mn.v + config.hysteresis {
                 direction = .up
-                lastTroughValue = mn.v
                 candidateMax = (t, x)
             }
         case .up:
             if x > (candidateMax?.v ?? -.infinity) { candidateMax = (t, x) }
             if let mx = candidateMax, x < mx.v - config.hysteresis {
-                // Huippu vahvistui: laske pumpuksi jos amplitudi ja väli riittävät.
-                let amplitude = mx.v - lastTroughValue
-                let sinceLast = strokeTimes.last.map { mx.t - $0 } ?? .infinity
-                if amplitude >= config.minAmplitude && sinceLast >= config.minStrokeInterval {
-                    strokeTimes.append(mx.t)
-                }
+                lastPeakValue = mx.v
                 direction = .down
                 candidateMin = (t, x)
             }
         case .down:
             if x < (candidateMin?.v ?? .infinity) { candidateMin = (t, x) }
             if let mn = candidateMin, x > mn.v + config.hysteresis {
-                lastTroughValue = mn.v
+                // Pohja vahvistui — alaspäin menevä työntö on pumppu, jos
+                // amplitudi edellisestä huipusta ja väli riittävät.
+                let amplitude = lastPeakValue - mn.v
+                let sinceLast = strokeTimes.last.map { mn.t - $0 } ?? .infinity
+                if amplitude >= config.minAmplitude && sinceLast >= config.minStrokeInterval {
+                    strokeTimes.append(mn.t)
+                }
                 direction = .up
                 candidateMax = (t, x)
             }

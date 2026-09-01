@@ -19,7 +19,7 @@ struct RootView: View {
                 .tabItem { Label("Kartta", systemImage: "map") }
                 .tag(Tab.map)
             ForecastTab()
-                .tabItem { Label("Ennuste", systemImage: "wind") }
+                .tabItem { Label("Spotit", systemImage: "star") }
                 .tag(Tab.forecast)
             // Keskimmäinen "nappi": valinta avaa tallennuksen eikä jää tabiksi.
             Color.clear

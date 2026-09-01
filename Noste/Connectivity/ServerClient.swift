@@ -13,6 +13,7 @@ struct ServerClient {
         var windSpeed: Double?
         var windGust: Double?
         var windDirection: Double?
+        var airTemp: Double?
 
         var date: Date? {
             ISO8601DateFormatter().date(from: time)

@@ -38,7 +38,7 @@ struct ForecastTab: View {
                     }
                 }
             }
-            .navigationTitle("Ennuste")
+            .navigationTitle("Spotit")
             .task {
                 await forecastStore.refreshFavorites(spots: sortedSpots)
             }

@@ -10,6 +10,7 @@ enum MapLayer: String, CaseIterable, Identifiable {
     case standard
     case terrain
     case marine
+    case aerial
 
     var id: String { rawValue }
 
@@ -18,6 +19,7 @@ enum MapLayer: String, CaseIterable, Identifiable {
         case .standard: return "Perus"
         case .terrain: return "Maasto"
         case .marine: return "Meri"
+        case .aerial: return "Ilma"
         }
     }
 }

@@ -57,8 +57,12 @@ struct SummaryView: View {
                         }
                     }
 
-                    Divider()
-                    ratingSection(summary: summary)
+                    // Pumpparilta ei kysytä tuulesta — sää haetaan puhelimessa
+                    // automaattisesti. Tuulilajit arvioivat kelin (spotti oppii).
+                    if !summary.sport.countsPumps {
+                        Divider()
+                        ratingSection(summary: summary)
+                    }
 
                     Text("Sessio siirtyy puhelimeen automaattisesti.")
                         .font(.footnote)

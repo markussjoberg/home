@@ -245,7 +245,9 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
             let sample = MotionSample(t: Date().timeIntervalSince(start), verticalAcceleration: vertical)
             self.motionLock.lock()
             self.motionSamples.append(sample)
-            if self.gatedSpeed < 0 || self.gatedSpeed >= 1.5 {
+            // Pumppu vain kun GPS-vauhti tiedetään ja riittää — tuntematon
+            // nopeus EI kelpaa (uinnin käsivedot vuotivat laskuriin).
+            if self.gatedSpeed >= 1.5 {
                 self.pumpDetector.add(sample)
             }
             self.motionLock.unlock()

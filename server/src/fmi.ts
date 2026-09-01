@@ -12,6 +12,8 @@ export interface WindObservation {
   windSpeed: number | null;
   windGust: number | null;
   windDirection: number | null;
+  /** Ilman lämpötila °C (t2m); null jos asema ei mittaa. */
+  airTemp: number | null;
 }
 
 export function buildObservationUrl(lat: number, lon: number, now: () => Date = () => new Date()): string {
@@ -23,7 +25,7 @@ export function buildObservationUrl(lat: number, lon: number, now: () => Date = 
   url.searchParams.set("storedquery_id", "fmi::observations::weather::simple");
   url.searchParams.set("latlon", `${lat.toFixed(4)},${lon.toFixed(4)}`);
   url.searchParams.set("maxlocations", "1");
-  url.searchParams.set("parameters", "ws_10min,wg_10min,wd_10min");
+  url.searchParams.set("parameters", "ws_10min,wg_10min,wd_10min,t2m");
   url.searchParams.set("starttime", start.toISOString());
   return url.toString();
 }
@@ -81,6 +83,7 @@ export function parseLatestObservation(xml: string): WindObservation | null {
       windSpeed: find("ws_10min"),
       windGust: find("wg_10min"),
       windDirection: find("wd_10min"),
+      airTemp: find("t2m"),
     };
     if (observation.windSpeed !== null) return observation;
   }

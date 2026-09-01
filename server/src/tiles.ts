@@ -13,6 +13,14 @@ export function terrainTileUrl(z: number, x: number, y: number, apiKey: string):
   );
 }
 
+/** MML:n ortokuva (ilmakuva) — sama avoin WMTS ja avain kuin maastokartalla. */
+export function aerialTileUrl(z: number, x: number, y: number, apiKey: string): string {
+  return (
+    "https://avoin-karttakuva.maanmittauslaitos.fi/avoin/wmts/1.0.0/ortokuva/default/" +
+    `WGS84_Pseudo-Mercator/${z}/${y}/${x}.jpg?api-key=${encodeURIComponent(apiKey)}`
+  );
+}
+
 export function marineTileUrl(template: string, z: number, x: number, y: number): string {
   return template
     .replaceAll("{z}", String(z))

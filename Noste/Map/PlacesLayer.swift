@@ -102,6 +102,7 @@ struct PlaceFilterSheet: View {
 /// Valitun kohteen kortti kartan alalaidassa.
 struct PlaceCard: View {
     let place: ServerClient.Place
+    var onForecast: () -> Void = {}
     var onMakeSpot: () -> Void = {}
     var onClose: () -> Void
 
@@ -129,6 +130,15 @@ struct PlaceCard: View {
             }
 
             Spacer()
+
+            // Ennuste mihin tahansa kohteeseen — ei vaadi spotin tallennusta.
+            Button {
+                onForecast()
+            } label: {
+                Image(systemName: "wind.circle.fill")
+                    .font(.title)
+                    .foregroundStyle(.cyan)
+            }
 
             // Rantakohteesta suoraan spotiksi — eksplisiittinen lisäyspolku.
             Button {

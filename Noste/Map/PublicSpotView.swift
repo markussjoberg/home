@@ -59,6 +59,21 @@ struct PublicSpotView: View {
                 }
 
                 Section {
+                    NavigationLink {
+                        SpotForecastView(spot: SpotData(
+                            id: UUID(),
+                            name: spot.name,
+                            latitude: spot.latitude,
+                            longitude: spot.longitude,
+                            waterType: WaterType(rawValue: spot.waterType) ?? .lake,
+                            sports: spot.sports.compactMap(Sport.init(rawValue:)),
+                            goodDirections: spot.goodDirections,
+                            minWind: spot.minWind,
+                            maxWind: spot.maxWind
+                        ), allSpots: [])
+                    } label: {
+                        Label("Ennuste", systemImage: "wind")
+                    }
                     Button {
                         let data = SpotData(
                             id: UUID(uuidString: spot.id) ?? UUID(),

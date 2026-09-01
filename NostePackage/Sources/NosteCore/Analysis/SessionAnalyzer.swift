@@ -103,7 +103,8 @@ public enum SessionAnalyzer {
             // käsivedot (hidas vauhti) eivät päädy pumppulaskuriin.
             let raw = PumpDetector.analyze(motion, config: pumpConfig)
             let validStrokes = raw.strokeTimes.filter { t in
-                guard let speed = Self.speed(at: t, in: points) else { return true }
+                // Nopeudeton hetki hylätään — uinnin käsivedot eivät ole pumppuja.
+                guard let speed = Self.speed(at: t, in: points) else { return false }
                 return speed >= config.pumpingMinSpeed
             }
             var filtered = PumpDetector.analysis(fromStrokeTimes: validStrokes, config: pumpConfig)

@@ -72,9 +72,15 @@ struct SpotEditorView: View {
                 }
 
                 Section {
-                    Toggle("Julkinen spotti", isOn: publicBinding)
+                    Picker("Näkyvyys", selection: publicBinding) {
+                        Text("Secret spot").tag(false)
+                        Text("Julkinen").tag(true)
+                    }
+                    .pickerStyle(.segmented)
                 } footer: {
-                    Text("Julkinen spotti näkyy kaikille Nosten käyttäjille kartalla, ja muut voivat kommentoida kokemuksiaan. Yksityinen näkyy vain sinulle.")
+                    Text(draft.isPublic == true
+                         ? "Julkinen spotti näkyy kaikille Nosten käyttäjille kartalla, ja muut voivat jakaa kokemuksiaan siitä."
+                         : "Secret spot näkyy vain sinulle. 🤫")
                 }
 
                 Section("Muistiinpanot") {

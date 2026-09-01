@@ -189,8 +189,10 @@ struct RecordSessionView: View {
                         LabeledContent("Pumput", value: "\(pumps.strokeCount)")
                     }
                 }
-                Section("Millainen tuuli?") {
-                    RatingControl(rating: rating) { rating = $0 }
+                if !summary.sport.countsPumps {
+                    Section("Millainen tuuli?") {
+                        RatingControl(rating: rating) { rating = $0 }
+                    }
                 }
                 if !gear.isEmpty {
                     Section("Millä kalustolla?") {
