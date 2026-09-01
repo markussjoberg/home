@@ -86,13 +86,25 @@ final class MutedTileOverlay: MKTileOverlay {
             let r = Double(pixels[offset])
             let g = Double(pixels[offset + 1])
             let b = Double(pixels[offset + 2])
-            // Sininen hallitsee → vesi (myös syvyyskäyrät ja vesitekstit).
+            // Sininen hallitsee → vesialuetta. Kylläisyys erottaa datan
+            // täytöstä: syvyyskäyrät ja vesistöjen nimet ovat kylläistä
+            // sinistä (sat ≥ ~70 %), täyttö vaaleaa (sat ~10–50 %).
             if b - r >= 18, b - g >= -12, b >= 120 {
-                // Kirkkaus talteen, sävy kiinteä mint (~172°, sat 0,30).
-                let value = min(1.0, max(r, max(g, b)) / 255 * 1.03)
-                pixels[offset] = UInt8(value * 0.70 * 255)
-                pixels[offset + 1] = UInt8(value * 0.96 * 255)
-                pixels[offset + 2] = UInt8(value * 0.92 * 255)
+                let maxC = max(r, max(g, b))
+                let minC = min(r, min(g, b))
+                let saturation = maxC == 0 ? 0 : (maxC - minC) / maxC
+                if saturation >= 0.68 {
+                    // Syvyyskäyrä / nimi / väylä: tumma petroli — erottuu mintusta.
+                    pixels[offset] = 22
+                    pixels[offset + 1] = 92
+                    pixels[offset + 2] = 104
+                } else {
+                    // Täyttö: kirkkaus talteen, sävy kiinteä mint (~172°).
+                    let value = min(1.0, maxC / 255 * 1.03)
+                    pixels[offset] = UInt8(value * 0.70 * 255)
+                    pixels[offset + 1] = UInt8(value * 0.96 * 255)
+                    pixels[offset + 2] = UInt8(value * 0.92 * 255)
+                }
             } else {
                 // Maa → pehmeä harmaasävy (nostettu musta, ettei teksti huuda).
                 let luma = 0.299 * r + 0.587 * g + 0.114 * b
