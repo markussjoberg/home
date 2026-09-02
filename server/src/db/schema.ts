@@ -74,3 +74,36 @@ export const userTokens = pgTable("user_tokens", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// --- Yhteisön pelisäännöt ---
+
+/**
+ * Poistoehdotus spotille, jossa on muiden sisältöä: toteutuu määräajan jälkeen
+ * ellei kukaan sisällön tekijä vastusta (hiljaisuus = suostumus).
+ */
+export const spotDeletionProposals = pgTable("spot_deletion_proposals", {
+  id: serial("id").primaryKey(),
+  spotId: text("spot_id").notNull(),
+  proposerHash: text("proposer_hash").notNull(),
+  proposerUserId: text("proposer_user_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  decidesAt: timestamp("decides_at", { withTimezone: true }).notNull(),
+  /** open | objected | executed | cancelled */
+  status: text("status").notNull().default("open"),
+  objectedBy: text("objected_by"),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+});
+
+/** Ilmoitus asiattomasta sisällöstä; admin käsittelee täydellä tokenilla. */
+export const reports = pgTable("reports", {
+  id: serial("id").primaryKey(),
+  /** spot | comment */
+  targetType: text("target_type").notNull(),
+  targetId: text("target_id").notNull(),
+  reporterHash: text("reporter_hash").notNull(),
+  reporterUserId: text("reporter_user_id"),
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  resolution: text("resolution"),
+});

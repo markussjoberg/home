@@ -15,6 +15,13 @@
       "when": 1788351832901,
       "tag": "0001_blushing_living_tribunal",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788376299080,
+      "tag": "0002_gray_magus",
+      "breakpoints": true
     }
   ]
 }

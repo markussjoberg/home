@@ -6,7 +6,7 @@ import { connectDatabase } from "./db/index.js";
 const config = loadConfig();
 const database = await connectDatabase(config.databaseUrl, config.dataDir);
 console.log(config.databaseUrl ? "tietokanta: Postgres" : `tietokanta: PGlite (${config.dataDir}/pglite)`);
-const { app, checkAlerts } = createApp({ config, db: database.db });
+const { app, checkAlerts, runGovernance } = createApp({ config, db: database.db });
 
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`noste-server käynnissä portissa ${info.port}`);
@@ -34,7 +34,12 @@ function runKelivahti(): void {
     .catch((error) => console.error("kelivahti epäonnistui:", error));
 }
 runKelivahti();
-const kelivahtiTimer = setInterval(runKelivahti, KELIVAHTI_INTERVAL_MS);
+const kelivahtiTimer = setInterval(() => {
+  runKelivahti();
+  // Vastustamattomat poistoehdotukset toteutuvat määräajan jälkeen.
+  runGovernance().then((ids) => { for (const id of ids) console.log(`poistoehdotus toteutettu: ${id}`); })
+    .catch((error) => console.error("poistoehdotukset epäonnistuivat:", error));
+}, KELIVAHTI_INTERVAL_MS);
 
 // Docker lähettää SIGTERMin: suljetaan siististi, ettei levykirjoitus jää kesken.
 for (const signal of ["SIGTERM", "SIGINT"] as const) {

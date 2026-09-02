@@ -15,6 +15,10 @@ import {
   addComment, countComments, countSpots, deleteSpot, getSpot, listComments, listRevisions, listSpots,
   migrateCommunityJson, saveSpot,
 } from "./community.js";
+import {
+  cancelDeletion, commentsByUser, deleteComment, executeDueDeletions, fileReport, hasOthersContent, isContributor,
+  objectDeletion, openProposal, openProposals, openReports, proposeDeletion, resolveReport,
+} from "./governance.js";
 import { type WaveFieldSeries, expandWaveBBox, fetchWaveField } from "./wavefield.js";
 import { fetchLipasPlaces, fetchOsmPlaces, nearestPerCategory, type Place } from "./places.js";
 import { LipasMirror, lipasNearby } from "./lipas.js";
@@ -402,13 +406,16 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
 
   app.get("/api/public/spots", async (c) => {
     await communityReady;
+    await executeDueDeletions(db, now());
     const user = await currentUser(c);
     const mine = new Set(user ? await deviceHashes(db, user.id) : []);
+    const proposals = await openProposals(db);
     const rows = await listSpots(db);
     return c.json({
-      spots: rows.map((r) => toPublicJson(
-        r.spot, r.commentCount, (user !== null && r.spot.ownerUserId === user.id) || mine.has(r.spot.ownerHash),
-      )),
+      spots: rows.map((r) => ({
+        ...toPublicJson(r.spot, r.commentCount, (user !== null && r.spot.ownerUserId === user.id) || mine.has(r.spot.ownerHash)),
+        deletionProposed: proposals.get(r.spot.id)?.decidesAt,
+      })),
     });
   });
 
@@ -446,11 +453,101 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
     if (!existing) return c.json({ ok: true });
     const fullToken = (c.req.header("authorization") ?? "").includes(config.apiToken);
     const user = await currentUser(c);
-    if (!(await mayEdit(existing, ownerKey ? hashOwnerKey(ownerKey) : null, user, fullToken))) {
+    const ownerHash = ownerKey ? hashOwnerKey(ownerKey) : null;
+    if (!(await mayEdit(existing, ownerHash, user, fullToken))) {
       return c.json({ error: "vain lisääjä voi poistaa" }, 403);
+    }
+    // Wikimäinen sääntö: jos muut ovat lisänneet sisältöä, poisto etenee
+    // ehdotuksena ja toteutuu määräajan jälkeen ellei kukaan vastusta.
+    if (!fullToken && (await hasOthersContent(db, existing))) {
+      const proposal = await proposeDeletion(db, id, ownerHash ?? "", user?.id ?? null, now());
+      return c.json({ ok: false, proposal }, 202);
     }
     await deleteSpot(db, id, now());
     return c.json({ ok: true });
+  });
+
+  /** Poistoehdotuksen tila. */
+  app.get("/api/public/spots/:id/deletion", async (c) => {
+    await communityReady;
+    const id = cleanText(c.req.param("id"), 64);
+    return c.json({ proposal: await openProposal(db, id) });
+  });
+
+  /** Vastustus: kuka tahansa spottiin osallistunut (kommentti, muokkaus) tai admin. */
+  app.post("/api/public/spots/:id/deletion/object", async (c) => {
+    await communityReady;
+    const id = cleanText(c.req.param("id"), 64);
+    const body = await readJson<{ ownerKey?: unknown }>(c);
+    const ownerHash = cleanText(body?.ownerKey, 128) ? hashOwnerKey(cleanText(body?.ownerKey, 128)) : null;
+    const user = await currentUser(c);
+    const fullToken = (c.req.header("authorization") ?? "").includes(config.apiToken);
+    if (!fullToken && !(await isContributor(db, id, ownerHash, user?.id ?? null))) {
+      return c.json({ error: "vain spottiin osallistunut voi vastustaa" }, 403);
+    }
+    const ok = await objectDeletion(db, id, user?.id ?? ownerHash ?? "admin", now());
+    return ok ? c.json({ ok: true }) : c.json({ error: "ei avointa ehdotusta" }, 404);
+  });
+
+  /** Ehdottaja perääntyy. */
+  app.post("/api/public/spots/:id/deletion/cancel", async (c) => {
+    await communityReady;
+    const id = cleanText(c.req.param("id"), 64);
+    const body = await readJson<{ ownerKey?: unknown }>(c);
+    const key = cleanText(body?.ownerKey, 128);
+    const user = await currentUser(c);
+    const ok = await cancelDeletion(db, id, key ? hashOwnerKey(key) : null, user?.id ?? null, now());
+    return ok ? c.json({ ok: true }) : c.json({ error: "ei omaa avointa ehdotusta" }, 404);
+  });
+
+  // --- Ilmoitukset ---
+
+  app.post("/api/public/reports", async (c) => {
+    await communityReady;
+    const body = await readJson<{ targetType?: unknown; targetId?: unknown; reason?: unknown; ownerKey?: unknown }>(c);
+    const targetType = body?.targetType === "comment" ? "comment" : body?.targetType === "spot" ? "spot" : null;
+    const targetId = cleanText(body?.targetId, 64);
+    const reason = cleanText(body?.reason, 300);
+    const ownerKey = cleanText(body?.ownerKey, 128);
+    if (!targetType || !targetId || !reason || !ownerKey) return c.json({ error: "targetType, targetId, reason ja ownerKey vaaditaan" }, 400);
+    const user = await currentUser(c);
+    const outcome = await fileReport(db, {
+      targetType, targetId, reason, reporterHash: hashOwnerKey(ownerKey), reporterUserId: user?.id ?? null, now: now(),
+    });
+    return c.json({ ok: true, duplicate: outcome === "duplicate" });
+  });
+
+  /** Admin: avoimet ilmoitukset (täysi token). */
+  app.get("/api/reports", async (c) => c.json({ reports: await openReports(db) }));
+  app.post("/api/reports/:id/resolve", async (c) => {
+    const id = Number(c.req.param("id"));
+    const body = await readJson<{ resolution?: unknown }>(c);
+    const ok = Number.isInteger(id) && (await resolveReport(db, id, cleanText(body?.resolution, 300) || "käsitelty", now()));
+    return ok ? c.json({ ok: true }) : c.json({ error: "ilmoitusta ei ole" }, 404);
+  });
+
+  /** Oman kommentin poisto (tai admin). */
+  app.delete("/api/public/spots/:id/comments/:commentId", async (c) => {
+    await communityReady;
+    const commentId = cleanText(c.req.param("commentId"), 80);
+    const user = await currentUser(c);
+    const fullToken = (c.req.header("authorization") ?? "").includes(config.apiToken);
+    const result = await deleteComment(db, commentId, user?.id ?? null, fullToken, now());
+    if (result === "forbidden") return c.json({ error: "vain kirjoittaja voi poistaa" }, 403);
+    if (result === "missing") return c.json({ error: "kommenttia ei ole" }, 404);
+    return c.json({ ok: true });
+  });
+
+  /** Oma sisältö: julkaistut spotit (tili tai sidotut laitteet) ja kommentit. */
+  app.get("/api/me/content", async (c) => {
+    await communityReady;
+    const user = await currentUser(c);
+    if (!user) return c.json({ error: "ei kirjautunut" }, 401);
+    const hashes = new Set(await deviceHashes(db, user.id));
+    const spots = (await listSpots(db))
+      .filter((r) => r.spot.ownerUserId === user.id || hashes.has(r.spot.ownerHash))
+      .map((r) => toPublicJson(r.spot, r.commentCount, true));
+    return c.json({ spots, comments: await commentsByUser(db, user.id) });
   });
 
   /** Muokkaushistoria (ilman hasheja): wikimäinen läpinäkyvyys. */
@@ -687,5 +784,8 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
     return sent;
   }
 
-  return { app, checkAlerts };
+  /** Toteuttaa määräajan ohittaneet poistoehdotukset (ajastin index.ts:ssä). */
+  const runGovernance = () => executeDueDeletions(db, now());
+
+  return { app, checkAlerts, runGovernance };
 }

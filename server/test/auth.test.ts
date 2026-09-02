@@ -99,4 +99,67 @@ describe("tunnukset", () => {
     const comments = await (await app.request("/api/public/spots/s1/comments", client)).json();
     expect(comments.comments[0].author).toBe("Tuulinen");
   });
+
+  it("poisto: yksin luotu heti, muiden sisältö → ehdotus, vastustus pysäyttää, määräaika toteuttaa", async () => {
+    const owner = await signIn("owner", "laite-O");
+    await app.request("/api/public/spots/s1", { method: "PUT", ...asUser(owner.token), body: spot("laite-O") });
+    // Ei muiden sisältöä → poistuu heti.
+    expect((await app.request("/api/public/spots/s1?ownerKey=laite-O", { method: "DELETE", ...asUser(owner.token) })).status).toBe(200);
+
+    // Uusi spotti, johon toinen kommentoi.
+    await app.request("/api/public/spots/s2", { method: "PUT", ...asUser(owner.token), body: spot("laite-O", "Yhteinen") });
+    const other = await signIn("other");
+    await app.request("/api/me", { method: "PUT", ...asUser(other.token), body: JSON.stringify({ nickname: "Toinen" }) });
+    await app.request("/api/public/spots/s2/comments", { method: "POST", ...asUser(other.token), body: JSON.stringify({ text: "Hyvä paikka" }) });
+
+    const del = await app.request("/api/public/spots/s2?ownerKey=laite-O", { method: "DELETE", ...asUser(owner.token) });
+    expect(del.status).toBe(202);
+    const listed = await (await app.request("/api/public/spots", client)).json();
+    expect(listed.spots.find((s: { id: string }) => s.id === "s2").deletionProposed).toBeTruthy();
+
+    // Ulkopuolinen ei voi vastustaa, osallistunut voi.
+    const stranger = await signIn("stranger");
+    expect((await app.request("/api/public/spots/s2/deletion/object", { method: "POST", ...asUser(stranger.token), body: "{}" })).status).toBe(403);
+    expect((await app.request("/api/public/spots/s2/deletion/object", { method: "POST", ...asUser(other.token), body: "{}" })).status).toBe(200);
+    expect((await (await app.request("/api/public/spots/s2/deletion", client)).json()).proposal).toBeNull();
+
+    // Uusi ehdotus ilman vastustusta toteutuu määräajan jälkeen.
+    await app.request("/api/public/spots/s2?ownerKey=laite-O", { method: "DELETE", ...asUser(owner.token) });
+    const later = createApp({
+      config: loadConfig({ NOSTE_TOKEN: "secret", CLIENT_TOKEN: "client", DATA_DIR: join(dir, "d2"), TILE_CACHE_DIR: join(dir, "t2") } as NodeJS.ProcessEnv),
+      db: database.db, fetchImpl: (async () => new Response("{}")) as never,
+      now: () => new Date(Date.now() + 8 * 24 * 3600 * 1000),
+    });
+    const executed = await later.runGovernance();
+    expect(executed).toEqual(["s2"]);
+    const after = await (await later.app.request("/api/public/spots", client)).json();
+    expect(after.spots.map((s: { id: string }) => s.id)).not.toContain("s2");
+  });
+
+  it("ilmoitus, oman kommentin poisto ja oma sisältö", async () => {
+    const { token } = await signIn("u1", "laite-1");
+    await app.request("/api/me", { method: "PUT", ...asUser(token), body: JSON.stringify({ nickname: "Eka" }) });
+    await app.request("/api/public/spots/s1", { method: "PUT", ...asUser(token), body: spot("laite-1") });
+    const posted = await (await app.request("/api/public/spots/s1/comments", { method: "POST", ...asUser(token), body: JSON.stringify({ text: "Moi" }) })).json();
+
+    const report = await app.request("/api/public/reports", { method: "POST", ...client, body: JSON.stringify({ targetType: "comment", targetId: posted.comment.id, reason: "roskaa", ownerKey: "laite-9" }) });
+    expect(report.status).toBe(200);
+    const again = await (await app.request("/api/public/reports", { method: "POST", ...client, body: JSON.stringify({ targetType: "comment", targetId: posted.comment.id, reason: "roskaa", ownerKey: "laite-9" }) })).json();
+    expect(again.duplicate).toBe(true);
+    expect((await app.request("/api/reports", client)).status).toBe(401);
+    const admin = { headers: { authorization: "Bearer secret" } };
+    const open = await (await app.request("/api/reports", admin)).json();
+    expect(open.reports).toHaveLength(1);
+    expect((await app.request(`/api/reports/${open.reports[0].id}/resolve`, { method: "POST", ...admin, body: JSON.stringify({ resolution: "poistettu" }) })).status).toBe(200);
+
+    const mine = await (await app.request("/api/me/content", asUser(token))).json();
+    expect(mine.spots).toHaveLength(1);
+    expect(mine.comments).toHaveLength(1);
+
+    const other = await signIn("u2");
+    expect((await app.request(`/api/public/spots/s1/comments/${posted.comment.id}`, { method: "DELETE", ...asUser(other.token) })).status).toBe(403);
+    expect((await app.request(`/api/public/spots/s1/comments/${posted.comment.id}`, { method: "DELETE", ...asUser(token) })).status).toBe(200);
+    const comments = await (await app.request("/api/public/spots/s1/comments", client)).json();
+    expect(comments.comments).toHaveLength(0);
+  });
 });
