@@ -3,6 +3,8 @@ export interface Config {
   port: number;
   /** Postgres-osoite; tyhjä = PGlite data-hakemistossa (kehitys, pienet asennukset). */
   databaseUrl: string;
+  /** Sign in with Apple: hyväksytyt yleisöt (bundle id:t). */
+  appleAudiences: string[];
   /** MML avoin karttakuvapalvelu -avain (maastokarttatiilet). */
   mmlApiKey: string;
   /** Merikarttatiilien WMTS-osoite, {z}/{y}/{x} korvataan. */
@@ -36,6 +38,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     port: Number(env.PORT ?? 8080),
     databaseUrl: env.DATABASE_URL ?? "",
+    appleAudiences: (env.APPLE_BUNDLE_IDS ?? "fi.markussjoberg.noste").split(",").map((s) => s.trim()).filter(Boolean),
     mmlApiKey: env.MML_API_KEY ?? "",
     marineTileTemplate: env.MARINE_TILE_TEMPLATE ?? DEFAULT_MARINE_TEMPLATE,
     apiToken: env.NOSTE_TOKEN ?? "",

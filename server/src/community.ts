@@ -22,6 +22,7 @@ function toSpot(row: SpotRow): PublicSpot {
     minWind: row.minWind ?? undefined,
     maxWind: row.maxWind ?? undefined,
     ownerHash: row.ownerHash,
+    ownerUserId: row.ownerUserId ?? undefined,
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -49,7 +50,7 @@ export async function countSpots(db: Db): Promise<number> {
 }
 
 /** Luo tai päivittää spotin ja kirjaa version. Omistajatarkistus on kutsujan. */
-export async function saveSpot(db: Db, spot: PublicSpot, editorHash: string): Promise<void> {
+export async function saveSpot(db: Db, spot: PublicSpot, editorHash: string, editorUserId: string | null = null): Promise<void> {
   const updatedAt = new Date(spot.updatedAt);
   const values = {
     id: spot.id,
@@ -62,6 +63,7 @@ export async function saveSpot(db: Db, spot: PublicSpot, editorHash: string): Pr
     minWind: spot.minWind ?? null,
     maxWind: spot.maxWind ?? null,
     ownerHash: spot.ownerHash,
+    ownerUserId: spot.ownerUserId ?? null,
     updatedAt,
     deletedAt: null,
   };
@@ -70,8 +72,8 @@ export async function saveSpot(db: Db, spot: PublicSpot, editorHash: string): Pr
       target: publicSpots.id,
       set: { ...values, ownerHash: undefined, id: undefined },
     });
-    const { ownerHash, ...data } = spot;
-    await tx.insert(spotRevisions).values({ spotId: spot.id, editorHash, data, createdAt: updatedAt });
+    const { ownerHash, ownerUserId, ...data } = spot;
+    await tx.insert(spotRevisions).values({ spotId: spot.id, editorHash, editorUserId, data, createdAt: updatedAt });
   });
 }
 
@@ -105,11 +107,12 @@ export async function countComments(db: Db, spotId: string): Promise<number> {
   return Number(rows[0]?.n ?? 0);
 }
 
-export async function addComment(db: Db, comment: SpotComment): Promise<void> {
+export async function addComment(db: Db, comment: SpotComment, userId: string | null = null): Promise<void> {
   await db.insert(spotComments).values({
     id: comment.id,
     spotId: comment.spotId,
     author: comment.author,
+    userId,
     text: comment.text,
     windMs: comment.windMs ?? null,
     windDir: comment.windDir ?? null,

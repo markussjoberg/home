@@ -19,6 +19,8 @@ export interface PublicSpot {
   maxWind?: number;
   /** sha256(ownerKey) — ei koskaan ulos rajapinnasta. */
   ownerHash: string;
+  /** Omistava käyttäjä (kirjautunut julkaisija). */
+  ownerUserId?: string;
   updatedAt: string;
 }
 
@@ -102,7 +104,7 @@ export function parseComment(body: unknown, spotId: string, now: Date): SpotComm
 }
 
 /** Julkinen muoto: omistajahash ei lähde ulos. */
-export function toPublicJson(spot: PublicSpot, commentCount: number) {
-  const { ownerHash, ...rest } = spot;
-  return { ...rest, commentCount };
+export function toPublicJson(spot: PublicSpot, commentCount: number, mine = false) {
+  const { ownerHash, ownerUserId, ...rest } = spot;
+  return { ...rest, commentCount, mine };
 }

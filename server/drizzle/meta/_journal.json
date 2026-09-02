@@ -8,6 +8,13 @@
       "when": 1788350369000,
       "tag": "0000_great_nightshade",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788351832901,
+      "tag": "0001_blushing_living_tribunal",
+      "breakpoints": true
     }
   ]
 }

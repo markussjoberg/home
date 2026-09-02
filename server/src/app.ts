@@ -8,6 +8,10 @@ import { type WindFieldSeries, fetchWindField } from "./windfield.js";
 import { parseBBox, roundBBox } from "./bbox.js";
 import type { Db } from "./db/index.js";
 import {
+  type IdentityVerifier, type User, appleIdentityVerifier, deviceHashes, linkDevice, nicknameTaken,
+  normalizeNickname, revokeToken, setNickname, signIn, userForToken,
+} from "./auth.js";
+import {
   addComment, countComments, countSpots, deleteSpot, getSpot, listComments, listRevisions, listSpots,
   migrateCommunityJson, saveSpot,
 } from "./community.js";
@@ -62,9 +66,12 @@ export interface AppDeps {
   now?: () => Date;
   /** Tietokanta (Postgres tai PGlite) — yhteisödata. */
   db: Db;
+  /** Applen identity tokenin tarkistus; testeissä stubi. */
+  verifyIdentity?: IdentityVerifier;
 }
 
-export function createApp({ config, fetchImpl = fetch, now = () => new Date(), db }: AppDeps) {
+export function createApp({ config, fetchImpl = fetch, now = () => new Date(), db, verifyIdentity }: AppDeps) {
+  const verifyAppleIdentity = verifyIdentity ?? appleIdentityVerifier(config.appleAudiences);
   const app = new Hono();
   const store = new JsonStore(config.dataDir);
   const tiles = new TileProxy(config.tileCacheDir, config.tileCacheTtl, fetchImpl);
@@ -91,7 +98,7 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
   const readOnlyPaths = /^\/api\/(tiles|forecast|observation|openmeteo|spotmeta|places|shop|wave|seastate|windfield|wavefield)\b/;
   // Yhteisöreitit (julkiset spotit + kommentit): myös kirjoitus onnistuu appiin
   // upotetulla tokenilla — omistajuus varmistetaan laitekohtaisella avaimella.
-  const communityPaths = /^\/api\/public\//;
+  const communityPaths = /^\/api\/(public\/|auth\/|me\b)/;
   app.use("/api/*", async (c, next) => {
     if (!config.apiToken) {
       return c.json({ error: "NOSTE_TOKEN puuttuu palvelimen ympäristöstä" }, 503);
@@ -329,6 +336,65 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
 
   // --- Julkiset spotit ja kommentit ---
 
+  // --- Tunnukset ---
+
+  const USER_TOKEN_HEADER = "x-user-token";
+  /** Kirjautunut käyttäjä X-User-Token-otsakkeesta; null = anonyymi laiteavain. */
+  const currentUser = (c: { req: { header(name: string): string | undefined } }): Promise<User | null> =>
+    userForToken(db, c.req.header(USER_TOKEN_HEADER), now());
+
+  app.post("/api/auth/apple", async (c) => {
+    const body = await readJson<{ identityToken?: unknown; ownerKey?: unknown }>(c);
+    const identityToken = typeof body?.identityToken === "string" ? body.identityToken : "";
+    if (!identityToken) return c.json({ error: "identityToken vaaditaan" }, 400);
+    let identity;
+    try {
+      identity = await verifyAppleIdentity(identityToken);
+    } catch (error) {
+      console.error("auth/apple: tunnistus hylätty", String(error));
+      return c.json({ error: "tunnistus hylätty" }, 401);
+    }
+    const ownerKey = cleanText(body?.ownerKey, 128);
+    const result = await signIn(db, identity, ownerKey ? hashOwnerKey(ownerKey) : null, now());
+    return c.json(result);
+  });
+
+  app.get("/api/me", async (c) => {
+    const user = await currentUser(c);
+    if (!user) return c.json({ error: "ei kirjautunut" }, 401);
+    return c.json({ user });
+  });
+
+  /** Nimimerkin asetus/vaihto; ainutkertainen kirjainkoosta riippumatta. */
+  app.put("/api/me", async (c) => {
+    const user = await currentUser(c);
+    if (!user) return c.json({ error: "ei kirjautunut" }, 401);
+    const body = await readJson<{ nickname?: unknown; ownerKey?: unknown }>(c);
+    const nickname = normalizeNickname(body?.nickname);
+    if (!nickname) return c.json({ error: "nimimerkki: 3–24 merkkiä, kirjaimia, numeroita, - tai _" }, 400);
+    if (await nicknameTaken(db, nickname, user.id)) return c.json({ error: "nimimerkki on varattu" }, 409);
+    const ownerKey = cleanText(body?.ownerKey, 128);
+    if (ownerKey) await linkDevice(db, user.id, hashOwnerKey(ownerKey), now());
+    return c.json({ user: await setNickname(db, user.id, nickname) });
+  });
+
+  app.post("/api/auth/logout", async (c) => {
+    const token = c.req.header(USER_TOKEN_HEADER);
+    if (token) await revokeToken(db, token);
+    return c.json({ ok: true });
+  });
+
+  /** Saako käyttäjä/laite muokata spottia: omistaja tunnuksella, laiteavaimella tai admin. */
+  async function mayEdit(spot: PublicSpot, ownerHash: string | null, user: User | null, fullToken: boolean): Promise<boolean> {
+    if (fullToken) return true;
+    if (ownerHash && spot.ownerHash === ownerHash) return true;
+    if (user) {
+      if (spot.ownerUserId === user.id) return true;
+      if ((await deviceHashes(db, user.id)).includes(spot.ownerHash)) return true;
+    }
+    return false;
+  }
+
   // Yhteisödata kannassa; vanhat JSON-tiedostot siirretään kertaalleen.
   const communityReady = migrateCommunityJson(db, store).catch((error) => {
     console.error("yhteisödatan siirto epäonnistui:", error);
@@ -336,8 +402,14 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
 
   app.get("/api/public/spots", async (c) => {
     await communityReady;
+    const user = await currentUser(c);
+    const mine = new Set(user ? await deviceHashes(db, user.id) : []);
     const rows = await listSpots(db);
-    return c.json({ spots: rows.map((r) => toPublicJson(r.spot, r.commentCount)) });
+    return c.json({
+      spots: rows.map((r) => toPublicJson(
+        r.spot, r.commentCount, (user !== null && r.spot.ownerUserId === user.id) || mine.has(r.spot.ownerHash),
+      )),
+    });
   });
 
   // Upsert: uusi id kelpaa kenelle vain; olemassa olevan saa yli vain sama
@@ -350,8 +422,9 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
     if (!id || !ownerKey) return c.json({ error: "id ja ownerKey vaaditaan" }, 400);
     const ownerHash = hashOwnerKey(ownerKey);
     const fullToken = (c.req.header("authorization") ?? "").includes(config.apiToken);
+    const user = await currentUser(c);
     const existing = await getSpot(db, id);
-    if (existing && existing.ownerHash !== ownerHash && !fullToken) {
+    if (existing && !(await mayEdit(existing, ownerHash, user, fullToken))) {
       return c.json({ error: "vain lisääjä voi muokata" }, 403);
     }
     if (!existing && (await countSpots(db)) >= MAX_PUBLIC_SPOTS) {
@@ -360,7 +433,8 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
     // Omistaja säilyy alkuperäisenä myös admin-muokkauksessa.
     const spot = parsePublicSpot(body, id, existing?.ownerHash ?? ownerHash, now());
     if (!spot) return c.json({ error: "kelvoton spotti" }, 400);
-    await saveSpot(db, spot, ownerHash);
+    spot.ownerUserId = existing?.ownerUserId ?? user?.id;
+    await saveSpot(db, spot, ownerHash, user?.id ?? null);
     return c.json({ ok: true });
   });
 
@@ -371,7 +445,8 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
     const existing = await getSpot(db, id);
     if (!existing) return c.json({ ok: true });
     const fullToken = (c.req.header("authorization") ?? "").includes(config.apiToken);
-    if (existing.ownerHash !== hashOwnerKey(ownerKey) && !fullToken) {
+    const user = await currentUser(c);
+    if (!(await mayEdit(existing, ownerKey ? hashOwnerKey(ownerKey) : null, user, fullToken))) {
       return c.json({ error: "vain lisääjä voi poistaa" }, 403);
     }
     await deleteSpot(db, id, now());
@@ -399,12 +474,17 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
     const id = cleanText(c.req.param("id"), 64);
     if (!(await getSpot(db, id))) return c.json({ error: "spottia ei ole" }, 404);
     const body = await c.req.json().catch(() => null);
-    const comment = parseComment(body, id, now());
+    // Kirjautuneen nimimerkki on aina kirjoittaja — sitä ei voi teeskennellä.
+    const user = await currentUser(c);
+    const payload = user?.nickname
+      ? { ...(body as Record<string, unknown> | null ?? {}), author: user.nickname }
+      : body;
+    const comment = parseComment(payload, id, now());
     if (!comment) return c.json({ error: "nimimerkki ja teksti vaaditaan" }, 400);
     if ((await countComments(db, id)) >= MAX_COMMENTS_PER_SPOT) {
       return c.json({ error: "kommentit täynnä" }, 507);
     }
-    await addComment(db, comment);
+    await addComment(db, comment, user?.id ?? null);
     return c.json({ comment });
   });
 
