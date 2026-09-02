@@ -1,6 +1,8 @@
 /** Palvelimen asetukset ympäristömuuttujista. */
 export interface Config {
   port: number;
+  /** Postgres-osoite; tyhjä = PGlite data-hakemistossa (kehitys, pienet asennukset). */
+  databaseUrl: string;
   /** MML avoin karttakuvapalvelu -avain (maastokarttatiilet). */
   mmlApiKey: string;
   /** Merikarttatiilien WMTS-osoite, {z}/{y}/{x} korvataan. */
@@ -33,6 +35,7 @@ export const DEFAULT_MARINE_TEMPLATE =
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     port: Number(env.PORT ?? 8080),
+    databaseUrl: env.DATABASE_URL ?? "",
     mmlApiKey: env.MML_API_KEY ?? "",
     marineTileTemplate: env.MARINE_TILE_TEMPLATE ?? DEFAULT_MARINE_TEMPLATE,
     apiToken: env.NOSTE_TOKEN ?? "",

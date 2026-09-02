@@ -1,9 +1,12 @@
 import { serve } from "@hono/node-server";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
+import { connectDatabase } from "./db/index.js";
 
 const config = loadConfig();
-const { app, checkAlerts } = createApp({ config });
+const database = await connectDatabase(config.databaseUrl, config.dataDir);
+console.log(config.databaseUrl ? "tietokanta: Postgres" : `tietokanta: PGlite (${config.dataDir}/pglite)`);
+const { app, checkAlerts } = createApp({ config, db: database.db });
 
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`noste-server käynnissä portissa ${info.port}`);
@@ -37,7 +40,7 @@ const kelivahtiTimer = setInterval(runKelivahti, KELIVAHTI_INTERVAL_MS);
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.on(signal, () => {
     clearInterval(kelivahtiTimer);
-    server.close(() => process.exit(0));
+    server.close(() => { database.close().finally(() => process.exit(0)); });
     setTimeout(() => process.exit(0), 5000).unref();
   });
 }

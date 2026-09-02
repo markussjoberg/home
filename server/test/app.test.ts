@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
+import { createTestDb, type DbHandle } from "../src/db/index.js";
 import { loadConfig } from "../src/config.js";
 
 const windBody = {
@@ -54,11 +55,13 @@ describe("app", () => {
   let app: ReturnType<typeof createApp>["app"];
   let checkAlerts: ReturnType<typeof createApp>["checkAlerts"];
   let ntfyLog: NtfyPost[];
+  let database: DbHandle;
   const auth = { headers: { authorization: "Bearer secret" } };
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "noste-app-"));
     ntfyLog = [];
+    database = await createTestDb();
     const config = loadConfig({
       NOSTE_TOKEN: "secret",
       CLIENT_TOKEN: "client",
@@ -69,12 +72,14 @@ describe("app", () => {
     } as NodeJS.ProcessEnv);
     ({ app, checkAlerts } = createApp({
       config,
+      db: database.db,
       fetchImpl: testFetch(ntfyLog),
       now: () => new Date("2026-08-21T08:00:00Z"),
     }));
   });
 
   afterEach(async () => {
+    await database.close();
     await rm(dir, { recursive: true, force: true });
   });
 
@@ -238,6 +243,7 @@ describe("app", () => {
         config: loadConfig({
           NOSTE_TOKEN: "secret", CLIENT_TOKEN: "client", DATA_DIR: join(dir, `data-${suffix}`), TILE_CACHE_DIR: join(dir, `tiles-${suffix}`),
         } as NodeJS.ProcessEnv),
+        db: database.db,
         fetchImpl: testFetch(),
         now: () => new Date(iso),
       });

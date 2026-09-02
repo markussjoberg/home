@@ -5,6 +5,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile --prod
 COPY tsconfig.json ./
 COPY src ./src
+COPY drizzle ./drizzle
 ENV NODE_ENV=production
 EXPOSE 8080
 # Traefik/Docker näkevät palvelun tilan; /healthz ei vaadi tokenia.

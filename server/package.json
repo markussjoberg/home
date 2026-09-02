@@ -14,11 +14,16 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.6.14",
+    "pg": "^8.23.0",
     "tsx": "^4.19.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@types/node": "^22.10.2",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.10",
     "typescript": "^5.7.2",
     "vitest": "^3.0.0"
   }

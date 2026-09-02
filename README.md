@@ -42,6 +42,14 @@ cp .env.example .env      # NOSTE_TOKEN, CLIENT_TOKEN, MML_API_KEY, NTFY_URL
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
+Yhteisödata (julkiset spotit, versiohistoria, kommentit) on Postgresissa:
+`docker-compose.prod.yml` nostaa oman `postgres:16`-kontin ja antaa appille
+`DATABASE_URL`:n (`POSTGRES_PASSWORD` .env:iin). Ilman `DATABASE_URL`:ää appi
+käyttää PGliteä (Postgres WASM:na) `data/pglite`-hakemistossa — kehitys ja
+testit eivät tarvitse erillistä kantaa. Skeema: Drizzle, migraatiot `server/drizzle/`
+(`pnpm drizzle-kit generate` skeemamuutoksen jälkeen; ajetaan käynnistyksessä).
+Vanhat JSON-tiedostot siirretään kantaan kertaalleen.
+
 Tuotannossa reverse proxy on **Traefik** (`docker-compose.prod.yml`, verkko
 `wp_web`; polkureitti `aihiolabs.com/noste` tarvitsee `priority: 1000`).
 Paikalliseen kehitykseen `docker-compose.yml` tai `pnpm dev`. Deploy:

@@ -6,6 +6,11 @@ import { fetchLatestObservation, type WindObservation } from "./fmi.js";
 import { type SeaStateStation, type WaveBuoyObservation, type WaveForecastHour, fetchSeaState, fetchWaveData } from "./wave.js";
 import { type WindFieldSeries, fetchWindField } from "./windfield.js";
 import { parseBBox, roundBBox } from "./bbox.js";
+import type { Db } from "./db/index.js";
+import {
+  addComment, countComments, countSpots, deleteSpot, getSpot, listComments, listRevisions, listSpots,
+  migrateCommunityJson, saveSpot,
+} from "./community.js";
 import { type WaveFieldSeries, expandWaveBBox, fetchWaveField } from "./wavefield.js";
 import { fetchLipasPlaces, fetchOsmPlaces, nearestPerCategory, type Place } from "./places.js";
 import { LipasMirror, lipasNearby } from "./lipas.js";
@@ -55,9 +60,11 @@ export interface AppDeps {
   config: Config;
   fetchImpl?: typeof fetch;
   now?: () => Date;
+  /** Tietokanta (Postgres tai PGlite) — yhteisödata. */
+  db: Db;
 }
 
-export function createApp({ config, fetchImpl = fetch, now = () => new Date() }: AppDeps) {
+export function createApp({ config, fetchImpl = fetch, now = () => new Date(), db }: AppDeps) {
   const app = new Hono();
   const store = new JsonStore(config.dataDir);
   const tiles = new TileProxy(config.tileCacheDir, config.tileCacheTtl, fetchImpl);
@@ -322,89 +329,82 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
 
   // --- Julkiset spotit ja kommentit ---
 
+  // Yhteisödata kannassa; vanhat JSON-tiedostot siirretään kertaalleen.
+  const communityReady = migrateCommunityJson(db, store).catch((error) => {
+    console.error("yhteisödatan siirto epäonnistui:", error);
+  });
+
   app.get("/api/public/spots", async (c) => {
-    const spots = await store.read<PublicSpot[]>("public-spots", []);
-    const comments = await store.read<SpotComment[]>("spot-comments", []);
-    const counts = new Map<string, number>();
-    for (const comment of comments) {
-      counts.set(comment.spotId, (counts.get(comment.spotId) ?? 0) + 1);
-    }
-    return c.json({ spots: spots.map((s) => toPublicJson(s, counts.get(s.id) ?? 0)) });
+    await communityReady;
+    const rows = await listSpots(db);
+    return c.json({ spots: rows.map((r) => toPublicJson(r.spot, r.commentCount)) });
   });
 
   // Upsert: uusi id kelpaa kenelle vain; olemassa olevan saa yli vain sama
-  // omistaja-avain (tai täysi token).
+  // omistaja-avain (tai täysi token). Jokainen tallennus jättää version.
   app.put("/api/public/spots/:id", async (c) => {
+    await communityReady;
     const id = cleanText(c.req.param("id"), 64);
     const body = await c.req.json().catch(() => null);
     const ownerKey = cleanText((body as Record<string, unknown> | null)?.ownerKey, 128);
     if (!id || !ownerKey) return c.json({ error: "id ja ownerKey vaaditaan" }, 400);
     const ownerHash = hashOwnerKey(ownerKey);
-    const spot = parsePublicSpot(body, id, ownerHash, now());
-    if (!spot) return c.json({ error: "kelvoton spotti" }, 400);
-
     const fullToken = (c.req.header("authorization") ?? "").includes(config.apiToken);
-    // Luku-muokkaus-kirjoitus lukon takana: kaksi samanaikaista lisäystä eivät
-    // hävitä toisiaan.
-    const outcome = { verdict: "ok" as "ok" | "forbidden" | "full" };
-    await store.update<PublicSpot[]>("public-spots", [], (spots) => {
-      const existing = spots.find((s) => s.id === id);
-      if (existing && existing.ownerHash !== ownerHash && !fullToken) {
-        outcome.verdict = "forbidden";
-        return spots;
-      }
-      if (!existing && spots.length >= MAX_PUBLIC_SPOTS) {
-        outcome.verdict = "full";
-        return spots;
-      }
-      return [...spots.filter((s) => s.id !== id), spot];
-    });
-    if (outcome.verdict === "forbidden") return c.json({ error: "vain lisääjä voi muokata" }, 403);
-    if (outcome.verdict === "full") return c.json({ error: "spottipooli täynnä" }, 507);
+    const existing = await getSpot(db, id);
+    if (existing && existing.ownerHash !== ownerHash && !fullToken) {
+      return c.json({ error: "vain lisääjä voi muokata" }, 403);
+    }
+    if (!existing && (await countSpots(db)) >= MAX_PUBLIC_SPOTS) {
+      return c.json({ error: "spottipooli täynnä" }, 507);
+    }
+    // Omistaja säilyy alkuperäisenä myös admin-muokkauksessa.
+    const spot = parsePublicSpot(body, id, existing?.ownerHash ?? ownerHash, now());
+    if (!spot) return c.json({ error: "kelvoton spotti" }, 400);
+    await saveSpot(db, spot, ownerHash);
     return c.json({ ok: true });
   });
 
   app.delete("/api/public/spots/:id", async (c) => {
+    await communityReady;
     const id = cleanText(c.req.param("id"), 64);
     const ownerKey = cleanText(c.req.query("ownerKey"), 128);
+    const existing = await getSpot(db, id);
+    if (!existing) return c.json({ ok: true });
     const fullToken = (c.req.header("authorization") ?? "").includes(config.apiToken);
-    const outcome = { forbidden: false };
-    await store.update<PublicSpot[]>("public-spots", [], (spots) => {
-      const existing = spots.find((s) => s.id === id);
-      if (!existing) return spots;
-      if (existing.ownerHash !== hashOwnerKey(ownerKey) && !fullToken) {
-        outcome.forbidden = true;
-        return spots;
-      }
-      return spots.filter((s) => s.id !== id);
-    });
-    if (outcome.forbidden) return c.json({ error: "vain lisääjä voi poistaa" }, 403);
+    if (existing.ownerHash !== hashOwnerKey(ownerKey) && !fullToken) {
+      return c.json({ error: "vain lisääjä voi poistaa" }, 403);
+    }
+    await deleteSpot(db, id, now());
     return c.json({ ok: true });
   });
 
-  app.get("/api/public/spots/:id/comments", async (c) => {
+  /** Muokkaushistoria (ilman hasheja): wikimäinen läpinäkyvyys. */
+  app.get("/api/public/spots/:id/history", async (c) => {
+    await communityReady;
     const id = cleanText(c.req.param("id"), 64);
-    const comments = await store.read<SpotComment[]>("spot-comments", []);
-    const forSpot = comments.filter((comment) => comment.spotId === id);
-    return c.json({ comments: forSpot.slice(-200).reverse() });
+    const revisions = await listRevisions(db, id);
+    return c.json({
+      revisions: revisions.map((r) => ({ id: r.id, createdAt: r.createdAt.toISOString(), data: r.data })),
+    });
+  });
+
+  app.get("/api/public/spots/:id/comments", async (c) => {
+    await communityReady;
+    const id = cleanText(c.req.param("id"), 64);
+    return c.json({ comments: await listComments(db, id) });
   });
 
   app.post("/api/public/spots/:id/comments", async (c) => {
+    await communityReady;
     const id = cleanText(c.req.param("id"), 64);
-    const spots = await store.read<PublicSpot[]>("public-spots", []);
-    if (!spots.some((s) => s.id === id)) return c.json({ error: "spottia ei ole" }, 404);
+    if (!(await getSpot(db, id))) return c.json({ error: "spottia ei ole" }, 404);
     const body = await c.req.json().catch(() => null);
     const comment = parseComment(body, id, now());
     if (!comment) return c.json({ error: "nimimerkki ja teksti vaaditaan" }, 400);
-    const outcome = { full: false };
-    await store.update<SpotComment[]>("spot-comments", [], (comments) => {
-      if (comments.filter((existing) => existing.spotId === id).length >= MAX_COMMENTS_PER_SPOT) {
-        outcome.full = true;
-        return comments;
-      }
-      return [...comments, comment];
-    });
-    if (outcome.full) return c.json({ error: "kommentit täynnä" }, 507);
+    if ((await countComments(db, id)) >= MAX_COMMENTS_PER_SPOT) {
+      return c.json({ error: "kommentit täynnä" }, 507);
+    }
+    await addComment(db, comment);
     return c.json({ comment });
   });
 
