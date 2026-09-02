@@ -43,18 +43,6 @@ final class PhoneConnectivity: NSObject, ObservableObject {
         guard let container else { return }
         let context = container.mainContext
 
-        // Linkitä lähimpään spottiin (alle 2 km), jos jälki alkaa jostain tutusta.
-        var spotName: String?
-        if let first = payload.track.first {
-            let spots = (try? context.fetch(FetchDescriptor<SpotRecord>())) ?? []
-            let nearest = spots.min { a, b in
-                distance(a, first) < distance(b, first)
-            }
-            if let nearest, distance(nearest, first) < 2000 {
-                spotName = nearest.name
-            }
-        }
-
         // Kellon uusintalähetys (WC-siirto tai palautus) ei saa duplikoida:
         // sama alkuhetki ±2 s = sama sessio, päivitetään olemassa oleva.
         let startDate = payload.summary.startDate
@@ -64,11 +52,12 @@ final class PhoneConnectivity: NSObject, ObservableObject {
             record = existing
             record.summaryData = (try? WatchSync.encode(payload.summary)) ?? record.summaryData
             record.trackData = (try? WatchSync.encode(payload.track)) ?? record.trackData
-            if record.spotName == nil { record.spotName = spotName }
         } else {
-            record = SessionRecord(summary: payload.summary, track: payload.track, spotName: spotName)
+            record = SessionRecord(summary: payload.summary, track: payload.track)
             context.insert(record)
         }
+        // Linkitä lähimpään spottiin (alle 2 km), jos jälki alkaa jostain tutusta.
+        if record.spotID == nil { SpotLinker.link(record, track: payload.track, context: context) }
         // Ehtikö raakadata perille ensin?
         if let key = pendingMotion.keys.first(where: { abs($0 - startDate.timeIntervalSince1970) < 2 }) {
             record.motionData = pendingMotion.removeValue(forKey: key)
@@ -82,20 +71,25 @@ final class PhoneConnectivity: NSObject, ObservableObject {
             await ServerClient.shared.backupSession(payload, id: recordID, motion: motion)
         }
 
-        // Pumppisessiolle tuuli ei ole se kiinnostava — haetaan sää (lämpötila +
-        // toteutunut tuuli) automaattisesti FMI:ltä, ei kysytä käyttäjältä mitään.
+        // Pumppisessiolle sää haetaan automaattisesti, ei kysytä käyttäjältä.
+        // Tuuli session AJALTA (kello synkkaa usein tunteja myöhemmin, joten
+        // siirtohetken havainto olisi väärältä hetkeltä); lämpötila FMI:n
+        // tuoreimmasta havainnosta vain jos sessio on juuri päättynyt.
         if payload.summary.sport.countsPumps, let first = payload.track.first {
+            let start = payload.summary.startDate
+            let end = start.addingTimeInterval(max(1800, payload.summary.duration))
             Task { @MainActor in
-                if let observation = await ServerClient.shared.observation(
-                    latitude: first.latitude, longitude: first.longitude
-                ) {
-                    record.airTemp = observation.airTemp
-                    if let speed = observation.windSpeed, let gust = observation.windGust,
-                       let direction = observation.windDirection {
-                        record.sessionWind = RatedWind(speed: speed, gust: gust, direction: direction)
-                    }
-                    try? context.save()
+                let client = OpenMeteoClient(server: ServerSettings.current)
+                if record.sessionWind == nil,
+                   let hours = try? await client.windHistory(latitude: first.latitude, longitude: first.longitude, from: start, to: end),
+                   let wind = RatedWind.average(of: hours) {
+                    record.sessionWind = wind
                 }
+                if Date().timeIntervalSince(end) < 3 * 3600,
+                   let observation = await ServerClient.shared.observation(latitude: first.latitude, longitude: first.longitude) {
+                    record.airTemp = observation.airTemp
+                }
+                try? context.save()
             }
         }
     }
@@ -133,9 +127,6 @@ final class PhoneConnectivity: NSObject, ObservableObject {
         await RatingService.apply(rating: rating, to: record, context: context)
     }
 
-    private func distance(_ spot: SpotRecord, _ point: TrackPoint) -> Double {
-        GeoMath.distanceMeters(lat1: spot.latitude, lon1: spot.longitude, lat2: point.latitude, lon2: point.longitude)
-    }
 }
 
 extension PhoneConnectivity: WCSessionDelegate {

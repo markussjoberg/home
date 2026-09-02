@@ -248,6 +248,8 @@ struct RecordSessionView: View {
 
     private func store(payload: WatchSync.SessionPayload) {
         let record = SessionRecord(summary: payload.summary, track: payload.track)
+        // Sama spottilinkitys kuin kellosessioilla — muuten puhelinsessio ei opeta spottia.
+        SpotLinker.link(record, track: payload.track, context: modelContext)
         record.gearIDs = selectedGear.isEmpty ? nil : Array(selectedGear)
         record.motionData = workout.motionForSummary
         modelContext.insert(record)

@@ -71,7 +71,7 @@ struct SpotEditorView: View {
                     } footer: {
                         Text(windowDefined
                              ? "Palvelin vahtii ennustetta ja ilmoittaa (ntfy), kun tuuli-ikkuna osuu vähintään 2 h putkeen."
-                             : "Määritä ensin tuuli-ikkuna, niin kelivahdilla on mitä vahtia.")
+                             : "Aseta ensin minimituuli, niin kelivahdilla on mitä vahtia — pelkkä suunta hälyttäisi myös tyvenessä.")
                     }
                 }
 
@@ -130,8 +130,9 @@ struct SpotEditorView: View {
 
     // MARK: - Tuuli-ikkuna
 
+    /// Kelivahti tarvitsee minimituulen: pelkkä suunta osuisi myös tyveneen.
     private var windowDefined: Bool {
-        hasWindLimits || draft.goodDirections?.isEmpty == false
+        hasWindLimits
     }
 
     private var directionGrid: some View {

@@ -106,7 +106,7 @@ struct SpotForecastView: View {
 
     /// Spotin oppiva tuuliprofiili reittatuista sessioista.
     private var profile: SpotWindProfile {
-        RatingService.profile(spotName: spot.name, sessions: allSessions)
+        RatingService.profile(spotID: spot.id, spotName: spot.name, sessions: allSessions)
     }
 
     var body: some View {

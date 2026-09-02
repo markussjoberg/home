@@ -133,6 +133,8 @@ final class SessionRecord {
     /// Kiihtyvyysraakadata (MotionLog-binääri) — kalibrointia varten.
     @Attribute(.externalStorage) var motionData: Data?
     var spotName: String?
+    /// Spotin tunniste — nimi voi vaihtua, id ei. Vanhoilla tietueilla nil.
+    var spotID: UUID?
     /// Sessiossa käytetty kalusto (GearRecord-id:t).
     var gearIDs: [UUID]?
     /// Tuuliarvosana (WindRating.rawValue; 0 = ei riittänyt, nil = ei reittausta).

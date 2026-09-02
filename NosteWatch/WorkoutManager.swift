@@ -52,6 +52,8 @@ final class WorkoutManager: NSObject, ObservableObject {
     private let healthStore = HKHealthStore()
     private var session: HKWorkoutSession?
     private var builder: HKLiveWorkoutBuilder?
+    /// GPS-reitti HealthKitiin: Kuntoilu-appi näyttää kartan ja matkan.
+    private var routeBuilder: HKWorkoutRouteBuilder?
 
     private let locationManager = CLLocationManager()
     private let motionManager = CMMotionManager()
@@ -85,11 +87,29 @@ final class WorkoutManager: NSObject, ObservableObject {
     override init() {
         super.init()
         recoverInterruptedSessionIfAny()
+        recoverHealthKitSessionIfAny()
+    }
+
+    /// Kaatumisen jälkeen HealthKit-treeni voi olla vielä auki: suljetaan se
+    /// siististi, jotta Kuntoilu-appiin ei jää roikkuvaa treeniä. Oma jälki
+    /// palautuu erikseen (SessionRecovery).
+    private func recoverHealthKitSessionIfAny() {
+        guard HKHealthStore.isHealthDataAvailable() else { return }
+        healthStore.recoverActiveWorkoutSession { [weak self] recovered, _ in
+            guard let recovered else { return }
+            Task { @MainActor in
+                guard let self, self.phase == .idle else { return }
+                recovered.delegate = self
+                self.session = recovered
+                self.builder = recovered.associatedWorkoutBuilder()
+                recovered.end()
+            }
+        }
     }
 
     func requestAuthorization() {
         guard HKHealthStore.isHealthDataAvailable() else { return }
-        let share: Set<HKSampleType> = [HKObjectType.workoutType()]
+        let share: Set<HKSampleType> = [HKObjectType.workoutType(), HKSeriesType.workoutRoute()]
         let read: Set<HKObjectType> = [
             HKQuantityType(.heartRate),
             HKQuantityType(.activeEnergyBurned)
@@ -186,10 +206,8 @@ final class WorkoutManager: NSObject, ObservableObject {
         }
         summary = result
 
-        let builder = builder
-        builder?.endCollection(withEnd: Date()) { _, _ in
-            builder?.finishWorkout { _, _ in }
-        }
+        // Applen järjestys: session.end() → delegaatti (.ended) → endCollection →
+        // finishWorkout → reitti. Ks. finishHealthKitWorkout.
         session?.end()
 
         WatchConnectivityManager.shared.send(payload: WatchSync.SessionPayload(summary: result, track: trackPoints))
@@ -327,10 +345,12 @@ final class WorkoutManager: NSObject, ObservableObject {
             let builder = session.associatedWorkoutBuilder()
             builder.dataSource = HKLiveWorkoutDataSource(healthStore: healthStore, workoutConfiguration: configuration)
             builder.delegate = self
+            session.delegate = self
             session.startActivity(with: startDate)
             builder.beginCollection(withStart: startDate) { _, _ in }
             self.session = session
             self.builder = builder
+            self.routeBuilder = HKWorkoutRouteBuilder(healthStore: healthStore, device: nil)
         } catch {
             errorMessage = "Treenisessio ei käynnistynyt: \(error.localizedDescription)"
         }
@@ -372,6 +392,9 @@ final class WorkoutManager: NSObject, ObservableObject {
                 horizontalAccuracy: location.horizontalAccuracy
             )
             trackPoints.append(point)
+            if accurate {
+                routeBuilder?.insertRouteData([location]) { _, _ in }
+            }
             breadcrumb.append(point)
             if breadcrumb.count > 600 {
                 // Harvenna vanhaa päätä: joka toinen pois.
@@ -453,6 +476,33 @@ extension WorkoutManager: CLLocationManagerDelegate {
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
+}
+
+extension WorkoutManager: HKWorkoutSessionDelegate {
+    nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didChangeTo toState: HKWorkoutSessionState,
+                                    from fromState: HKWorkoutSessionState, date: Date) {
+        guard toState == .ended else { return }
+        Task { @MainActor in
+            self.finishHealthKitWorkout(endDate: date)
+        }
+    }
+
+    nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {}
+
+    /// Sulkee keruun, luo HKWorkoutin ja liittää GPS-reitin siihen.
+    fileprivate func finishHealthKitWorkout(endDate: Date) {
+        let builder = builder
+        let routeBuilder = routeBuilder
+        self.builder = nil
+        self.routeBuilder = nil
+        self.session = nil
+        builder?.endCollection(withEnd: endDate) { _, _ in
+            builder?.finishWorkout { workout, _ in
+                guard let workout, let routeBuilder else { return }
+                routeBuilder.finishRoute(with: workout, metadata: nil) { _, _ in }
+            }
+        }
+    }
 }
 
 extension WorkoutManager: HKLiveWorkoutBuilderDelegate {

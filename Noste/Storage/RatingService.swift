@@ -37,9 +37,12 @@ enum RatingService {
     }
 
     /// Rakentaa spotin tuuliprofiilin reittatuista sessioista.
-    static func profile(spotName: String, sessions: [SessionRecord]) -> SpotWindProfile {
+    /// Spotin sessiot id:llä; vanhat tietueet ilman id:tä täsmätään nimellä.
+    static func profile(spotID: UUID? = nil, spotName: String, sessions: [SessionRecord]) -> SpotWindProfile {
         let rated: [SpotWindProfile.RatedSession] = sessions.compactMap { record in
-            guard record.spotName == spotName,
+            let linked = (spotID != nil && record.spotID == spotID)
+                || (record.spotID == nil && record.spotName == spotName)
+            guard linked,
                   let rating = record.rating,
                   let wind = record.sessionWind
             else { return nil }
