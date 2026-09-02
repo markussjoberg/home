@@ -568,20 +568,19 @@ struct MapTab: View {
                 NavigationStack {
                     // Oma spotti saa täyden listan (ennuste talletetaan ja kelloon);
                     // tilapäinen piste tyhjän → ei ylikirjoita suosikkeja.
-                    SpotForecastView(spot: point, allSpots: spots.contains { $0.id == point.id } ? spots.map(\.data) : [])
+                    SpotForecastView(
+                        spot: point,
+                        allSpots: spots.contains { $0.id == point.id } ? spots.map(\.data) : [],
+                        // Oman spotin asetukset ovat spottisivun takana, eivät kartalla.
+                        onEdit: spots.contains(where: { $0.id == point.id }) ? {
+                            forecastPoint = nil
+                            selectedSpot = nil
+                            editingSpot = point
+                        } : nil
+                    )
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
                                 Button("Sulje") { forecastPoint = nil }
-                            }
-                            // Oman spotin asetukset ovat sääsivun takana, eivät kartalla.
-                            if spots.contains(where: { $0.id == point.id }) {
-                                ToolbarItem(placement: .primaryAction) {
-                                    Button("Muokkaa") {
-                                        forecastPoint = nil
-                                        selectedSpot = nil
-                                        editingSpot = point
-                                    }
-                                }
                             }
                         }
                 }
@@ -595,55 +594,11 @@ struct MapTab: View {
     }
 
     private func handle(_ action: SpotEditorView.Action, original: SpotData) {
-        switch action {
-        case .save(let data):
-            let record: SpotRecord
-            if let existing = spots.first(where: { $0.id == data.id }) {
-                existing.update(from: data)
-                record = existing
-            } else {
-                record = SpotRecord(from: data)
-                modelContext.insert(record)
-            }
-            try? modelContext.save()
-            // @Query päivittyy asynkronisesti — rakenna ajantasainen lista itse.
-            var updated = spots.map(\.data).filter { $0.id != data.id }
-            updated.append(data)
-            let context = modelContext
-            Task {
-                // Julkinen spotti näkyy kaikille — julkaisu/poisto yhteispoolista.
-                if data.isPublic == true {
-                    await ServerClient.shared.publishSpot(data)
-                } else {
-                    await handleUnpublish(await ServerClient.shared.unpublishSpot(id: data.id))
-                }
-                if let shared = await ServerClient.shared.publicSpots() {
-                    publicSpots = shared
-                }
-                await forecastStore.refresh(spot: data, force: true, allSpots: updated)
-                await ServerClient.shared.backupSpots(updated)
-                // Maastoanalyysi kerran per spotti: fetch + avoimuus ilmansuunnittain.
-                if record.fetchKmByOctant == nil,
-                   let meta = await ServerClient.shared.spotMeta(latitude: data.latitude, longitude: data.longitude) {
-                    let sorted = meta.octants.sorted { $0.octant < $1.octant }
-                    record.fetchKmByOctant = sorted.map(\.fetchKm)
-                    record.exposureByOctant = sorted.map(\.exposure)
-                    try? context.save()
-                }
-            }
-        case .delete:
-            if let existing = spots.first(where: { $0.id == original.id }) {
-                modelContext.delete(existing)
-                try? modelContext.save()
-                let remaining = spots.map(\.data).filter { $0.id != original.id }
-                Task {
-                    await handleUnpublish(await ServerClient.shared.unpublishSpot(id: original.id))
-                    await ServerClient.shared.backupSpots(remaining)
-                }
-            }
-        case .cancel:
-            break
-        }
+        SpotEditing.apply(action, original: original, spots: spots, context: modelContext, forecastStore: forecastStore,
+                          effects: .init(
+                              publicSpotsChanged: { publicSpots = $0 },
+                              unpublished: { handleUnpublish($0) }
+                          ))
         editingSpot = nil
     }
 }

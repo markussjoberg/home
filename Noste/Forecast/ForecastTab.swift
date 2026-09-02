@@ -6,6 +6,9 @@ import NosteCore
 struct ForecastTab: View {
     @Query(sort: \SpotRecord.name) private var spots: [SpotRecord]
     @EnvironmentObject private var forecastStore: ForecastStore
+    @Environment(\.modelContext) private var modelContext
+    @State private var editingSpot: SpotData?
+    @State private var notice: String?
 
     private var sortedSpots: [SpotData] {
         spots.map(\.data).sorted { a, b in
@@ -26,7 +29,7 @@ struct ForecastTab: View {
                 } else {
                     List(sortedSpots) { spot in
                         NavigationLink {
-                            SpotForecastView(spot: spot, allSpots: sortedSpots)
+                            SpotForecastView(spot: spot, allSpots: sortedSpots, onEdit: { editingSpot = spot })
                         } label: {
                             SpotRow(spot: spot, forecast: forecastStore.forecast(for: spot))
                         }
@@ -38,6 +41,20 @@ struct ForecastTab: View {
                     }
                 }
             }
+            .sheet(item: $editingSpot) { spot in
+                SpotEditorView(draft: spot, isNew: false) { action in
+                    SpotEditing.apply(action, original: spot, spots: spots, context: modelContext, forecastStore: forecastStore,
+                                      effects: .init(unpublished: { result in
+                                          if case .proposed = result {
+                                              notice = "Muut ovat lisänneet spottiin sisältöä, joten julkinen spotti ei poistu heti. Poisto toteutuu 7 päivän kuluttua, ellei kukaan osallistunut vastusta."
+                                          }
+                                      }))
+                    editingSpot = nil
+                }
+            }
+            .alert("Julkinen spotti on yhteinen", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {
+                Button("OK") { notice = nil }
+            } message: { Text(notice ?? "") }
             .navigationTitle("Spotit")
             .task {
                 await forecastStore.refreshFavorites(spots: sortedSpots)
@@ -96,6 +113,8 @@ private struct SpotRow: View {
 struct SpotForecastView: View {
     let spot: SpotData
     let allSpots: [SpotData]
+    /// Oman spotin muokkaus (nil = ei omaa spottia, esim. tilapäinen piste).
+    var onEdit: (() -> Void)? = nil
     @EnvironmentObject private var forecastStore: ForecastStore
     @Query private var allSessions: [SessionRecord]
     @State private var observation: ServerClient.Observation?
@@ -285,6 +304,10 @@ struct SpotForecastView: View {
                 Task { await refresh(force: true) }
             } label: {
                 Image(systemName: "arrow.clockwise")
+            }
+            .accessibilityLabel("Päivitä ennuste")
+            if let onEdit {
+                Button("Muokkaa", action: onEdit)
             }
         }
         .task {
