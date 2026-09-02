@@ -1,4 +1,5 @@
 import SwiftUI
+import NosteCore
 
 /// Kahdeksanosainen kompassiruusu: sektori napautetaan päälle/pois. Korvaa
 /// N/NE/E-palikat — suunnat hahmottuvat kartan tapaan, ei listana.
@@ -82,5 +83,36 @@ struct CompassRoseSelector: View {
             path.closeSubpath()
             return path
         }
+    }
+}
+
+/// Pieni, ei-interaktiivinen kompassiruusu maaston avoimuudesta: avoimet
+/// sektorit korostusvärillä, suojaiset harmaana, välimuoto vaaleana.
+struct ExposureRoseGlyph: View {
+    /// Avoimuus 0–1 ilmansuunnittain (0 = N, 45° välein), 8 arvoa.
+    let exposure: [Double]
+    var diameter: CGFloat = 44
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<min(8, exposure.count), id: \.self) { index in
+                CompassRoseSelector.Wedge(index: index)
+                    .fill(color(exposure[index]))
+                    .overlay(CompassRoseSelector.Wedge(index: index).stroke(Color(.systemBackground), lineWidth: 1))
+            }
+            Text("N")
+                .font(.system(size: diameter * 0.2, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .offset(y: -diameter * 0.62)
+        }
+        .frame(width: diameter, height: diameter)
+        .padding(.top, diameter * 0.22)
+        .accessibilityHidden(true)
+    }
+
+    private func color(_ value: Double) -> Color {
+        if value >= SpotData.openExposure { return .accentColor }
+        if value <= 0.3 { return Color(.systemGray4) }
+        return Color.accentColor.opacity(0.45)
     }
 }

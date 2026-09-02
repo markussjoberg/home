@@ -41,6 +41,8 @@ struct MapTab: View {
     @State private var timelineOffset: Double = 0
     /// Ennustepiste (Windy-tyyliin): napautettu kohta, jonka arvot luetaan kentistä.
     @State private var probeCoordinate: CLLocationCoordinate2D?
+    /// Kartalta napautettu oma spotti: kortti, ei suoraan editori.
+    @State private var selectedSpot: SpotData?
     /// Merisää-kerroksen tila käyttäjälle: nil = kaikki hyvin, muuten lyhyt syy
     /// (haku kesken / ei yhteyttä). Hiljaa tyhjänä oleva kerros näyttäisi rikkinäiseltä.
     @State private var seaStateStatus: String?
@@ -294,7 +296,9 @@ struct MapTab: View {
                         )
                     },
                     onSelectSpot: { spot in
-                        editingSpot = spot
+                        selectedSpot = spot
+                        selectedPlace = nil
+                        probeCoordinate = nil
                     },
                     onSelectPlace: { place in
                         selectedPlace = place
@@ -303,6 +307,7 @@ struct MapTab: View {
                         selectedPublicSpot = spot
                     },
                     onTap: { coordinate in
+                        selectedSpot = nil
                         // Ennustepiste vain kun kentät ovat ladattuna — muuten napautus on neutraali.
                         guard seaStateEnabled else { return }
                         probeCoordinate = coordinate
@@ -325,6 +330,17 @@ struct MapTab: View {
                 }
 
                 VStack(spacing: 8) {
+                    if let spot = selectedSpot {
+                        SpotCard(
+                            spot: spot,
+                            onForecast: { forecastPoint = spot },
+                            onEdit: {
+                                editingSpot = spot
+                                selectedSpot = nil
+                            },
+                            onClose: { selectedSpot = nil }
+                        )
+                    }
                     if let coordinate = probeCoordinate, seaStateEnabled {
                         ForecastProbeCard(
                             coordinate: coordinate,
@@ -533,7 +549,9 @@ struct MapTab: View {
             }
             .sheet(item: $forecastPoint) { point in
                 NavigationStack {
-                    SpotForecastView(spot: point, allSpots: [])
+                    // Oma spotti saa täyden listan (ennuste talletetaan ja kelloon);
+                    // tilapäinen piste tyhjän → ei ylikirjoita suosikkeja.
+                    SpotForecastView(spot: point, allSpots: spots.contains { $0.id == point.id } ? spots.map(\.data) : [])
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
                                 Button("Sulje") { forecastPoint = nil }
@@ -837,6 +855,11 @@ struct SpotMapView: UIViewRepresentable {
                 region.span.longitudeDelta /= 3
                 mapView.setRegion(region, animated: true)
                 mapView.deselectAnnotation(cluster, animated: false)
+            } else if let spotAnnotation = view.annotation as? SpotAnnotation {
+                // Oma spotti: kortti alalaitaan MapKitin kuplan sijaan; valinta
+                // puretaan heti, jotta sama merkki voi avata kortin uudelleen.
+                parent.onSelectSpot(spotAnnotation.spot)
+                mapView.deselectAnnotation(spotAnnotation, animated: false)
             } else if let place = view.annotation as? PlaceAnnotation {
                 parent.onSelectPlace(place.place)
             } else if let publicSpot = view.annotation as? PublicSpotAnnotation {
@@ -893,7 +916,7 @@ struct SpotMapView: UIViewRepresentable {
                 let view = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView)
                     ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
                 view.annotation = annotation
-                view.canShowCallout = true
+                view.canShowCallout = false // kortti korvaa kuplan
                 view.markerTintColor = spotAnnotation.spot.isFavorite ? .systemOrange : .systemTeal
                 view.glyphImage = UIImage(systemName: spotAnnotation.spot.waterType == .sea ? "water.waves" : "drop")
                 view.rightCalloutAccessoryView = UIButton(type: .detailDisclosure)

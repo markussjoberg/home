@@ -199,12 +199,9 @@ struct SpotForecastView: View {
                 }
             }
 
-            if exposureText != nil || places?.isEmpty == false {
+            if spot.exposureByOctant?.count == 8 || places?.isEmpty == false {
                 Section("Ranta & maasto") {
-                    if let exposureText {
-                        Label(exposureText, systemImage: "mountain.2")
-                            .font(.subheadline)
-                    }
+                    exposureRow
                     if let places {
                         ForEach(places) { place in
                             HStack {
@@ -396,16 +393,29 @@ struct SpotForecastView: View {
         return (nil, false)
     }
 
-    /// Maaston avoimuus tekstinä: avoimet ja suojaisat suunnat.
-    private var exposureText: String? {
-        guard let exposure = spot.exposureByOctant, exposure.count == 8 else { return nil }
-        let name = { (i: Int) in GeoMath.compassName(degrees: Double(i) * 45) }
-        let open = (0..<8).filter { exposure[$0] >= SpotData.openExposure }.map(name)
-        let sheltered = (0..<8).filter { exposure[$0] <= 0.3 }.map(name)
-        var parts: [String] = []
-        if !open.isEmpty { parts.append("Avoin: \(open.joined(separator: ", "))") }
-        if !sheltered.isEmpty { parts.append("Suojainen: \(sheltered.joined(separator: ", "))") }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    /// Maaston avoimuus: kompassiruusu kuvana, suojaisat suunnat lyhyesti tekstinä
+    /// (lista kaikista suunnista oli raskas lukea).
+    @ViewBuilder
+    private var exposureRow: some View {
+        if let exposure = spot.exposureByOctant, exposure.count == 8 {
+            let name = { (i: Int) in GeoMath.compassName(degrees: Double(i) * 45) }
+            let open = (0..<8).filter { exposure[$0] >= SpotData.openExposure }
+            let sheltered = (0..<8).filter { exposure[$0] <= 0.3 }.map(name)
+            HStack(spacing: 14) {
+                ExposureRoseGlyph(exposure: exposure)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Avoimuus tuulelle")
+                        .font(.subheadline)
+                    Text(sheltered.isEmpty
+                         ? (open.count == 8 ? "Avoin joka suunnasta" : "Ei suojaisia suuntia")
+                         : "Suojainen: \(sheltered.joined(separator: ", "))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Avoin \(open.count) suunnasta kahdeksasta" + (sheltered.isEmpty ? "" : ", suojainen \(sheltered.joined(separator: ", "))"))
+        }
     }
 
     /// Osuuko keskipitkän ennusteen päivä spotin tuuli-ikkunaan (karkea: maksimituuli + vallitseva suunta).
@@ -595,10 +605,12 @@ private struct WindRow: View {
                         StarBadge(value: stars)
                     }
                 }
-                if let wave {
-                    Text(String(format: waveEstimated ? "aalto ~%.1f m · %.0f s (lask.)" : "aalto %.1f m · %.0f s",
-                                wave.height, wave.period)
-                        .replacingOccurrences(of: ".", with: ","))
+                // Järviarvio näytetään vasta kun siitä on jotain (0,0 m on kohinaa);
+                // desimaalipilkku vaihdetaan vain lukuihin, ei tekstiin.
+                if let wave, !(waveEstimated && wave.height < 0.05) {
+                    let height = String(format: "%.1f", wave.height).replacingOccurrences(of: ".", with: ",")
+                    let period = String(format: "%.0f", wave.period)
+                    Text(waveEstimated ? "aalto ~\(height) m · \(period) s (arvio)" : "aalto \(height) m · \(period) s")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
