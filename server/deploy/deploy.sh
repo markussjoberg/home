@@ -7,11 +7,14 @@ set -eu
 REPO=/opt/noste-repo
 APP=/opt/noste
 BRANCH=$(cat "$APP/deploy-branch" 2>/dev/null || echo "claude/wing-foil-surf-app-pqvliz")
-URL=https://github.com/markussjoberg/home.git
+# Luku-oikeuksinen GitHub deploy key: anonyymi https-haku sai satunnaisia 401:iä.
+URL=git@github.com:markussjoberg/home.git
+export GIT_SSH_COMMAND="ssh -i /root/.ssh/noste_github_deploy -o IdentitiesOnly=yes -o BatchMode=yes"
 
 if [ ! -d "$REPO/.git" ]; then
   git clone --depth 1 -b "$BRANCH" "$URL" "$REPO"
 fi
+git -C "$REPO" remote set-url origin "$URL"
 git -C "$REPO" fetch --depth 1 origin "$BRANCH"
 git -C "$REPO" reset -q --hard "origin/$BRANCH"
 
