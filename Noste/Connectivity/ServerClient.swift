@@ -82,12 +82,67 @@ struct ServerClient {
         var request = URLRequest(url: components.url!)
         request.httpMethod = method
         request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Authorization")
+        Self.attachUserToken(&request)
         if let body {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
         request.timeoutInterval = 15
         return request
+    }
+
+    /// Kirjautuneen istuntotunniste mukaan — palvelin tunnistaa omistajan ja kirjoittajan.
+    private static func attachUserToken(_ request: inout URLRequest) {
+        if let token = UserAccount.shared.token {
+            request.setValue(token, forHTTPHeaderField: "X-User-Token")
+        }
+    }
+
+    // MARK: - Tili
+
+    enum AccountResult { case success(UserAccount.User); case unauthorized; case unavailable }
+    enum NicknameResult { case success(UserAccount.User); case failure(String) }
+
+    /// Applen identity token → palvelimen istunto. ownerKey sitoo laitteen tiliin.
+    func signInWithApple(identityToken: String, ownerKey: String) async -> (token: String, user: UserAccount.User)? {
+        struct Upload: Codable { var identityToken: String; var ownerKey: String }
+        struct Reply: Codable { var token: String; var user: UserAccount.User }
+        guard let body = try? JSONEncoder().encode(Upload(identityToken: identityToken, ownerKey: ownerKey)),
+              let request = communityRequest(path: "api/auth/apple", method: "POST", body: body),
+              let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let reply = try? JSONDecoder().decode(Reply.self, from: data)
+        else { return nil }
+        return (reply.token, reply.user)
+    }
+
+    func me() async -> AccountResult {
+        struct Reply: Codable { var user: UserAccount.User }
+        guard let request = request(path: "api/me"),
+              let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse
+        else { return .unavailable }
+        if http.statusCode == 401 { return .unauthorized }
+        guard http.statusCode == 200, let reply = try? JSONDecoder().decode(Reply.self, from: data) else { return .unavailable }
+        return .success(reply.user)
+    }
+
+    func setNickname(_ nickname: String, ownerKey: String) async -> NicknameResult {
+        struct Upload: Codable { var nickname: String; var ownerKey: String }
+        struct Reply: Codable { var user: UserAccount.User? ; var error: String? }
+        guard let body = try? JSONEncoder().encode(Upload(nickname: nickname, ownerKey: ownerKey)),
+              let request = communityRequest(path: "api/me", method: "PUT", body: body),
+              let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse,
+              let reply = try? JSONDecoder().decode(Reply.self, from: data)
+        else { return .failure("Palvelimeen ei saatu yhteyttä.") }
+        if http.statusCode == 200, let user = reply.user { return .success(user) }
+        return .failure(reply.error ?? "Nimimerkkiä ei voitu asettaa.")
+    }
+
+    func logout() async {
+        guard let request = communityRequest(path: "api/auth/logout", method: "POST") else { return }
+        _ = try? await URLSession.shared.data(for: request)
     }
 
     /// Toteutunut tuuli lähimmältä FMI-asemalta; nil jos palvelinta ei ole tai haku epäonnistuu.
@@ -370,6 +425,7 @@ struct ServerClient {
         var request = URLRequest(url: components.url!)
         request.httpMethod = method
         request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Authorization")
+        Self.attachUserToken(&request)
         if let body {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")

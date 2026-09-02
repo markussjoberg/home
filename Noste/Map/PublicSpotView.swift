@@ -11,6 +11,7 @@ struct PublicSpotView: View {
     @Query private var ownSpots: [SpotRecord]
 
     @AppStorage("nickname") private var nickname = ""
+    @ObservedObject private var account = UserAccount.shared
     @State private var comments: [ServerClient.SpotComment]?
     @State private var newComment = ""
     @State private var sending = false
@@ -128,7 +129,12 @@ struct PublicSpotView: View {
                     }
 
                     VStack(spacing: 8) {
-                        if nickname.isEmpty {
+                        // Kirjautuneella kirjoittaja on tilin nimimerkki (palvelin pakottaa sen).
+                        if let accountName = account.user?.nickname, !accountName.isEmpty {
+                            Text("Kommentoit nimellä \(accountName)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else if nickname.isEmpty {
                             TextField("Nimimerkki", text: $nickname)
                                 .textInputAutocapitalization(.never)
                         }
@@ -141,7 +147,7 @@ struct PublicSpotView: View {
                                 Image(systemName: "paperplane.fill")
                             }
                             .disabled(sending || newComment.trimmingCharacters(in: .whitespaces).isEmpty
-                                      || nickname.trimmingCharacters(in: .whitespaces).isEmpty)
+                                      || effectiveAuthor.isEmpty)
                         }
                     }
                 } header: {
@@ -161,8 +167,12 @@ struct PublicSpotView: View {
         }
     }
 
+    private var effectiveAuthor: String {
+        (account.user?.nickname ?? nickname).trimmingCharacters(in: .whitespaces)
+    }
+
     private func send() {
-        let author = nickname.trimmingCharacters(in: .whitespaces)
+        let author = effectiveAuthor
         let text = newComment.trimmingCharacters(in: .whitespaces)
         guard !author.isEmpty, !text.isEmpty else { return }
         sending = true

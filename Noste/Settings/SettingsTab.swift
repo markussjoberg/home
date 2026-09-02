@@ -1,4 +1,5 @@
 import SwiftUI
+import AuthenticationServices
 import NosteCore
 
 /// Käyttäjän profiili: omat lajit (suodattaa valitsimet) ja stanssi.
@@ -42,6 +43,8 @@ struct SettingsTab: View {
     var body: some View {
         NavigationStack {
             Form {
+                AccountSection()
+
                 Section {
                     ForEach(Sport.allCases) { sport in
                         Button {
@@ -118,6 +121,69 @@ struct SettingsTab: View {
                 }
             }
             .navigationTitle("Asetukset")
+        }
+    }
+}
+
+
+/// Tili: Sign in with Apple + nimimerkki. Ilman tiliä appi toimii laiteavaimella;
+/// tili tekee spoteista ja kommenteista käyttäjän omia laitteiden yli.
+private struct AccountSection: View {
+    @ObservedObject private var account = UserAccount.shared
+    @State private var nicknameDraft = ""
+    @State private var saving = false
+
+    var body: some View {
+        Section {
+            if let user = account.user {
+                HStack {
+                    Label(user.nickname ?? "Nimimerkki puuttuu", systemImage: "person.crop.circle.fill")
+                    Spacer()
+                    if user.nickname == nil {
+                        Text("aseta alla").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                HStack {
+                    TextField("Nimimerkki (3–24 merkkiä)", text: $nicknameDraft)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    Button(saving ? "…" : "Tallenna") {
+                        saving = true
+                        Task {
+                            _ = await account.setNickname(nicknameDraft.trimmingCharacters(in: .whitespaces))
+                            saving = false
+                        }
+                    }
+                    .disabled(saving || nicknameDraft.trimmingCharacters(in: .whitespaces).count < 3)
+                }
+                Button("Kirjaudu ulos", role: .destructive) {
+                    Task { await account.signOut() }
+                }
+            } else {
+                SignInWithAppleButton(.signIn) { request in
+                    request.requestedScopes = []
+                } onCompletion: { result in
+                    if case .success(let authorization) = result {
+                        Task { await account.signIn(with: authorization) }
+                    }
+                }
+                .signInWithAppleButtonStyle(.black)
+                .frame(height: 44)
+                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+            }
+            if let error = account.lastError {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
+        } header: {
+            Text("Tili")
+        } footer: {
+            Text(account.user == nil
+                 ? "Tilillä spotit ja kommentit ovat sinun laitteesta riippumatta. Ilman tiliä kaikki toimii, mutta omistus on laitekohtainen."
+                 : "Nimimerkki näkyy kommenteissasi ja julkaisemissasi spoteissa.")
+        }
+        .onAppear {
+            nicknameDraft = account.user?.nickname ?? ""
+            Task { await account.refresh() }
         }
     }
 }

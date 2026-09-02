@@ -21,6 +21,12 @@ targets:
       - package: NostePackage
         product: NosteCore
       - target: NosteWatch
+    entitlements:
+      path: Noste/Noste.entitlements
+      properties:
+        # Tunnukset: Sign in with Apple (ei salasanoja). Vaatii capabilityn App ID:lle.
+        com.apple.developer.applesignin:
+          - Default
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: fi.markussjoberg.noste
