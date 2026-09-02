@@ -340,15 +340,49 @@ struct ServerClient {
         var maxWind: Double?
         var updatedAt: String
         var commentCount: Int
+        /// Oma (tili tai sidottu laite) — palvelin päättää.
+        var mine: Bool?
+        /// Avoin poistoehdotus: toteutuu tänä hetkenä ellei vastusteta.
+        var deletionProposed: String?
     }
 
     struct SpotComment: Codable, Identifiable {
         var id: String
         var author: String
+        var userId: String?
         var text: String
         var windMs: Double?
         var windDir: Double?
         var createdAt: String
+    }
+
+    enum UnpublishResult { case deleted, proposed(decidesAt: String), failed }
+
+    /// Ilmoitus asiattomasta spotista tai kommentista.
+    func report(targetType: String, targetID: String, reason: String) async -> Bool {
+        struct Upload: Codable { var targetType: String; var targetId: String; var reason: String; var ownerKey: String }
+        guard let body = try? JSONEncoder().encode(Upload(targetType: targetType, targetId: targetID, reason: reason, ownerKey: ServerSettings.deviceKey)),
+              let request = communityRequest(path: "api/public/reports", method: "POST", body: body),
+              let (_, response) = try? await URLSession.shared.data(for: request)
+        else { return false }
+        return (response as? HTTPURLResponse)?.statusCode == 200
+    }
+
+    func deleteComment(spotID: String, commentID: String) async -> Bool {
+        guard let request = communityRequest(path: "api/public/spots/\(spotID)/comments/\(commentID)", method: "DELETE"),
+              let (_, response) = try? await URLSession.shared.data(for: request)
+        else { return false }
+        return (response as? HTTPURLResponse)?.statusCode == 200
+    }
+
+    /// Vastustaa avointa poistoehdotusta (vain spottiin osallistunut).
+    func objectDeletion(spotID: String) async -> Bool {
+        struct Upload: Codable { var ownerKey: String }
+        guard let body = try? JSONEncoder().encode(Upload(ownerKey: ServerSettings.deviceKey)),
+              let request = communityRequest(path: "api/public/spots/\(spotID)/deletion/object", method: "POST", body: body),
+              let (_, response) = try? await URLSession.shared.data(for: request)
+        else { return false }
+        return (response as? HTTPURLResponse)?.statusCode == 200
     }
 
     func publicSpots() async -> [PublicSpot]? {
@@ -386,12 +420,21 @@ struct ServerClient {
         _ = try? await URLSession.shared.data(for: request)
     }
 
-    func unpublishSpot(id: UUID) async {
+    /// Poistaa julkaisun. Jos muut ovat lisänneet sisältöä, palvelin tekee
+    /// poistoehdotuksen (202) joka toteutuu määräajan jälkeen ellei vastusteta.
+    @discardableResult
+    func unpublishSpot(id: UUID) async -> UnpublishResult {
+        struct Reply: Codable { struct Proposal: Codable { var decidesAt: String }; var proposal: Proposal? }
         guard let request = communityRequest(
             path: "api/public/spots/\(id.uuidString)", method: "DELETE",
             query: [URLQueryItem(name: "ownerKey", value: ServerSettings.deviceKey)]
-        ) else { return }
-        _ = try? await URLSession.shared.data(for: request)
+        ), let (data, response) = try? await URLSession.shared.data(for: request),
+           let http = response as? HTTPURLResponse
+        else { return .failed }
+        if http.statusCode == 202, let decidesAt = (try? JSONDecoder().decode(Reply.self, from: data))?.proposal?.decidesAt {
+            return .proposed(decidesAt: decidesAt)
+        }
+        return http.statusCode == 200 ? .deleted : .failed
     }
 
     func spotComments(spotID: String) async -> [SpotComment]? {

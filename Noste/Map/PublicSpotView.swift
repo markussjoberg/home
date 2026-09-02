@@ -16,6 +16,11 @@ struct PublicSpotView: View {
     @State private var newComment = ""
     @State private var sending = false
     @State private var saved = false
+    @State private var reportTarget: (type: String, id: String)?
+    @State private var reportReason = ""
+    @State private var reportSent = false
+    @State private var deletionProposed: String? = nil
+    @State private var objected = false
 
     private var alreadyOwn: Bool {
         saved || ownSpots.contains { $0.id.uuidString == spot.id }
@@ -37,6 +42,8 @@ struct PublicSpotView: View {
     var body: some View {
         NavigationStack {
             List {
+                deletionSection
+
                 Section {
                     if !spot.sports.isEmpty {
                         HStack(spacing: 14) {
@@ -99,60 +106,7 @@ struct PublicSpotView: View {
                     .disabled(alreadyOwn)
                 }
 
-                Section {
-                    if let comments {
-                        if comments.isEmpty {
-                            Text("Ei vielä kommentteja — kerro ensimmäisenä millä keleillä täällä toimii.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        ForEach(comments) { comment in
-                            VStack(alignment: .leading, spacing: 3) {
-                                HStack {
-                                    Text(comment.author).font(.subheadline.weight(.semibold))
-                                    if let wind = comment.windMs {
-                                        Text("\(Format.speedMs(wind))\(comment.windDir.map { " \(GeoMath.compassName(degrees: $0))" } ?? "")")
-                                            .font(.caption)
-                                            .foregroundStyle(.cyan)
-                                    }
-                                    Spacer()
-                                    Text(Self.dateText(comment.createdAt))
-                                        .font(.caption2)
-                                        .foregroundStyle(.tertiary)
-                                }
-                                Text(comment.text).font(.subheadline)
-                            }
-                            .padding(.vertical, 2)
-                        }
-                    } else {
-                        ProgressView()
-                    }
-
-                    VStack(spacing: 8) {
-                        // Kirjautuneella kirjoittaja on tilin nimimerkki (palvelin pakottaa sen).
-                        if let accountName = account.user?.nickname, !accountName.isEmpty {
-                            Text("Kommentoit nimellä \(accountName)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else if nickname.isEmpty {
-                            TextField("Nimimerkki", text: $nickname)
-                                .textInputAutocapitalization(.never)
-                        }
-                        HStack {
-                            TextField("Millä keleillä toimii?", text: $newComment, axis: .vertical)
-                                .lineLimit(1...4)
-                            Button {
-                                send()
-                            } label: {
-                                Image(systemName: "paperplane.fill")
-                            }
-                            .disabled(sending || newComment.trimmingCharacters(in: .whitespaces).isEmpty
-                                      || effectiveAuthor.isEmpty)
-                        }
-                    }
-                } header: {
-                    Text("Kokemukset")
-                }
+                commentsSection
             }
             .navigationTitle(spot.name)
             .navigationBarTitleDisplayMode(.inline)
@@ -160,10 +114,135 @@ struct PublicSpotView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Sulje") { dismiss() }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Button("Ilmoita spotti", systemImage: "flag") { reportTarget = ("spot", spot.id) }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .accessibilityLabel("Lisää toimintoja")
+                }
             }
+            .alert("Ilmoita asiaton sisältö", isPresented: Binding(get: { reportTarget != nil }, set: { if !$0 { reportTarget = nil } })) {
+                TextField("Miksi? (lyhyesti)", text: $reportReason)
+                Button("Lähetä") {
+                    guard let target = reportTarget else { return }
+                    let reason = reportReason.trimmingCharacters(in: .whitespaces)
+                    reportTarget = nil
+                    reportReason = ""
+                    Task { reportSent = await ServerClient.shared.report(targetType: target.type, targetID: target.id, reason: reason.isEmpty ? "asiaton" : reason) }
+                }
+                Button("Peru", role: .cancel) { reportTarget = nil }
+            } message: {
+                Text("Ilmoitus menee ylläpidolle. Kiitos, että pidät yhteisön asiallisena.")
+            }
+            .alert("Ilmoitus lähetetty", isPresented: $reportSent) { Button("OK") {} }
             .task {
+                deletionProposed = spot.deletionProposed
                 comments = await ServerClient.shared.spotComments(spotID: spot.id) ?? []
             }
+        }
+    }
+
+
+    @ViewBuilder
+    private var deletionSection: some View {
+        if let decidesAt = deletionProposed {
+            Section {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Poistoehdotus").font(.subheadline.weight(.semibold))
+                        Text("Luoja haluaa poistaa spotin. Poisto toteutuu \(Self.dateText(decidesAt)), ellei kukaan spottiin osallistunut vastusta.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                }
+                if objected {
+                    Text("Vastustuksesi on kirjattu — spotti säilyy.").font(.caption).foregroundStyle(.green)
+                } else {
+                    Button("Vastusta poistoa") {
+                        Task {
+                            if await ServerClient.shared.objectDeletion(spotID: spot.id) {
+                                objected = true
+                                deletionProposed = nil
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var commentsSection: some View {
+        Section {
+            if let comments {
+                if comments.isEmpty {
+                    Text("Ei vielä kommentteja — kerro ensimmäisenä millä keleillä täällä toimii.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(comments) { comment in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack {
+                            Text(comment.author).font(.subheadline.weight(.semibold))
+                            if let wind = comment.windMs {
+                                Text("\(Format.speedMs(wind))\(comment.windDir.map { " \(GeoMath.compassName(degrees: $0))" } ?? "")")
+                                    .font(.caption)
+                                    .foregroundStyle(.cyan)
+                            }
+                            Spacer()
+                            Text(Self.dateText(comment.createdAt))
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                        Text(comment.text).font(.subheadline)
+                    }
+                    .padding(.vertical, 2)
+                    .contextMenu {
+                        if let me = account.user?.id, comment.userId == me {
+                            Button("Poista kommenttini", role: .destructive) {
+                                Task {
+                                    if await ServerClient.shared.deleteComment(spotID: spot.id, commentID: comment.id) {
+                                        self.comments = await ServerClient.shared.spotComments(spotID: spot.id) ?? comments
+                                    }
+                                }
+                            }
+                        } else {
+                            Button("Ilmoita kommentti", systemImage: "flag") {
+                                reportTarget = ("comment", comment.id)
+                            }
+                        }
+                    }
+                }
+            } else {
+                ProgressView()
+            }
+
+            VStack(spacing: 8) {
+                // Kirjautuneella kirjoittaja on tilin nimimerkki (palvelin pakottaa sen).
+                if let accountName = account.user?.nickname, !accountName.isEmpty {
+                    Text("Kommentoit nimellä \(accountName)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if nickname.isEmpty {
+                    TextField("Nimimerkki", text: $nickname)
+                        .textInputAutocapitalization(.never)
+                }
+                HStack {
+                    TextField("Millä keleillä toimii?", text: $newComment, axis: .vertical)
+                        .lineLimit(1...4)
+                    Button {
+                        send()
+                    } label: {
+                        Image(systemName: "paperplane.fill")
+                    }
+                    .disabled(sending || newComment.trimmingCharacters(in: .whitespaces).isEmpty
+                              || effectiveAuthor.isEmpty)
+                }
+            }
+        } header: {
+            Text("Kokemukset")
         }
     }
 

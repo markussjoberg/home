@@ -46,6 +46,8 @@ struct MapTab: View {
     /// Merisää-kerroksen tila käyttäjälle: nil = kaikki hyvin, muuten lyhyt syy
     /// (haku kesken / ei yhteyttä). Hiljaa tyhjänä oleva kerros näyttäisi rikkinäiseltä.
     @State private var seaStateStatus: String?
+    /// Yhteisöviesti (esim. poisto eteni ehdotuksena, koska muut ovat lisänneet sisältöä).
+    @State private var communityNotice: String?
     /// Panoroinnin/zoomin aikana tuulipartikkelit piilotetaan: SwiftUI-kerros
     /// ei seuraa karttaa liikkeen aikana, joten ne hyppäisivät lopussa.
     @State private var isMapMoving = false
@@ -213,6 +215,18 @@ struct MapTab: View {
         guard s.weight > 0.2 else { return nil }
         let from = (atan2(s.u, s.v) * 180 / .pi + 180).truncatingRemainder(dividingBy: 360)
         return .init(height: s.height, direction: from < 0 ? from + 360 : from, period: s.period)
+    }
+
+    /// Julkaisun poisto voi edetä ehdotuksena: kerrotaan käyttäjälle miksi ja milloin.
+    @MainActor
+    private func handleUnpublish(_ result: ServerClient.UnpublishResult) {
+        guard case .proposed(let decidesAt) = result else { return }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "fi_FI")
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        let when = ISO8601.parse(decidesAt).map { f.string(from: $0) } ?? "7 päivän kuluttua"
+        communityNotice = "Muut ovat lisänneet spottiin sisältöä, joten julkinen spotti ei poistu heti. Poisto toteutuu \(when), ellei kukaan osallistunut vastusta. Oma yksityinen kopiosi on jo poistettu tai piilotettu."
     }
 
     /// Aikajanan otsikko: "Nyt" tai viikonpäivä + tunti Suomen ajassa.
@@ -531,6 +545,11 @@ struct MapTab: View {
                     set: { placesFilterRaw = $0.sorted().joined(separator: "|") }
                 ))
             }
+            .alert("Julkinen spotti on yhteinen", isPresented: Binding(get: { communityNotice != nil }, set: { if !$0 { communityNotice = nil } })) {
+                Button("OK") { communityNotice = nil }
+            } message: {
+                Text(communityNotice ?? "")
+            }
             .sheet(item: $editingSpot) { spot in
                 SpotEditorView(draft: spot, isNew: !spots.contains { $0.id == spot.id }) { action in
                     handle(action, original: spot)
@@ -596,7 +615,7 @@ struct MapTab: View {
                 if data.isPublic == true {
                     await ServerClient.shared.publishSpot(data)
                 } else {
-                    await ServerClient.shared.unpublishSpot(id: data.id)
+                    await handleUnpublish(await ServerClient.shared.unpublishSpot(id: data.id))
                 }
                 if let shared = await ServerClient.shared.publicSpots() {
                     publicSpots = shared
@@ -618,7 +637,7 @@ struct MapTab: View {
                 try? modelContext.save()
                 let remaining = spots.map(\.data).filter { $0.id != original.id }
                 Task {
-                    await ServerClient.shared.unpublishSpot(id: original.id)
+                    await handleUnpublish(await ServerClient.shared.unpublishSpot(id: original.id))
                     await ServerClient.shared.backupSpots(remaining)
                 }
             }
