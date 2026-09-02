@@ -32,27 +32,10 @@ export interface SpotSync {
   goodDirections?: number[];
   minWind?: number;
   maxWind?: number;
-  /** Kelivahti päällä — palvelin johtaa hälytyksen näistä kentistä. */
+  /** Vanha lippu; hälytykset ovat nykyään omia tietueita (/api/alerts). */
   alertEnabled?: boolean;
 }
 
-/** Johtaa hälytyksen spotin tuuli-ikkunasta (sama logiikka kuin appin puolella). */
-export function alertFromSpot(spot: SpotSync | null | undefined): Alert | null {
-  if (!spot || typeof spot !== "object" || !spot.alertEnabled) return null;
-  // Minimituuli vaaditaan: pelkkä suunta osuisi myös 1 m/s:n tyveneen ja
-  // hälyttäisi käytännössä joka kierroksella.
-  if (spot.minWind === undefined || spot.minWind === null) return null;
-  return {
-    id: `spot-${spot.id}`,
-    spotId: spot.id,
-    spotName: spot.name,
-    minWind: spot.minWind,
-    maxWind: spot.maxWind,
-    goodDirections: spot.goodDirections,
-    minHours: 2,
-    enabled: true,
-  };
-}
 
 export interface SessionSync {
   id: string;
@@ -536,31 +519,30 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
   });
 
   async function checkAlerts(): Promise<{ alertId: string; spotName: string; windows: AlertWindow[] }[]> {
-    const stored = (await store.read<Alert[]>("alerts", [])).filter((a) => a.enabled);
+    // Hälytykset ovat käyttäjän omia tietueita omalla rajallaan; spotin
+    // tuuli-ikkuna ei itsessään hälytä.
+    const alerts = (await store.read<Alert[]>("alerts", [])).filter((a) => a?.enabled && Number.isFinite(a.minWind));
     const spots = await store.read<SpotSync[]>("spots", []);
-    // Hälytykset johdetaan ensisijaisesti spottien tuuli-ikkunoista; erikseen
-    // talletettu hälytys samalle spotille ohittaa johdetun.
-    const covered = new Set(stored.map((a) => a.spotId));
-    const derived = spots
-      .map(alertFromSpot)
-      .filter((a): a is Alert => a !== null && !covered.has(a.spotId));
-    const alerts = [...stored, ...derived];
     const results: { alertId: string; spotName: string; windows: AlertWindow[] }[] = [];
 
     for (const alert of alerts) {
+      // Sijainti hälytyksestä itsestään; vanhoissa hälytyksissä spotista.
       const spot = spots.find((s) => s.id === alert.spotId);
-      if (!spot) continue;
+      const latitude = alert.latitude ?? spot?.latitude;
+      const longitude = alert.longitude ?? spot?.longitude;
+      const sea = (alert.waterType ?? spot?.waterType) === "sea";
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
       try {
-        const key = `${spot.latitude.toFixed(3)},${spot.longitude.toFixed(3)},${spot.waterType === "sea"}`;
+        const key = `${latitude!.toFixed(3)},${longitude!.toFixed(3)},${sea}`;
         const forecast = await forecastCache.getOrSet(key, () =>
-          fetchCombinedForecast(spot.latitude, spot.longitude, spot.waterType === "sea", 3, fetchImpl, now),
+          fetchCombinedForecast(latitude!, longitude!, sea, 3, fetchImpl, now),
         );
         // Vain tulevat tunnit: Open-Meteon päivä alkaa 00 UTC, eikä aamun
         // ikkunasta pidä ilmoittaa iltapäivällä.
         const nowHour = `${now().toISOString().slice(0, 13)}:00`; // käynnissä oleva tunti mukaan
         const windows = matchAlert(alert, forecast.wind.filter((h) => h.time >= nowHour));
         if (windows.length > 0) {
-          results.push({ alertId: alert.id, spotName: alert.spotName || spot.name, windows });
+          results.push({ alertId: alert.id, spotName: alert.spotName || spot?.name || "Kelivahti", windows });
         }
       } catch {
         // Yhden spotin hakuvirhe ei kaada kierrosta.

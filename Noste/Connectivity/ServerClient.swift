@@ -386,6 +386,14 @@ struct ServerClient {
         _ = try? await URLSession.shared.data(for: request)
     }
 
+    /// Käyttäjän kelivahtihälytykset palvelimelle (koko lista korvaa edellisen).
+    func backupAlerts(_ alerts: [WindAlert]) async {
+        guard let body = try? JSONEncoder().encode(alerts),
+              let request = request(path: "api/alerts", method: "PUT", body: body)
+        else { return }
+        _ = try? await URLSession.shared.data(for: request)
+    }
+
     /// Vie yhden session palvelimelle raakajälkineen. Vakaa id → uudelleenvienti
     /// (esim. reittauksen jälkeen) päivittää saman session, ei duplikoi.
     func backupSession(_ payload: WatchSync.SessionPayload, id: UUID,

@@ -183,3 +183,71 @@ final class SessionRecord {
         }
     }
 }
+
+/// Käyttäjän oma kelivahtihälytys (ks. WindAlert). Yksi per spotti.
+@Model
+final class AlertRecord {
+    @Attribute(.unique) var id: UUID
+    var spotID: UUID
+    var spotName: String
+    var latitude: Double
+    var longitude: Double
+    var waterTypeRaw: String
+    var minWind: Double
+    var goodDirections: [Int]?
+    var minHours: Int
+    var enabled: Bool
+
+    init(from alert: WindAlert) {
+        id = alert.id
+        spotID = alert.spotId
+        spotName = alert.spotName
+        latitude = alert.latitude
+        longitude = alert.longitude
+        waterTypeRaw = alert.waterType.rawValue
+        minWind = alert.minWind
+        goodDirections = alert.goodDirections
+        minHours = alert.minHours
+        enabled = alert.enabled
+    }
+
+    func update(from alert: WindAlert) {
+        spotName = alert.spotName
+        latitude = alert.latitude
+        longitude = alert.longitude
+        waterTypeRaw = alert.waterType.rawValue
+        minWind = alert.minWind
+        goodDirections = alert.goodDirections
+        minHours = alert.minHours
+        enabled = alert.enabled
+    }
+
+    var data: WindAlert {
+        WindAlert(id: id, spotId: spotID, spotName: spotName, latitude: latitude, longitude: longitude,
+                  waterType: WaterType(rawValue: waterTypeRaw) ?? .sea, minWind: minWind,
+                  goodDirections: goodDirections, minHours: minHours, enabled: enabled)
+    }
+}
+
+/// Hälytysten talletus ja vienti palvelimelle yhdestä paikasta.
+enum AlertStore {
+    static func alert(for spotID: UUID, context: ModelContext) -> AlertRecord? {
+        ((try? context.fetch(FetchDescriptor<AlertRecord>())) ?? []).first { $0.spotID == spotID }
+    }
+
+    /// Tallettaa (tai päivittää) hälytyksen ja vie koko listan palvelimelle.
+    static func upsert(_ alert: WindAlert, context: ModelContext) {
+        if let existing = self.alert(for: alert.spotId, context: context) {
+            existing.update(from: alert)
+        } else {
+            context.insert(AlertRecord(from: alert))
+        }
+        try? context.save()
+        sync(context: context)
+    }
+
+    static func sync(context: ModelContext) {
+        let alerts = ((try? context.fetch(FetchDescriptor<AlertRecord>())) ?? []).map(\.data)
+        Task { await ServerClient.shared.backupAlerts(alerts) }
+    }
+}

@@ -202,30 +202,27 @@ describe("app", () => {
     expect(body.nearest[0]).toMatchObject({ category: "Uimaranta", name: "Ranta" });
   });
 
-  it("kelivahti johdetaan spotin tuuli-ikkunasta ilman erillistä hälytystä", async () => {
-    await app.request("/api/spots", {
-      method: "PUT",
-      headers: { ...auth.headers, "content-type": "application/json" },
+  it("hälytys toimii omilla koordinaateillaan ilman spottia", async () => {
+    await app.request("/api/alerts", {
+      method: "PUT", ...auth,
       body: JSON.stringify([{
-        id: "s1", name: "Kotispotti", latitude: 60.1, longitude: 24.9,
-        waterType: "lake", sports: [], isFavorite: true, notes: "",
-        alertEnabled: true, minWind: 8, goodDirections: [5, 6],
+        id: "a1", spotId: "poistettu", spotName: "Oma paikka", latitude: 60.1, longitude: 24.9, waterType: "sea",
+        minWind: 8, goodDirections: [5, 6], enabled: true,
       }]),
     });
-
     const results = await checkAlerts();
     expect(results).toHaveLength(1);
-    expect(results[0]!.alertId).toBe("spot-s1");
+    expect(results[0]!.alertId).toBe("a1");
+    expect(results[0]!.spotName).toBe("Oma paikka");
     expect(results[0]!.windows[0]!.hours).toBe(3);
   });
 
-  it("spotti ilman alertEnabled-lippua ei hälytä", async () => {
+  it("spotin tuuli-ikkuna ei itsessään hälytä", async () => {
     await app.request("/api/spots", {
-      method: "PUT",
-      headers: { ...auth.headers, "content-type": "application/json" },
+      method: "PUT", ...auth,
       body: JSON.stringify([{
         id: "s1", name: "Kotispotti", latitude: 60.1, longitude: 24.9,
-        waterType: "lake", sports: [], isFavorite: true, notes: "", minWind: 8,
+        waterType: "lake", sports: [], isFavorite: true, notes: "", minWind: 8, alertEnabled: true,
       }]),
     });
     expect(await checkAlerts()).toHaveLength(0);
@@ -234,8 +231,8 @@ describe("app", () => {
   it("kelivahti ohittaa menneet tunnit", async () => {
     // Ennusteen tunnit 10–13 UTC (9, 10, 11, 3 m/s). Kello 10:30 → ikkuna alkaa
     // käynnissä olevasta tunnista; kello 12:30 → jäljellä vain 13:00 (3 m/s), ei ikkunaa.
-    const spots = JSON.stringify([{ id: "s1", name: "Lauttis", latitude: 60.1, longitude: 24.9, waterType: "sea",
-      alertEnabled: true, minWind: 8 }]);
+    const alerts = JSON.stringify([{ id: "a1", spotId: "s1", spotName: "Lauttis", latitude: 60.1, longitude: 24.9,
+      waterType: "sea", minWind: 8, enabled: true }]);
     const at = async (iso: string, suffix: string) => {
       const built = createApp({
         config: loadConfig({
@@ -244,7 +241,7 @@ describe("app", () => {
         fetchImpl: testFetch(),
         now: () => new Date(iso),
       });
-      await built.app.request("/api/spots", { method: "PUT", ...auth, body: spots });
+      await built.app.request("/api/alerts", { method: "PUT", ...auth, body: alerts });
       return built.checkAlerts();
     };
     const morning = await at("2026-08-21T10:30:00Z", "a");

@@ -11,6 +11,12 @@ struct SpotEditorView: View {
     @State var draft: SpotData
     var onDone: (Action) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    // Kelivahti on käyttäjän oma hälytys omalla rajalla — ei spotin ominaisuus.
+    @State private var alertEnabled = false
+    @State private var alertThreshold: Double = 6
+    @State private var alertLoaded = false
 
     private let isNew: Bool
     @State private var hasWindLimits: Bool
@@ -62,17 +68,29 @@ struct SpotEditorView: View {
                     Text("Toimivat suunnat ja voimakkuus. Ennusteesta korostetaan ikkunaan osuvat tunnit — myös kellossa.")
                 }
 
-                // Vain oma palvelin: spottien synkka (ja siten kelivahti) vaatii
-                // täyden tokenin, sisäänrakennettu client-token ei riitä.
+                // Vain oma palvelin: kelivahti vaatii täyden tokenin, sisäänrakennettu
+                // client-token ei riitä.
                 if ServerSettings.userConfigured != nil {
                     Section {
-                        Toggle("Kelivahti", isOn: alertBinding)
-                            .disabled(!windowDefined)
+                        Toggle("Kelivahti", isOn: $alertEnabled)
+                        if alertEnabled {
+                            Stepper(value: $alertThreshold, in: 3...25, step: 1) {
+                                HStack {
+                                    Text("Hälytysraja")
+                                    Spacer()
+                                    Text("\(Int(alertThreshold)) m/s").foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    } header: {
+                        Text("Oma hälytys")
                     } footer: {
-                        Text(windowDefined
-                             ? "Palvelin vahtii ennustetta ja ilmoittaa (ntfy), kun tuuli-ikkuna osuu vähintään 2 h putkeen."
-                             : "Aseta ensin minimituuli, niin kelivahdilla on mitä vahtia — pelkkä suunta hälyttäisi myös tyvenessä.")
+                        Text(alertEnabled
+                             ? "Ilmoitus (ntfy), kun ennuste ylittää rajan vähintään 2 h putkeen\(draft.goodDirections?.isEmpty == false ? " spotin toimivista suunnista" : ""). Raja on sinun, ei spotin."
+                             : "Henkilökohtainen ilmoitus tämän paikan ennusteesta. Spotin tuuli-ikkuna kuvaa spottia, hälytysraja on oma valintasi.")
                     }
+                    .onChange(of: alertEnabled) { _, _ in saveAlert() }
+                    .onChange(of: alertThreshold) { _, _ in saveAlert() }
                 }
 
                 Section {
@@ -105,6 +123,7 @@ struct SpotEditorView: View {
                     }
                 }
             }
+            .onAppear(perform: loadAlert)
             .navigationTitle(isNew ? "Uusi spotti" : draft.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -187,11 +206,31 @@ struct SpotEditorView: View {
         )
     }
 
-    private var alertBinding: Binding<Bool> {
-        Binding(
-            get: { draft.alertEnabled ?? false },
-            set: { draft.alertEnabled = $0 ? true : nil }
-        )
+    private func loadAlert() {
+        guard !alertLoaded else { return }
+        alertLoaded = true
+        if let existing = AlertStore.alert(for: draft.id, context: modelContext) {
+            alertEnabled = existing.enabled
+            alertThreshold = existing.minWind
+        } else {
+            alertThreshold = draft.minWind ?? 6
+        }
+    }
+
+    /// Hälytys talletetaan heti (oma tietue, ei osa spottia) ja viedään palvelimelle.
+    private func saveAlert() {
+        guard alertLoaded else { return }
+        AlertStore.upsert(WindAlert(
+            id: AlertStore.alert(for: draft.id, context: modelContext)?.id ?? UUID(),
+            spotId: draft.id,
+            spotName: draft.name.isEmpty ? "Nimetön spotti" : draft.name,
+            latitude: draft.latitude,
+            longitude: draft.longitude,
+            waterType: draft.waterType,
+            minWind: alertThreshold,
+            goodDirections: draft.goodDirections?.isEmpty == false ? draft.goodDirections : nil,
+            enabled: alertEnabled
+        ), context: modelContext)
     }
 
     private func sportBinding(_ sport: Sport) -> Binding<Bool> {

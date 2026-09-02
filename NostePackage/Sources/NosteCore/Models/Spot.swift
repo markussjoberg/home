@@ -37,7 +37,7 @@ public struct SpotData: Codable, Sendable, Equatable, Identifiable {
     public var minWind: Double?
     /// Kelin yläraja m/s (nil = ei rajaa).
     public var maxWind: Double?
-    /// Kelivahti päällä tälle spotille (vaatii oman palvelimen).
+    /// Vanha lippu (ennen omia hälytystietueita) — ei enää käytössä, säilyy dekoodausta varten.
     public var alertEnabled: Bool?
     /// Julkinen spotti: saa näkyä muille, kun spottien jako toteutuu.
     /// nil/false = yksityinen (oletus).

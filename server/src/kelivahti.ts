@@ -5,11 +5,20 @@
  */
 import type { WindHour } from "./openmeteo.js";
 
+/**
+ * Käyttäjän oma hälytys: raja (m/s) ja sijainti ovat hälytyksen omia, spotti
+ * on vain nimi ja oletussijainti — spotin tuuli-ikkuna kuvaa spottia, ei
+ * sitä milloin käyttäjä haluaa ilmoituksen.
+ */
 export interface Alert {
   id: string;
   spotId: string;
   spotName: string;
-  /** m/s */
+  /** Sijainti; puuttuessa haetaan spotista (vanhat hälytykset). */
+  latitude?: number;
+  longitude?: number;
+  waterType?: "sea" | "lake";
+  /** Hälytysraja m/s */
   minWind: number;
   /** m/s; puuttuva = ei ylärajaa */
   maxWind?: number;
