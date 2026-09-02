@@ -1,0 +1,28 @@
+# Palvelimen deploy pushista: kun server/-kansio muuttuu branchilla, ajetaan
+# palvelimella /opt/noste/deploy/deploy.sh rajatulla SSH-avaimella.
+# Salaisuudet: DEPLOY_SSH_KEY (yksityinen avain), DEPLOY_HOST (esim. root@95.216.206.136),
+# DEPLOY_KNOWN_HOSTS (ssh-keyscan-rivi palvelimesta).
+name: Deploy server
+
+on:
+  push:
+    branches: [claude/wing-foil-surf-app-pqvliz]
+    paths: ["server/**", ".github/workflows/deploy-server.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH-avain ja tunnettu isäntä
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+      - name: Aja deploy palvelimella
+        run: ssh -i ~/.ssh/deploy_key -o BatchMode=yes "${{ secrets.DEPLOY_HOST }}" deploy
