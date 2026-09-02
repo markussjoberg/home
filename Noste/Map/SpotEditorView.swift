@@ -158,34 +158,17 @@ struct SpotEditorView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Toimivat suunnat")
                 .font(.subheadline)
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 6) {
-                ForEach(0..<8, id: \.self) { index in
-                    let selected = draft.goodDirections?.contains(index) == true
-                    Button {
-                        toggleDirection(index)
-                    } label: {
-                        Text(Self.compassNames[index])
-                            .font(.subheadline.weight(selected ? .bold : .regular))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                            .background(selected ? Color.accentColor : Color(.systemGray5),
-                                        in: RoundedRectangle(cornerRadius: 8))
-                            .foregroundStyle(selected ? .white : .primary)
-                    }
-                    .buttonStyle(.plain)
-                }
+            HStack {
+                Spacer()
+                CompassRoseSelector(selected: $draft.goodDirections)
+                Spacer()
             }
+            Text(draft.goodDirections?.isEmpty == false
+                 ? "Valittu: " + (draft.goodDirections ?? []).map { Self.compassNames[$0] }.joined(separator: ", ")
+                 : "Ei valintaa — kaikki suunnat käyvät.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
-    }
-
-    private func toggleDirection(_ index: Int) {
-        var directions = draft.goodDirections ?? []
-        if let position = directions.firstIndex(of: index) {
-            directions.remove(at: position)
-        } else {
-            directions.append(index)
-        }
-        draft.goodDirections = directions.isEmpty ? nil : directions.sorted()
     }
 
     private func windSlider(_ label: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
