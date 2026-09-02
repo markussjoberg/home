@@ -17,6 +17,8 @@ export interface PublicSpot {
   goodDirections?: number[];
   minWind?: number;
   maxWind?: number;
+  /** Yhteinen kuvaus — kuka tahansa kirjautunut voi täydentää (wiki). */
+  description?: string;
   /** sha256(ownerKey) — ei koskaan ulos rajapinnasta. */
   ownerHash: string;
   /** Omistava käyttäjä (kirjautunut julkaisija). */
@@ -68,6 +70,7 @@ export function parsePublicSpot(body: unknown, id: string, ownerHash: string, no
     ? b.goodDirections.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 7).slice(0, 8)
     : undefined;
   const minWind = Number.isFinite(Number(b.minWind)) ? Number(b.minWind) : undefined;
+  const description = cleanText(b.description, 600) || undefined;
   const maxWind = Number.isFinite(Number(b.maxWind)) ? Number(b.maxWind) : undefined;
   return {
     id,
@@ -79,6 +82,7 @@ export function parsePublicSpot(body: unknown, id: string, ownerHash: string, no
     goodDirections: directions?.length ? directions : undefined,
     minWind,
     maxWind,
+    description,
     ownerHash,
     updatedAt: now.toISOString(),
   };

@@ -4,7 +4,7 @@
  */
 import { and, asc, count, desc, eq, isNull } from "drizzle-orm";
 import type { Db } from "./db/index.js";
-import { publicSpots, spotComments, spotRevisions } from "./db/schema.js";
+import { publicSpots, spotComments, spotRevisions, users } from "./db/schema.js";
 import type { PublicSpot, SpotComment } from "./public.js";
 import type { JsonStore } from "./store.js";
 
@@ -21,6 +21,7 @@ function toSpot(row: SpotRow): PublicSpot {
     goodDirections: row.goodDirections ?? undefined,
     minWind: row.minWind ?? undefined,
     maxWind: row.maxWind ?? undefined,
+    description: row.description ?? undefined,
     ownerHash: row.ownerHash,
     ownerUserId: row.ownerUserId ?? undefined,
     updatedAt: row.updatedAt.toISOString(),
@@ -62,6 +63,7 @@ export async function saveSpot(db: Db, spot: PublicSpot, editorHash: string, edi
     goodDirections: spot.goodDirections ?? null,
     minWind: spot.minWind ?? null,
     maxWind: spot.maxWind ?? null,
+    description: spot.description ?? null,
     ownerHash: spot.ownerHash,
     ownerUserId: spot.ownerUserId ?? null,
     updatedAt,
@@ -82,8 +84,25 @@ export async function deleteSpot(db: Db, id: string, now: Date): Promise<void> {
   await db.update(publicSpots).set({ deletedAt: now }).where(eq(publicSpots.id, id));
 }
 
+/** Historia muokkaajan nimimerkillä (hashit eivät lähde ulos). */
 export async function listRevisions(db: Db, spotId: string) {
-  return db.select().from(spotRevisions).where(eq(spotRevisions.spotId, spotId)).orderBy(desc(spotRevisions.createdAt));
+  const rows = await db.select({ revision: spotRevisions, nickname: users.nickname })
+    .from(spotRevisions)
+    .leftJoin(users, eq(users.id, spotRevisions.editorUserId))
+    .where(eq(spotRevisions.spotId, spotId))
+    .orderBy(desc(spotRevisions.createdAt), desc(spotRevisions.id));
+  return rows.map((r) => ({
+    id: r.revision.id,
+    createdAt: r.revision.createdAt.toISOString(),
+    editor: r.nickname ?? "anonyymi",
+    data: r.revision.data,
+  }));
+}
+
+export async function getRevision(db: Db, spotId: string, revisionId: number) {
+  const rows = await db.select().from(spotRevisions)
+    .where(and(eq(spotRevisions.spotId, spotId), eq(spotRevisions.id, revisionId))).limit(1);
+  return rows[0] ?? null;
 }
 
 export async function listComments(db: Db, spotId: string, limit = 200): Promise<SpotComment[]> {

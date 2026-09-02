@@ -12,7 +12,7 @@ import {
   normalizeNickname, revokeToken, setNickname, signIn, userForToken,
 } from "./auth.js";
 import {
-  addComment, countComments, countSpots, deleteSpot, getSpot, listComments, listRevisions, listSpots,
+  addComment, countComments, countSpots, deleteSpot, getRevision, getSpot, listComments, listRevisions, listSpots,
   migrateCommunityJson, saveSpot,
 } from "./community.js";
 import {
@@ -431,15 +431,25 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
     const fullToken = (c.req.header("authorization") ?? "").includes(config.apiToken);
     const user = await currentUser(c);
     const existing = await getSpot(db, id);
-    if (existing && !(await mayEdit(existing, ownerHash, user, fullToken))) {
-      return c.json({ error: "vain lisääjä voi muokata" }, 403);
+    // Wiki: nimimerkillä kirjautunut saa täydentää muiden spotteja (kuvaus,
+    // suunnat, lajit, rajat) — sijaintia ja nimeä siirtää vain omistaja.
+    const owner = existing ? await mayEdit(existing, ownerHash, user, fullToken) : true;
+    const wikiEdit = existing !== null && !owner && Boolean(user?.nickname);
+    if (existing && !owner && !wikiEdit) {
+      return c.json({ error: "muokkaus vaatii kirjautumisen ja nimimerkin" }, 403);
     }
     if (!existing && (await countSpots(db)) >= MAX_PUBLIC_SPOTS) {
       return c.json({ error: "spottipooli täynnä" }, 507);
     }
-    // Omistaja säilyy alkuperäisenä myös admin-muokkauksessa.
+    // Omistaja säilyy alkuperäisenä myös admin- ja wikimuokkauksessa.
     const spot = parsePublicSpot(body, id, existing?.ownerHash ?? ownerHash, now());
     if (!spot) return c.json({ error: "kelvoton spotti" }, 400);
+    if (wikiEdit && existing) {
+      const moved = Math.abs(spot.latitude - existing.latitude) > 0.002 || Math.abs(spot.longitude - existing.longitude) > 0.004;
+      if (moved || spot.name !== existing.name) {
+        return c.json({ error: "vain omistaja voi siirtää tai nimetä spotin" }, 403);
+      }
+    }
     spot.ownerUserId = existing?.ownerUserId ?? user?.id;
     await saveSpot(db, spot, ownerHash, user?.id ?? null);
     return c.json({ ok: true });
@@ -550,14 +560,40 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
     return c.json({ spots, comments: await commentsByUser(db, user.id) });
   });
 
-  /** Muokkaushistoria (ilman hasheja): wikimäinen läpinäkyvyys. */
+  /** Muokkaushistoria muokkaajan nimimerkillä: wikimäinen läpinäkyvyys. */
   app.get("/api/public/spots/:id/history", async (c) => {
     await communityReady;
     const id = cleanText(c.req.param("id"), 64);
-    const revisions = await listRevisions(db, id);
-    return c.json({
-      revisions: revisions.map((r) => ({ id: r.id, createdAt: r.createdAt.toISOString(), data: r.data })),
-    });
+    return c.json({ revisions: await listRevisions(db, id) });
+  });
+
+  /** Palautus aiempaan versioon: uusi versio vanhalla sisällöllä (historia ei katkea). */
+  app.post("/api/public/spots/:id/history/:revisionId/restore", async (c) => {
+    await communityReady;
+    const id = cleanText(c.req.param("id"), 64);
+    const revisionId = Number(c.req.param("revisionId"));
+    const body = await readJson<{ ownerKey?: unknown }>(c);
+    const ownerKey = cleanText(body?.ownerKey, 128);
+    const ownerHash = ownerKey ? hashOwnerKey(ownerKey) : null;
+    const user = await currentUser(c);
+    const fullToken = (c.req.header("authorization") ?? "").includes(config.apiToken);
+    const existing = await getSpot(db, id);
+    if (!existing) return c.json({ error: "spottia ei ole" }, 404);
+    const owner = await mayEdit(existing, ownerHash, user, fullToken);
+    if (!owner && !user?.nickname) return c.json({ error: "palautus vaatii kirjautumisen ja nimimerkin" }, 403);
+    const revision = Number.isInteger(revisionId) ? await getRevision(db, id, revisionId) : null;
+    if (!revision) return c.json({ error: "versiota ei ole" }, 404);
+    const restored = parsePublicSpot(revision.data, id, existing.ownerHash, now());
+    if (!restored) return c.json({ error: "versio ei kelpaa" }, 400);
+    if (!owner) {
+      // Wikimuokkaaja ei voi palauttaa sijaintia tai nimeä.
+      restored.latitude = existing.latitude;
+      restored.longitude = existing.longitude;
+      restored.name = existing.name;
+    }
+    restored.ownerUserId = existing.ownerUserId;
+    await saveSpot(db, restored, ownerHash ?? "", user?.id ?? null);
+    return c.json({ ok: true });
   });
 
   app.get("/api/public/spots/:id/comments", async (c) => {

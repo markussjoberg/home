@@ -15,6 +15,8 @@ export const publicSpots = pgTable("public_spots", {
   goodDirections: jsonb("good_directions").$type<number[]>(),
   minWind: doublePrecision("min_wind"),
   maxWind: doublePrecision("max_wind"),
+  /** Yhteinen kuvaus (wiki): pysäköinti, karikot, launch, etiketti. */
+  description: text("description"),
   /** sha256(ownerKey) — ei koskaan ulos rajapinnasta. */
   ownerHash: text("owner_hash").notNull(),
   /** Omistava käyttäjä, kun julkaisija on kirjautunut. */

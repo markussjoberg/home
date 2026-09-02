@@ -1,0 +1,1 @@
+ALTER TABLE "public_spots" ADD COLUMN "description" text;
