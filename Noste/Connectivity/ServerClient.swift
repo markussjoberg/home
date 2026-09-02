@@ -358,6 +358,26 @@ struct ServerClient {
 
     enum UnpublishResult { case deleted, proposed(decidesAt: String), failed }
 
+    struct MyComment: Codable, Identifiable {
+        var id: String
+        var spotId: String
+        var text: String
+        var createdAt: String
+    }
+    struct MyContent: Codable {
+        var spots: [PublicSpot]
+        var comments: [MyComment]
+    }
+
+    /// Tilin julkaistut spotit ja kommentit (vaatii kirjautumisen).
+    func myContent() async -> MyContent? {
+        guard let request = request(path: "api/me/content"),
+              let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200
+        else { return nil }
+        return try? JSONDecoder().decode(MyContent.self, from: data)
+    }
+
     /// Ilmoitus asiattomasta spotista tai kommentista.
     func report(targetType: String, targetID: String, reason: String) async -> Bool {
         struct Upload: Codable { var targetType: String; var targetId: String; var reason: String; var ownerKey: String }

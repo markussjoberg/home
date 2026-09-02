@@ -156,6 +156,11 @@ private struct AccountSection: View {
                     }
                     .disabled(saving || nicknameDraft.trimmingCharacters(in: .whitespaces).count < 3)
                 }
+                NavigationLink {
+                    MyContentView()
+                } label: {
+                    Label("Omat julkaisut", systemImage: "square.and.pencil")
+                }
                 Button("Kirjaudu ulos", role: .destructive) {
                     Task { await account.signOut() }
                 }
