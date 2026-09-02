@@ -5,7 +5,13 @@ import NosteCore
 /// Julkisen spotin kortti: tiedot, tuuli-ikkuna, kommentit ("millä keleillä
 /// toimii") ja tallennus omiin spotteihin.
 struct PublicSpotView: View {
-    let spot: ServerClient.PublicSpot
+    /// Alkuarvo listasta; wiki-muokkaus ja palautus päivittävät `spot`-tilan.
+    init(spot: ServerClient.PublicSpot) {
+        _spot = State(initialValue: spot)
+    }
+
+    @State private var spot: ServerClient.PublicSpot
+    @State private var editing = false
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query private var ownSpots: [SpotRecord]
@@ -62,6 +68,14 @@ struct PublicSpotView: View {
                             .font(.subheadline)
                     }
                     LabeledContent("Vesistö", value: spot.waterType == "sea" ? "Meri" : "Järvi")
+                    if let description = spot.description, !description.isEmpty {
+                        Text(description).font(.subheadline)
+                    }
+                    NavigationLink {
+                        PublicSpotHistoryView(spotID: spot.id) { Task { await reloadSpot() } }
+                    } label: {
+                        Label("Muokkaushistoria", systemImage: "clock.arrow.circlepath").font(.subheadline)
+                    }
                 } header: {
                     Text("Spotti")
                 }
@@ -116,6 +130,11 @@ struct PublicSpotView: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
+                        if account.user?.nickname != nil {
+                            Button("Täydennä tietoja", systemImage: "pencil") { editing = true }
+                        } else {
+                            Text("Kirjaudu ja aseta nimimerkki, niin voit täydentää spotin tietoja.")
+                        }
                         Button("Ilmoita spotti", systemImage: "flag") { reportTarget = ("spot", spot.id) }
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -137,6 +156,9 @@ struct PublicSpotView: View {
                 Text("Ilmoitus menee ylläpidolle. Kiitos, että pidät yhteisön asiallisena.")
             }
             .alert("Ilmoitus lähetetty", isPresented: $reportSent) { Button("OK") {} }
+            .sheet(isPresented: $editing) {
+                PublicSpotEditor(spot: spot) { updated in spot = updated }
+            }
             .task {
                 deletionProposed = spot.deletionProposed
                 comments = await ServerClient.shared.spotComments(spotID: spot.id) ?? []
@@ -243,6 +265,13 @@ struct PublicSpotView: View {
             }
         } header: {
             Text("Kokemukset")
+        }
+    }
+
+    /// Palautuksen tai muokkauksen jälkeen: tuorein versio listauksesta.
+    private func reloadSpot() async {
+        if let fresh = (await ServerClient.shared.publicSpots())?.first(where: { $0.id == spot.id }) {
+            spot = fresh
         }
     }
 

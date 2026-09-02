@@ -338,6 +338,8 @@ struct ServerClient {
         var goodDirections: [Int]?
         var minWind: Double?
         var maxWind: Double?
+        /// Yhteinen kuvaus (wiki).
+        var description: String?
         var updatedAt: String
         var commentCount: Int
         /// Oma (tili tai sidottu laite) — palvelin päättää.
@@ -357,6 +359,74 @@ struct ServerClient {
     }
 
     enum UnpublishResult { case deleted, proposed(decidesAt: String), failed }
+
+    /// Vapaamuotoinen JSON (versiohistorian sisältö).
+    enum JSONValue: Codable {
+        case string(String), number(Double), bool(Bool), null, array([JSONValue]), object([String: JSONValue])
+        init(from decoder: Decoder) throws {
+            let c = try decoder.singleValueContainer()
+            if c.decodeNil() { self = .null }
+            else if let b = try? c.decode(Bool.self) { self = .bool(b) }
+            else if let n = try? c.decode(Double.self) { self = .number(n) }
+            else if let s = try? c.decode(String.self) { self = .string(s) }
+            else if let a = try? c.decode([JSONValue].self) { self = .array(a) }
+            else { self = .object(try c.decode([String: JSONValue].self)) }
+        }
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.singleValueContainer()
+            switch self {
+            case .string(let s): try c.encode(s)
+            case .number(let n): try c.encode(n)
+            case .bool(let b): try c.encode(b)
+            case .null: try c.encodeNil()
+            case .array(let a): try c.encode(a)
+            case .object(let o): try c.encode(o)
+            }
+        }
+    }
+
+    struct SpotRevision: Codable, Identifiable {
+        var id: Int
+        var createdAt: String
+        var editor: String
+        var data: [String: JSONValue]
+    }
+
+    /// Wiki-muokkaus: tallentaa julkisen spotin tiedot (palvelin rajaa mitä muu kuin omistaja saa muuttaa)
+    /// ja palauttaa päivitetyn spotin listauksesta.
+    func updatePublicSpot(_ spot: PublicSpot) async -> PublicSpot? {
+        struct Upload: Codable {
+            var name: String; var latitude: Double; var longitude: Double; var waterType: String; var sports: [String]
+            var goodDirections: [Int]?; var minWind: Double?; var maxWind: Double?; var description: String?; var ownerKey: String
+        }
+        let upload = Upload(name: spot.name, latitude: spot.latitude, longitude: spot.longitude, waterType: spot.waterType,
+                            sports: spot.sports, goodDirections: spot.goodDirections, minWind: spot.minWind, maxWind: spot.maxWind,
+                            description: spot.description, ownerKey: ServerSettings.deviceKey)
+        guard let body = try? JSONEncoder().encode(upload),
+              let request = communityRequest(path: "api/public/spots/\(spot.id)", method: "PUT", body: body),
+              let (_, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200
+        else { return nil }
+        return (await publicSpots())?.first { $0.id == spot.id }
+    }
+
+    func spotHistory(spotID: String) async -> [SpotRevision]? {
+        struct Reply: Codable { var revisions: [SpotRevision] }
+        guard let request = request(path: "api/public/spots/\(spotID)/history"),
+              let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200
+        else { return nil }
+        return (try? JSONDecoder().decode(Reply.self, from: data))?.revisions
+    }
+
+    func restoreRevision(spotID: String, revisionID: Int) async -> Bool {
+        struct Upload: Codable { var ownerKey: String }
+        guard let body = try? JSONEncoder().encode(Upload(ownerKey: ServerSettings.deviceKey)),
+              let request = communityRequest(path: "api/public/spots/\(spotID)/history/\(revisionID)/restore", method: "POST", body: body),
+              let (_, response) = try? await URLSession.shared.data(for: request)
+        else { return false }
+        return (response as? HTTPURLResponse)?.statusCode == 200
+    }
 
     struct MyComment: Codable, Identifiable {
         var id: String
