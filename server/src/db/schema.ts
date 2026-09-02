@@ -17,6 +17,8 @@ export const publicSpots = pgTable("public_spots", {
   maxWind: doublePrecision("max_wind"),
   /** Yhteinen kuvaus (wiki): pysäköinti, karikot, launch, etiketti. */
   description: text("description"),
+  /** exact | coarse — karkea sijainti (~1 km) salailua varten: ranta näkyy, launch ei. */
+  precision: text("precision").notNull().default("exact"),
   /** sha256(ownerKey) — ei koskaan ulos rajapinnasta. */
   ownerHash: text("owner_hash").notNull(),
   /** Omistava käyttäjä, kun julkaisija on kirjautunut. */

@@ -19,6 +19,8 @@ export interface PublicSpot {
   maxWind?: number;
   /** Yhteinen kuvaus — kuka tahansa kirjautunut voi täydentää (wiki). */
   description?: string;
+  /** coarse = näytetään muille ~1 km tarkkuudella (secret spot -kulttuuri). */
+  precision: "exact" | "coarse";
   /** sha256(ownerKey) — ei koskaan ulos rajapinnasta. */
   ownerHash: string;
   /** Omistava käyttäjä (kirjautunut julkaisija). */
@@ -71,6 +73,7 @@ export function parsePublicSpot(body: unknown, id: string, ownerHash: string, no
     : undefined;
   const minWind = Number.isFinite(Number(b.minWind)) ? Number(b.minWind) : undefined;
   const description = cleanText(b.description, 600) || undefined;
+  const precision = b.precision === "coarse" ? "coarse" : "exact";
   const maxWind = Number.isFinite(Number(b.maxWind)) ? Number(b.maxWind) : undefined;
   return {
     id,
@@ -83,6 +86,7 @@ export function parsePublicSpot(body: unknown, id: string, ownerHash: string, no
     minWind,
     maxWind,
     description,
+    precision,
     ownerHash,
     updatedAt: now.toISOString(),
   };
@@ -108,7 +112,14 @@ export function parseComment(body: unknown, spotId: string, now: Date): SpotComm
 }
 
 /** Julkinen muoto: omistajahash ei lähde ulos. */
+/** Karkea sijainti: pyöristys ~1 km ruudukkoon (0,01° lat, 0,02° lon Suomen leveyksillä). */
+export function coarsen(latitude: number, longitude: number): { latitude: number; longitude: number } {
+  return { latitude: Math.round(latitude * 100) / 100, longitude: Math.round(longitude * 50) / 50 };
+}
+
+/** Julkinen muoto: omistajahash ei lähde ulos; karkea spotti näytetään muille pyöristettynä. */
 export function toPublicJson(spot: PublicSpot, commentCount: number, mine = false) {
   const { ownerHash, ownerUserId, ...rest } = spot;
-  return { ...rest, commentCount, mine };
+  const location = spot.precision === "coarse" && !mine ? coarsen(spot.latitude, spot.longitude) : {};
+  return { ...rest, ...location, commentCount, mine };
 }

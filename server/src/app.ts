@@ -446,9 +446,12 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
     const spot = parsePublicSpot(body, id, existing?.ownerHash ?? ownerHash, now());
     if (!spot) return c.json({ error: "kelvoton spotti" }, 400);
     if (wikiEdit && existing) {
-      const moved = Math.abs(spot.latitude - existing.latitude) > 0.002 || Math.abs(spot.longitude - existing.longitude) > 0.004;
-      if (moved || spot.name !== existing.name) {
-        return c.json({ error: "vain omistaja voi siirtää tai nimetä spotin" }, 403);
+      // Wikimuokkaaja näkee karkean spotin pyöristettynä eikä saa siirtää — säilytä omistajan sijainti ja tarkkuus.
+      spot.latitude = existing.latitude;
+      spot.longitude = existing.longitude;
+      spot.precision = existing.precision;
+      if (spot.name !== existing.name) {
+        return c.json({ error: "vain omistaja voi nimetä spotin" }, 403);
       }
     }
     spot.ownerUserId = existing?.ownerUserId ?? user?.id;

@@ -178,24 +178,29 @@ describe("tunnukset", () => {
     expect(wiki.status).toBe(200);
     // Siirto tai nimeäminen ei onnistu muulta kuin omistajalta.
     const moved = await app.request("/api/public/spots/w1", { method: "PUT", ...asUser(editor.token),
-      body: JSON.stringify({ name: "Ranta", latitude: 60.3, longitude: 24.87, waterType: "sea", ownerKey: "laite-E" }) });
-    expect(moved.status).toBe(403);
+      body: JSON.stringify({ name: "Ranta", latitude: 60.3, longitude: 24.87, waterType: "sea", ownerKey: "laite-E", description: "Parkki tien päässä", goodDirections: [5, 6] }) });
+    expect(moved.status).toBe(200); // sijainti jätetään omistajan asettamaksi
+    const renamed = await app.request("/api/public/spots/w1", { method: "PUT", ...asUser(editor.token),
+      body: JSON.stringify({ name: "Uusi", latitude: 60.15, longitude: 24.87, waterType: "sea", ownerKey: "laite-E" }) });
+    expect(renamed.status).toBe(403);
 
     const list = await (await app.request("/api/public/spots", client)).json();
     expect(list.spots[0].description).toBe("Parkki tien päässä");
+    // Wikimuokkaus ei siirtänyt eikä muuttanut tarkkuutta.
+    expect(list.spots[0].latitude).toBe(60.15);
     // Omistaja on edelleen omistaja.
     const asOwner = await (await app.request("/api/public/spots", asUser(owner.token))).json();
     expect(asOwner.spots[0].mine).toBe(true);
 
     const history = await (await app.request("/api/public/spots/w1/history", client)).json();
-    expect(history.revisions.map((r: { editor: string }) => r.editor)).toEqual(["Muokkaaja", "Omistaja"]);
+    expect(history.revisions.map((r: { editor: string }) => r.editor)).toEqual(["Muokkaaja", "Muokkaaja", "Omistaja"]);
 
     // Palautus ensimmäiseen versioon: kuvaus katoaa, historia kasvaa.
-    const first = history.revisions[1].id;
+    const first = history.revisions[2].id;
     expect((await app.request(`/api/public/spots/w1/history/${first}/restore`, { method: "POST", ...asUser(editor.token), body: "{}" })).status).toBe(200);
     const after = await (await app.request("/api/public/spots", client)).json();
     expect(after.spots[0].description).toBeUndefined();
-    expect((await (await app.request("/api/public/spots/w1/history", client)).json()).revisions).toHaveLength(3);
+    expect((await (await app.request("/api/public/spots/w1/history", client)).json()).revisions).toHaveLength(4);
   });
 
   it("ilmoitukset: kommentti omistajalle, poistoehdotus osallistuneille, luetuksi merkintä", async () => {
