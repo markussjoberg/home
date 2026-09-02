@@ -42,6 +42,8 @@ public struct SpotData: Codable, Sendable, Equatable, Identifiable {
     /// Julkinen spotti: saa näkyä muille, kun spottien jako toteutuu.
     /// nil/false = yksityinen (oletus).
     public var isPublic: Bool?
+    /// Julkaistaan karkealla (~1 km) sijainnilla: ranta näkyy, launch ei.
+    public var coarseLocation: Bool?
     /// Maastoanalyysi ilmansuunnittain (0 = N … 7 = NW): pyyhkäisymatka (km)
     /// järviaaltojen laskentaan ja avoimuus 0–1. Haetaan palvelimelta.
     public var fetchKmByOctant: [Double]?
@@ -50,7 +52,7 @@ public struct SpotData: Codable, Sendable, Equatable, Identifiable {
     public init(id: UUID = UUID(), name: String, latitude: Double, longitude: Double,
                 waterType: WaterType = .sea, sports: [Sport] = [], isFavorite: Bool = false, notes: String = "",
                 goodDirections: [Int]? = nil, minWind: Double? = nil, maxWind: Double? = nil,
-                alertEnabled: Bool? = nil, isPublic: Bool? = nil,
+                alertEnabled: Bool? = nil, isPublic: Bool? = nil, coarseLocation: Bool? = nil,
                 fetchKmByOctant: [Double]? = nil, exposureByOctant: [Double]? = nil) {
         self.id = id
         self.name = name
@@ -65,6 +67,7 @@ public struct SpotData: Codable, Sendable, Equatable, Identifiable {
         self.maxWind = maxWind
         self.alertEnabled = alertEnabled
         self.isPublic = isPublic
+        self.coarseLocation = coarseLocation
         self.fetchKmByOctant = fetchKmByOctant
         self.exposureByOctant = exposureByOctant
     }

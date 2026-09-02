@@ -340,6 +340,8 @@ struct ServerClient {
         var maxWind: Double?
         /// Yhteinen kuvaus (wiki).
         var description: String?
+        /// exact | coarse (muille pyöristetty sijainti).
+        var precision: String?
         var updatedAt: String
         var commentCount: Int
         /// Oma (tili tai sidottu laite) — palvelin päättää.
@@ -397,11 +399,11 @@ struct ServerClient {
     func updatePublicSpot(_ spot: PublicSpot) async -> PublicSpot? {
         struct Upload: Codable {
             var name: String; var latitude: Double; var longitude: Double; var waterType: String; var sports: [String]
-            var goodDirections: [Int]?; var minWind: Double?; var maxWind: Double?; var description: String?; var ownerKey: String
+            var goodDirections: [Int]?; var minWind: Double?; var maxWind: Double?; var description: String?; var precision: String?; var ownerKey: String
         }
         let upload = Upload(name: spot.name, latitude: spot.latitude, longitude: spot.longitude, waterType: spot.waterType,
                             sports: spot.sports, goodDirections: spot.goodDirections, minWind: spot.minWind, maxWind: spot.maxWind,
-                            description: spot.description, ownerKey: ServerSettings.deviceKey)
+                            description: spot.description, precision: spot.precision, ownerKey: ServerSettings.deviceKey)
         guard let body = try? JSONEncoder().encode(upload),
               let request = communityRequest(path: "api/public/spots/\(spot.id)", method: "PUT", body: body),
               let (_, response) = try? await URLSession.shared.data(for: request),
@@ -530,12 +532,16 @@ struct ServerClient {
             var goodDirections: [Int]?
             var minWind: Double?
             var maxWind: Double?
+            var description: String?
+            var precision: String
             var ownerKey: String
         }
         let upload = Upload(
             name: spot.name, latitude: spot.latitude, longitude: spot.longitude,
             waterType: spot.waterType.rawValue, sports: spot.sports.map(\.rawValue),
             goodDirections: spot.goodDirections, minWind: spot.minWind, maxWind: spot.maxWind,
+            description: spot.notes.isEmpty ? nil : spot.notes,
+            precision: spot.coarseLocation == true ? "coarse" : "exact",
             ownerKey: ServerSettings.deviceKey
         )
         guard let body = try? JSONEncoder().encode(upload),

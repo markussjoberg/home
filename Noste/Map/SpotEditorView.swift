@@ -94,15 +94,14 @@ struct SpotEditorView: View {
                 }
 
                 Section {
-                    Picker("Näkyvyys", selection: publicBinding) {
-                        Text("Secret spot").tag(false)
-                        Text("Julkinen").tag(true)
+                    Picker("Näkyvyys", selection: visibilityBinding) {
+                        Text("Secret").tag(Visibility.secret)
+                        Text("Julkinen").tag(Visibility.publicExact)
+                        Text("Karkea").tag(Visibility.publicCoarse)
                     }
                     .pickerStyle(.segmented)
                 } footer: {
-                    Text(draft.isPublic == true
-                         ? "Julkinen spotti näkyy kaikille Nosten käyttäjille kartalla, ja muut voivat jakaa kokemuksiaan siitä."
-                         : "Secret spot näkyy vain sinulle. 🤫")
+                    Text(visibilityFooter)
                 }
 
                 Section("Muistiinpanot") {
@@ -182,11 +181,31 @@ struct SpotEditorView: View {
         }
     }
 
-    private var publicBinding: Binding<Bool> {
+    private enum Visibility: Hashable { case secret, publicExact, publicCoarse }
+
+    /// Julkinen spotti on yhteinen — kerrotaan se jo valinnassa, ei vasta poistossa.
+    private var visibilityBinding: Binding<Visibility> {
         Binding(
-            get: { draft.isPublic ?? false },
-            set: { draft.isPublic = $0 ? true : nil }
+            get: {
+                guard draft.isPublic == true else { return .secret }
+                return draft.coarseLocation == true ? .publicCoarse : .publicExact
+            },
+            set: { value in
+                draft.isPublic = value == .secret ? nil : true
+                draft.coarseLocation = value == .publicCoarse ? true : nil
+            }
         )
+    }
+
+    private var visibilityFooter: String {
+        switch visibilityBinding.wrappedValue {
+        case .secret:
+            return "Secret spot näkyy vain sinulle. 🤫"
+        case .publicExact:
+            return "Julkinen spotti on yhteinen: se näkyy kaikille kartalla, muut voivat kommentoida ja täydentää tietoja, ja muistiinpanosi lähtevät kuvaukseksi. Kun muut ovat lisänneet sisältöä, poisto etenee ehdotuksena."
+        case .publicCoarse:
+            return "Kuten julkinen, mutta muille näytetään sijainti noin kilometrin tarkkuudella — ranta löytyy, launch-paikka ei. Sinä näet tarkan."
+        }
     }
 
     private func loadAlert() {

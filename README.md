@@ -72,11 +72,22 @@ kaikille ennustetunneille (kartan tuulipartikkelit ja aaltokenttä) ·
 `/api/spotmeta?lat&lon` maastoanalyysi (avoimuus + fetch ilmansuunnittain) ·
 `/api/places?lat&lon` rantainfo (OSM + Lipas) ·
 `/api/tiles/{terrain,marine,aerial}/{z}/{x}/{y}.png` tiilet ·
-`/api/shop/catalog` Lappis-katalogi · `/api/public/spots`, `/api/public/spots/:id/comments`
-yhteisön spotit ja kommentit · `/api/spots`, `/api/sessions` synkka ·
-`/api/alerts`, `/api/alerts/matches` kelivahti · `/healthz`.
+`/api/shop/catalog` Lappis-katalogi · yhteisö: `/api/public/spots` (listaus,
+PUT/DELETE — poisto etenee ehdotuksena jos muiden sisältöä), `/:id/comments`,
+`/:id/history` + `/:revisionId/restore`, `/:id/deletion{,/object,/cancel}`,
+`/api/public/reports` · tili: `/api/auth/apple`, `/api/auth/logout`, `/api/me`,
+`/api/me/content`, `/api/me/notifications` · admin (täysi token): `/api/reports`
+· `/api/spots`, `/api/sessions{,/:id}` synkka · `/api/alerts`,
+`/api/alerts/matches` kelivahti · `/healthz`.
 
-Kehitys: `pnpm install && pnpm test && pnpm dev` (85 testiä, vitest).
+Yhteisön säännöt: julkinen spotti on yhteinen. Nimimerkillä kirjautunut voi
+täydentää kuvausta, lajeja, suuntia ja rajoja (versiohistoria, palautus);
+nimen ja sijainnin muuttaa vain lisääjä. Poisto on heti mahdollinen vain
+spotille ilman muiden sisältöä, muuten 7 vrk ehdotus jonka osallistunut voi
+vastustaa. Poistot ovat pehmeitä. `precision: coarse` näyttää sijainnin
+muille ~1 km tarkkuudella.
+
+Kehitys: `pnpm install && pnpm test && pnpm dev` (96 testiä, vitest).
 
 ## Kartat
 
