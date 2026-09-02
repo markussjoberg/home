@@ -157,6 +157,12 @@ private struct AccountSection: View {
                     .disabled(saving || nicknameDraft.trimmingCharacters(in: .whitespaces).count < 3)
                 }
                 NavigationLink {
+                    NotificationsView()
+                } label: {
+                    Label("Ilmoitukset", systemImage: "bell")
+                        .badge(account.unreadNotifications)
+                }
+                NavigationLink {
                     MyContentView()
                 } label: {
                     Label("Omat julkaisut", systemImage: "square.and.pencil")

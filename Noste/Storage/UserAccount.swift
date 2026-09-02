@@ -20,6 +20,8 @@ final class UserAccount: ObservableObject {
 
     @Published private(set) var user: User?
     @Published var lastError: String?
+    /// Lukemattomat ilmoitukset (päivittyy refreshissä).
+    @Published private(set) var unreadNotifications = 0
 
     private static let tokenKey = "userToken"
     private static let userKey = "userAccount"
@@ -71,7 +73,9 @@ final class UserAccount: ObservableObject {
     func refresh() async {
         guard token != nil else { return }
         switch await ServerClient.shared.me() {
-        case .success(let fresh): store(user: fresh)
+        case .success(let fresh):
+            store(user: fresh)
+            unreadNotifications = await ServerClient.shared.unreadNotifications() ?? unreadNotifications
         case .unauthorized: signOutLocally()
         case .unavailable: break
         }
@@ -86,6 +90,7 @@ final class UserAccount: ObservableObject {
         KeychainStore.delete(Self.tokenKey)
         UserDefaults.standard.removeObject(forKey: Self.userKey)
         user = nil
+        unreadNotifications = 0
     }
 
     private func store(user: User) {

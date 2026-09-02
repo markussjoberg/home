@@ -439,6 +439,40 @@ struct ServerClient {
         var comments: [MyComment]
     }
 
+    struct Notification: Codable, Identifiable {
+        var id: Int
+        var kind: String
+        var spotId: String
+        var spotName: String
+        var message: String
+        var createdAt: String
+        var read: Bool
+    }
+
+    func notifications() async -> [Notification]? {
+        struct Reply: Codable { var notifications: [Notification] }
+        guard let request = request(path: "api/me/notifications"),
+              let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200
+        else { return nil }
+        return (try? JSONDecoder().decode(Reply.self, from: data))?.notifications
+    }
+
+    /// Lukemattomien määrä tilin merkkiin.
+    func unreadNotifications() async -> Int? {
+        struct Reply: Codable { var unread: Int }
+        guard let request = request(path: "api/me/notifications"),
+              let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200
+        else { return nil }
+        return (try? JSONDecoder().decode(Reply.self, from: data))?.unread
+    }
+
+    func markNotificationsRead() async {
+        guard let request = communityRequest(path: "api/me/notifications/read", method: "POST", body: Data("{}".utf8)) else { return }
+        _ = try? await URLSession.shared.data(for: request)
+    }
+
     /// Tilin julkaistut spotit ja kommentit (vaatii kirjautumisen).
     func myContent() async -> MyContent? {
         guard let request = request(path: "api/me/content"),
