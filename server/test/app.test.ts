@@ -271,6 +271,38 @@ describe("app", () => {
     expect((await app.request("/api/seastate?bbox=24,59,26", client)).status).toBe(400);
   });
 
+  it("sessiot tallentuvat tiedosto per sessio, listaus kevyt, haku id:llä", async () => {
+    const session = (id: string, start: string) => JSON.stringify({
+      id, startDate: start, sport: "wingFoil", summary: { duration: 10 }, track: [{ t: 0 }], motion: "AAAA",
+    });
+    expect((await app.request("/api/sessions", { method: "POST", ...auth, body: session("a1", "2026-08-20T10:00:00Z") })).status).toBe(200);
+    expect((await app.request("/api/sessions", { method: "POST", ...auth, body: session("b2", "2026-08-21T10:00:00Z") })).status).toBe(200);
+    expect((await app.request("/api/sessions", { method: "POST", ...auth, body: session("../x", "2026-08-21T10:00:00Z") })).status).toBe(400);
+    const list = await (await app.request("/api/sessions", auth)).json() as Record<string, unknown>[];
+    expect(list.map((s) => s.id)).toEqual(["b2", "a1"]);
+    expect(list[0]).not.toHaveProperty("track");
+    expect(list[0]).not.toHaveProperty("motion");
+    const one = await (await app.request("/api/sessions/a1", auth)).json() as Record<string, unknown>;
+    expect(one.track).toEqual([{ t: 0 }]);
+    expect((await app.request("/api/sessions/none", auth)).status).toBe(404);
+  });
+
+  it("samanaikaiset yhteisölisäykset säilyvät molemmat", async () => {
+    const client = { headers: { authorization: "Bearer client", "content-type": "application/json" } };
+    const spot = (name: string) => JSON.stringify({
+      name, latitude: 60.1, longitude: 24.9, waterType: "sea", ownerKey: `owner-${name}`,
+    });
+    const responses = await Promise.all([
+      app.request("/api/public/spots/p1", { method: "PUT", ...client, body: spot("Eka") }),
+      app.request("/api/public/spots/p2", { method: "PUT", ...client, body: spot("Toka") }),
+      app.request("/api/public/spots/p3", { method: "PUT", ...client, body: spot("Kolmas") }),
+    ]);
+    expect(responses.map((r) => r.status)).toEqual([200, 200, 200]);
+    const list = await (await app.request("/api/public/spots", client)).json() as { spots?: unknown[] } | unknown[];
+    const spots = Array.isArray(list) ? list : (list.spots ?? []);
+    expect(spots).toHaveLength(3);
+  });
+
   it("ntfy-ilmoitus lähtee kerran per ikkuna", async () => {
     await app.request("/api/spots", {
       method: "PUT",

@@ -40,7 +40,11 @@ Foililla ajo tunnistetaan kahdesta signaalista:
   pumppi ~8 km/h), kosketukseen pudotaan alemmalla kynnyksellä (hystereesi, ettei
   raja-arvon ympärillä värähtely pilko lentoa).
 - **Tärinä** (kiihtyvyysanturi): foililla ajo on *sileää*, runkokosketus ja läpsyminen
-  näkyy korkeataajuisena kohinana. Kiihtyvyyden liukuva varianssi erottaa nämä.
+  näkyy korkeataajuisena kohinana. Kiihtyvyyden liukuva varianssi lasketaan ja
+  talletetaan, mutta **porttina se ei ole vielä käytössä** (`maxTakeoffRoughness`
+  on oletuksena pois): kynnys kalibroidaan raakadataexporteista kenttädatalla ennen
+  kuin sen annetaan pilkkoa foiliaikaa. Tuotannossa tunnistus on toistaiseksi
+  pelkkä nopeushystereesi.
 
 Tuloksena per sessio: **foiliaika yhteensä ja %-osuus, lentojen määrä, pisin lento
 (aika ja matka), keskinopeus foililla**.

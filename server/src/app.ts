@@ -39,14 +39,14 @@ export interface SpotSync {
 /** Johtaa hälytyksen spotin tuuli-ikkunasta (sama logiikka kuin appin puolella). */
 export function alertFromSpot(spot: SpotSync | null | undefined): Alert | null {
   if (!spot || typeof spot !== "object" || !spot.alertEnabled) return null;
-  if (spot.minWind === undefined && spot.maxWind === undefined && !spot.goodDirections?.length) {
-    return null; // ei ikkunaa jota vahtia
-  }
+  // Minimituuli vaaditaan: pelkkä suunta osuisi myös 1 m/s:n tyveneen ja
+  // hälyttäisi käytännössä joka kierroksella.
+  if (spot.minWind === undefined || spot.minWind === null) return null;
   return {
     id: `spot-${spot.id}`,
     spotId: spot.id,
     spotName: spot.name,
-    minWind: spot.minWind ?? 0,
+    minWind: spot.minWind,
     maxWind: spot.maxWind,
     goodDirections: spot.goodDirections,
     minHours: 2,
@@ -360,32 +360,42 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
     const spot = parsePublicSpot(body, id, ownerHash, now());
     if (!spot) return c.json({ error: "kelvoton spotti" }, 400);
 
-    const spots = await store.read<PublicSpot[]>("public-spots", []);
-    const existing = spots.find((s) => s.id === id);
     const fullToken = (c.req.header("authorization") ?? "").includes(config.apiToken);
-    if (existing && existing.ownerHash !== ownerHash && !fullToken) {
-      return c.json({ error: "vain lisääjä voi muokata" }, 403);
-    }
-    if (!existing && spots.length >= MAX_PUBLIC_SPOTS) {
-      return c.json({ error: "spottipooli täynnä" }, 507);
-    }
-    const updated = spots.filter((s) => s.id !== id);
-    updated.push(spot);
-    await store.write("public-spots", updated);
+    // Luku-muokkaus-kirjoitus lukon takana: kaksi samanaikaista lisäystä eivät
+    // hävitä toisiaan.
+    const outcome = { verdict: "ok" as "ok" | "forbidden" | "full" };
+    await store.update<PublicSpot[]>("public-spots", [], (spots) => {
+      const existing = spots.find((s) => s.id === id);
+      if (existing && existing.ownerHash !== ownerHash && !fullToken) {
+        outcome.verdict = "forbidden";
+        return spots;
+      }
+      if (!existing && spots.length >= MAX_PUBLIC_SPOTS) {
+        outcome.verdict = "full";
+        return spots;
+      }
+      return [...spots.filter((s) => s.id !== id), spot];
+    });
+    if (outcome.verdict === "forbidden") return c.json({ error: "vain lisääjä voi muokata" }, 403);
+    if (outcome.verdict === "full") return c.json({ error: "spottipooli täynnä" }, 507);
     return c.json({ ok: true });
   });
 
   app.delete("/api/public/spots/:id", async (c) => {
     const id = cleanText(c.req.param("id"), 64);
     const ownerKey = cleanText(c.req.query("ownerKey"), 128);
-    const spots = await store.read<PublicSpot[]>("public-spots", []);
-    const existing = spots.find((s) => s.id === id);
-    if (!existing) return c.json({ ok: true });
     const fullToken = (c.req.header("authorization") ?? "").includes(config.apiToken);
-    if (existing.ownerHash !== hashOwnerKey(ownerKey) && !fullToken) {
-      return c.json({ error: "vain lisääjä voi poistaa" }, 403);
-    }
-    await store.write("public-spots", spots.filter((s) => s.id !== id));
+    const outcome = { forbidden: false };
+    await store.update<PublicSpot[]>("public-spots", [], (spots) => {
+      const existing = spots.find((s) => s.id === id);
+      if (!existing) return spots;
+      if (existing.ownerHash !== hashOwnerKey(ownerKey) && !fullToken) {
+        outcome.forbidden = true;
+        return spots;
+      }
+      return spots.filter((s) => s.id !== id);
+    });
+    if (outcome.forbidden) return c.json({ error: "vain lisääjä voi poistaa" }, 403);
     return c.json({ ok: true });
   });
 
@@ -403,13 +413,15 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
     const body = await c.req.json().catch(() => null);
     const comment = parseComment(body, id, now());
     if (!comment) return c.json({ error: "nimimerkki ja teksti vaaditaan" }, 400);
-    const comments = await store.read<SpotComment[]>("spot-comments", []);
-    const forSpot = comments.filter((existing) => existing.spotId === id);
-    if (forSpot.length >= MAX_COMMENTS_PER_SPOT) {
-      return c.json({ error: "kommentit täynnä" }, 507);
-    }
-    comments.push(comment);
-    await store.write("spot-comments", comments);
+    const outcome = { full: false };
+    await store.update<SpotComment[]>("spot-comments", [], (comments) => {
+      if (comments.filter((existing) => existing.spotId === id).length >= MAX_COMMENTS_PER_SPOT) {
+        outcome.full = true;
+        return comments;
+      }
+      return [...comments, comment];
+    });
+    if (outcome.full) return c.json({ error: "kommentit täynnä" }, 507);
     return c.json({ comment });
   });
 
@@ -460,16 +472,49 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date() }:
     return c.json({ ok: true, count: body.length });
   });
 
+  // Sessiot yksi per tiedosto (sessions/<id>.json): jälki + kiihtyvyysraakadata
+  // ovat isoja, eikä koko arkistoa lueta ja kirjoiteta joka uploadilla.
+  const SESSION_ID = /^[A-Za-z0-9-]{1,64}$/;
+  let sessionsMigrated: Promise<void> | null = null;
+  const migrateSessions = () => {
+    sessionsMigrated ??= (async () => {
+      const legacy = await store.read<SessionSync[] | null>("sessions", null);
+      if (!legacy) return;
+      for (const session of legacy) {
+        if (SESSION_ID.test(session.id)) await store.write(`sessions/${session.id}`, session);
+      }
+      await store.remove("sessions");
+    })();
+    return sessionsMigrated;
+  };
+
   app.get("/api/sessions", async (c) => {
-    const sessions = await store.read<SessionSync[]>("sessions", []);
-    // Kevyt listaus ilman raakajälkiä.
-    return c.json(sessions.map(({ track, ...rest }) => rest));
+    await migrateSessions();
+    const ids = await store.list("sessions");
+    const sessions = await Promise.all(ids.map((id) => store.read<SessionSync | null>(`sessions/${id}`, null)));
+    // Kevyt listaus: ilman jälkeä ja raakadataa.
+    const light = sessions
+      .filter((s): s is SessionSync => s !== null)
+      .map(({ track, motion, ...rest }) => rest)
+      .sort((a, b) => (a.startDate < b.startDate ? 1 : -1));
+    return c.json(light);
+  });
+
+  app.get("/api/sessions/:id", async (c) => {
+    await migrateSessions();
+    const id = c.req.param("id");
+    if (!SESSION_ID.test(id)) return c.json({ error: "kelvoton id" }, 400);
+    const session = await store.read<SessionSync | null>(`sessions/${id}`, null);
+    if (!session) return c.json({ error: "sessiota ei ole" }, 404);
+    return c.json(session);
   });
 
   app.post("/api/sessions", async (c) => {
+    await migrateSessions();
     const body = await readJson<SessionSync>(c);
     if (!body?.id || !body?.startDate) return c.json({ error: "id ja startDate vaaditaan" }, 400);
-    await store.upsertById("sessions", [body]);
+    if (!SESSION_ID.test(body.id)) return c.json({ error: "kelvoton id" }, 400);
+    await store.write(`sessions/${body.id}`, body);
     return c.json({ ok: true });
   });
 
