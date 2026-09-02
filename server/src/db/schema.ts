@@ -109,3 +109,16 @@ export const reports = pgTable("reports", {
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
   resolution: text("resolution"),
 });
+
+/** Käyttäjän ilmoitukset appiin (ei pushia): poistoehdotus, uusi kommentti omaan spottiin. */
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  /** deletion_proposed | comment | deletion_executed */
+  kind: text("kind").notNull(),
+  spotId: text("spot_id").notNull(),
+  spotName: text("spot_name").notNull(),
+  message: text("message").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  readAt: timestamp("read_at", { withTimezone: true }),
+});

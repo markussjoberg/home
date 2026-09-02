@@ -19,6 +19,7 @@ import {
   cancelDeletion, commentsByUser, deleteComment, executeDueDeletions, fileReport, hasOthersContent, isContributor,
   objectDeletion, openProposal, openProposals, openReports, proposeDeletion, resolveReport,
 } from "./governance.js";
+import { listNotifications, markRead, notify, stakeholders } from "./notifications.js";
 import { type WaveFieldSeries, expandWaveBBox, fetchWaveField } from "./wavefield.js";
 import { fetchLipasPlaces, fetchOsmPlaces, nearestPerCategory, type Place } from "./places.js";
 import { LipasMirror, lipasNearby } from "./lipas.js";
@@ -470,7 +471,15 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
     // Wikimäinen sääntö: jos muut ovat lisänneet sisältöä, poisto etenee
     // ehdotuksena ja toteutuu määräajan jälkeen ellei kukaan vastusta.
     if (!fullToken && (await hasOthersContent(db, existing))) {
+      const before = await openProposal(db, id);
       const proposal = await proposeDeletion(db, id, ownerHash ?? "", user?.id ?? null, now());
+      if (!before) {
+        const when = new Intl.DateTimeFormat("fi-FI", { timeZone: "Europe/Helsinki", day: "numeric", month: "numeric" }).format(new Date(proposal.decidesAt));
+        await notify(db, await stakeholders(db, existing), {
+          kind: "deletion_proposed", spot: existing, now: now(), exclude: user?.id,
+          message: `Spotille ${existing.name} on tehty poistoehdotus. Se toteutuu ${when}, ellei kukaan osallistunut vastusta.`,
+        });
+      }
       return c.json({ ok: false, proposal }, 202);
     }
     await deleteSpot(db, id, now());
@@ -548,6 +557,23 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
     return c.json({ ok: true });
   });
 
+  /** Ilmoitukset tilille; unread-määrä mukana. */
+  app.get("/api/me/notifications", async (c) => {
+    const user = await currentUser(c);
+    if (!user) return c.json({ error: "ei kirjautunut" }, 401);
+    const items = await listNotifications(db, user.id);
+    return c.json({ notifications: items, unread: items.filter((n) => !n.read).length });
+  });
+
+  app.post("/api/me/notifications/read", async (c) => {
+    const user = await currentUser(c);
+    if (!user) return c.json({ error: "ei kirjautunut" }, 401);
+    const body = await readJson<{ ids?: unknown }>(c);
+    const ids = Array.isArray(body?.ids) ? body.ids.map(Number).filter(Number.isInteger) : "all";
+    await markRead(db, user.id, ids, now());
+    return c.json({ ok: true });
+  });
+
   /** Oma sisältö: julkaistut spotit (tili tai sidotut laitteet) ja kommentit. */
   app.get("/api/me/content", async (c) => {
     await communityReady;
@@ -618,6 +644,13 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
       return c.json({ error: "kommentit täynnä" }, 507);
     }
     await addComment(db, comment, user?.id ?? null);
+    const target = await getSpot(db, id);
+    if (target) {
+      await notify(db, await stakeholders(db, target), {
+        kind: "comment", spot: target, now: now(), exclude: user?.id,
+        message: `${comment.author} kommentoi spottia ${target.name}: ${comment.text.slice(0, 80)}`,
+      });
+    }
     return c.json({ comment });
   });
 

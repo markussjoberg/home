@@ -197,4 +197,28 @@ describe("tunnukset", () => {
     expect(after.spots[0].description).toBeUndefined();
     expect((await (await app.request("/api/public/spots/w1/history", client)).json()).revisions).toHaveLength(3);
   });
+
+  it("ilmoitukset: kommentti omistajalle, poistoehdotus osallistuneille, luetuksi merkintä", async () => {
+    const owner = await signIn("owner", "laite-O");
+    await app.request("/api/public/spots/n1", { method: "PUT", ...asUser(owner.token), body: spot("laite-O", "Ilmoitusranta") });
+    const other = await signIn("other");
+    await app.request("/api/me", { method: "PUT", ...asUser(other.token), body: JSON.stringify({ nickname: "Toinen" }) });
+    await app.request("/api/public/spots/n1/comments", { method: "POST", ...asUser(other.token), body: JSON.stringify({ text: "Toimii" }) });
+
+    let mine = await (await app.request("/api/me/notifications", asUser(owner.token))).json();
+    expect(mine.unread).toBe(1);
+    expect(mine.notifications[0]).toMatchObject({ kind: "comment", spotId: "n1" });
+    // Kommentoija ei saa ilmoitusta omasta kommentistaan.
+    expect((await (await app.request("/api/me/notifications", asUser(other.token))).json()).unread).toBe(0);
+
+    // Poistoehdotus → kommentoinut saa ilmoituksen, ehdottaja ei.
+    await app.request("/api/public/spots/n1?ownerKey=laite-O", { method: "DELETE", ...asUser(owner.token) });
+    const theirs = await (await app.request("/api/me/notifications", asUser(other.token))).json();
+    expect(theirs.unread).toBe(1);
+    expect(theirs.notifications[0].kind).toBe("deletion_proposed");
+
+    await app.request("/api/me/notifications/read", { method: "POST", ...asUser(owner.token), body: "{}" });
+    mine = await (await app.request("/api/me/notifications", asUser(owner.token))).json();
+    expect(mine.unread).toBe(0);
+  });
 });
