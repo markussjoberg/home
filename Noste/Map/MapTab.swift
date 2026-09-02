@@ -331,13 +331,11 @@ struct MapTab: View {
 
                 VStack(spacing: 8) {
                     if let spot = selectedSpot {
+                        // Pikakortti: napautus avaa spotin sää- ja infosivun, jonka
+                        // takana muokkaus on.
                         SpotCard(
                             spot: spot,
-                            onForecast: { forecastPoint = spot },
-                            onEdit: {
-                                editingSpot = spot
-                                selectedSpot = nil
-                            },
+                            onOpen: { forecastPoint = spot },
                             onClose: { selectedSpot = nil }
                         )
                     }
@@ -555,6 +553,16 @@ struct MapTab: View {
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
                                 Button("Sulje") { forecastPoint = nil }
+                            }
+                            // Oman spotin asetukset ovat sääsivun takana, eivät kartalla.
+                            if spots.contains(where: { $0.id == point.id }) {
+                                ToolbarItem(placement: .primaryAction) {
+                                    Button("Muokkaa") {
+                                        forecastPoint = nil
+                                        selectedSpot = nil
+                                        editingSpot = point
+                                    }
+                                }
                             }
                         }
                 }

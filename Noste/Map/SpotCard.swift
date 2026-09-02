@@ -1,17 +1,36 @@
 import SwiftUI
 import NosteCore
 
-/// Oman spotin kortti kartalla: napautus näyttää spotin ja ennusteen, muokkaus
-/// on oman napin takana — editori ei aukea vahingossa.
+/// Oman spotin pikakortti kartalla: napautus avaa spotin sää- ja infosivun,
+/// jonka takana muokkaus on — editori ei aukea vahingossa.
 struct SpotCard: View {
     let spot: SpotData
-    var onForecast: () -> Void
-    var onEdit: () -> Void
+    var onOpen: () -> Void
     var onClose: () -> Void
 
     private static let compassNames = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 
     var body: some View {
+        HStack(spacing: 12) {
+            Button(action: onOpen) {
+                cardBody
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(spot.name.isEmpty ? "Nimetön spotti" : spot.name), avaa sää ja tiedot")
+
+            Button(action: onClose) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityLabel("Sulje")
+        }
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .padding(.horizontal)
+    }
+
+    private var cardBody: some View {
         HStack(spacing: 12) {
             if let exposure = spot.exposureByOctant, exposure.count == 8 {
                 ExposureRoseGlyph(exposure: exposure, diameter: 40)
@@ -36,30 +55,11 @@ struct SpotCard: View {
 
             Spacer()
 
-            Button(action: onForecast) {
-                Image(systemName: "wind.circle.fill")
-                    .font(.title)
-                    .foregroundStyle(.cyan)
-            }
-            .accessibilityLabel("Näytä ennuste")
-
-            Button(action: onEdit) {
-                Image(systemName: "pencil.circle.fill")
-                    .font(.title)
-                    .foregroundStyle(.orange)
-            }
-            .accessibilityLabel("Muokkaa spottia")
-
-            Button(action: onClose) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title)
-                    .foregroundStyle(.secondary)
-            }
-            .accessibilityLabel("Sulje")
+            Image(systemName: "chevron.right")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
-        .padding(12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .padding(.horizontal)
+        .contentShape(Rectangle())
     }
 
     /// Spotin yleistieto: vesistö, toimivat suunnat ja voimakkuusrajat.
