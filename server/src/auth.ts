@@ -105,6 +105,28 @@ export async function setNickname(db: Db, userId: string, nickname: string): Pro
   return row ? toUser(row) : null;
 }
 
+/**
+ * Tilin poisto (App Store vaatii): tunniste, istunnot, laitesidonnat, omat
+ * spotit ja hälytykset poistetaan; ilmoitukset poistetaan. Yhteisösisältö
+ * (julkaistut spotit, kommentit, versiot) jää wikimäisesti mutta irrotetaan
+ * tilistä — kommentin kirjoittajaksi jää nimimerkki, jota ei enää voi
+ * yhdistää kenenkään tunnukseen.
+ */
+export async function deleteAccount(db: Db, userId: string): Promise<void> {
+  const { notifications, publicSpots, spotComments, spotRevisions, userAlerts, userSpots } = await import("./db/schema.js");
+  await db.transaction(async (tx) => {
+    await tx.delete(userTokens).where(eq(userTokens.userId, userId));
+    await tx.delete(userDevices).where(eq(userDevices.userId, userId));
+    await tx.delete(userSpots).where(eq(userSpots.userId, userId));
+    await tx.delete(userAlerts).where(eq(userAlerts.userId, userId));
+    await tx.delete(notifications).where(eq(notifications.userId, userId));
+    await tx.update(publicSpots).set({ ownerUserId: null }).where(eq(publicSpots.ownerUserId, userId));
+    await tx.update(spotComments).set({ userId: null }).where(eq(spotComments.userId, userId));
+    await tx.update(spotRevisions).set({ editorUserId: null }).where(eq(spotRevisions.editorUserId, userId));
+    await tx.delete(users).where(eq(users.id, userId));
+  });
+}
+
 export async function deviceHashes(db: Db, userId: string): Promise<string[]> {
   const rows = await db.select({ ownerHash: userDevices.ownerHash }).from(userDevices).where(eq(userDevices.userId, userId));
   return rows.map((r) => r.ownerHash);

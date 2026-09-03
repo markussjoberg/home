@@ -260,4 +260,24 @@ describe("tunnukset", () => {
   it("sessioreittejä ei ole — GPS ja terveysdata pysyvät puhelimessa", async () => {
     expect((await app.request("/api/sessions", { headers: { authorization: "Bearer secret" } })).status).toBe(404);
   });
+
+  it("tilin poisto: tunnus, istunto, sidonnat ja omat tiedot poistuvat, yhteisösisältö irtoaa", async () => {
+    const { token } = await signIn("gone", "laite-G");
+    await app.request("/api/me", { method: "PUT", ...asUser(token), body: JSON.stringify({ nickname: "Poistuja" }) });
+    await app.request("/api/public/spots/g1", { method: "PUT", ...asUser(token), body: spot("laite-G") });
+    await app.request("/api/public/spots/g1/comments", { method: "POST", ...asUser(token), body: JSON.stringify({ text: "Hei" }) });
+    await app.request("/api/me/spots", { method: "PUT", ...asUser(token), body: JSON.stringify([{ id: "s1", latitude: 60, longitude: 24 }]) });
+
+    expect((await app.request("/api/me", { method: "DELETE", ...asUser(token) })).status).toBe(200);
+    expect((await app.request("/api/me", asUser(token))).status).toBe(401);
+    // Julkinen spotti ja kommentti jäävät, mutta eivät kuulu enää kenellekään.
+    const list = await (await app.request("/api/public/spots", client)).json();
+    expect(list.spots).toHaveLength(1);
+    const comments = await (await app.request("/api/public/spots/g1/comments", client)).json();
+    expect(comments.comments[0]).toMatchObject({ author: "Poistuja" });
+    expect(comments.comments[0].userId).toBeUndefined();
+    // Sama Apple-tunnus voi luoda tilin uudelleen puhtaalta pöydältä.
+    const again = await signIn("gone");
+    expect(again.user.nickname).toBeNull();
+  });
 });

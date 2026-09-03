@@ -8,7 +8,7 @@ import { type WindFieldSeries, fetchWindField } from "./windfield.js";
 import { parseBBox, roundBBox } from "./bbox.js";
 import type { Db } from "./db/index.js";
 import {
-  type IdentityVerifier, type User, appleIdentityVerifier, deviceHashes, linkDevice, nicknameTaken,
+  type IdentityVerifier, type User, appleIdentityVerifier, deleteAccount, deviceHashes, linkDevice, nicknameTaken,
   normalizeNickname, revokeToken, setNickname, signIn, userForToken,
 } from "./auth.js";
 import {
@@ -369,6 +369,14 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
     const ownerKey = cleanText(body?.ownerKey, 128);
     if (ownerKey) await linkDevice(db, user.id, hashOwnerKey(ownerKey), now());
     return c.json({ user: await setNickname(db, user.id, nickname) });
+  });
+
+  /** Tilin poisto (App Store 5.1.1: tilin voi poistaa appista). */
+  app.delete("/api/me", async (c) => {
+    const user = await currentUser(c);
+    if (!user) return c.json({ error: "ei kirjautunut" }, 401);
+    await deleteAccount(db, user.id);
+    return c.json({ ok: true });
   });
 
   app.post("/api/auth/logout", async (c) => {
