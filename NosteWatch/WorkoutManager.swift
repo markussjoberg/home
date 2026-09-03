@@ -204,6 +204,8 @@ final class WorkoutManager: NSObject, ObservableObject {
         if diveCount > 0 {
             result.dives = DiveAnalysis(count: diveCount, totalTime: diveTime, maxDepth: maxDepth)
         }
+        // Kesto kelloajasta (paussit pois) — sama luku kuin näytöllä, myös ilman GPS-pisteitä.
+        result.duration = max(result.duration, Date().timeIntervalSince(startDate) - pausedTotal)
         summary = result
 
         // Applen järjestys: session.end() → delegaatti (.ended) → endCollection →

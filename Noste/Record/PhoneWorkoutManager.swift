@@ -73,6 +73,14 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
         }
     }
 
+    /// Sijaintilupa kysytään jo lajivalikossa, ei tallennuksen alettua —
+    /// muuten ensimmäiset sekunnit tallentuvat ilman GPS:ää.
+    func requestLocationPermission() {
+        if locationManager.authorizationStatus == .notDetermined {
+            locationManager.requestWhenInUseAuthorization()
+        }
+    }
+
     func start(sport: Sport) {
         guard phase == .idle else { return }
         self.sport = sport
@@ -137,10 +145,14 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
         motionLock.unlock()
 
         let segments = segmentTracker.snapshot(at: trackPoints.last?.t ?? 0)
-        summary = SessionAnalyzer.summarize(
+        var result = SessionAnalyzer.summarize(
             sport: sport, startDate: startDate, points: trackPoints, motion: motion,
             segments: segments.isEmpty ? nil : segments
         )
+        // Kesto kelloajasta (paussit pois), ei GPS-pisteistä: ilman GPS:ää tai
+        // pysähdyksissä pisteitä ei tule, mutta sessio kesti silti.
+        result.duration = max(result.duration, Date().timeIntervalSince(startDate) - pausedTotal)
+        summary = result
         trackForSummary = trackPoints
         motionForSummary = motion.isEmpty ? nil : MotionLog.pack(motion)
         SessionRecovery.clear()

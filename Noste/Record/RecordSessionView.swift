@@ -17,6 +17,7 @@ struct RecordSessionView: View {
                 switch workout.phase {
                 case .idle:
                     sportPicker
+                        .onAppear { workout.requestLocationPermission() }
                 case .running, .paused:
                     metrics
                 case .ended:
