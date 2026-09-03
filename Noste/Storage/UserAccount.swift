@@ -86,6 +86,16 @@ final class UserAccount: ObservableObject {
         signOutLocally()
     }
 
+    /// Poistaa tilin palvelimelta ja kirjaa ulos. Paikalliset spotit ja sessiot jäävät puhelimeen.
+    func deleteAccount() async -> Bool {
+        guard await ServerClient.shared.deleteAccount() else {
+            lastError = "Tilin poisto ei onnistunut. Yritä myöhemmin."
+            return false
+        }
+        signOutLocally()
+        return true
+    }
+
     private func signOutLocally() {
         KeychainStore.delete(Self.tokenKey)
         UserDefaults.standard.removeObject(forKey: Self.userKey)

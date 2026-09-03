@@ -128,6 +128,14 @@ struct ServerClient {
         return .failure(reply.error ?? "Nimimerkkiä ei voitu asettaa.")
     }
 
+    /// Tilin poisto palvelimelta (App Store vaatii). true = poistettu.
+    func deleteAccount() async -> Bool {
+        guard let request = communityRequest(path: "api/me", method: "DELETE"),
+              let (_, response) = try? await URLSession.shared.data(for: request)
+        else { return false }
+        return (response as? HTTPURLResponse)?.statusCode == 200
+    }
+
     func logout() async {
         guard let request = communityRequest(path: "api/auth/logout", method: "POST") else { return }
         _ = try? await URLSession.shared.data(for: request)

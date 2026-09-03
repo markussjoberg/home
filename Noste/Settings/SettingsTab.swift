@@ -133,6 +133,7 @@ private struct AccountSection: View {
     @Environment(\.modelContext) private var modelContext
     @State private var nicknameDraft = ""
     @State private var saving = false
+    @State private var confirmDelete = false
 
     var body: some View {
         Section {
@@ -168,9 +169,16 @@ private struct AccountSection: View {
                 } label: {
                     Label("Omat julkaisut", systemImage: "square.and.pencil")
                 }
-                Button("Kirjaudu ulos", role: .destructive) {
+                Button("Kirjaudu ulos") {
                     Task { await account.signOut() }
                 }
+                Button("Poista tili", role: .destructive) { confirmDelete = true }
+                    .confirmationDialog("Poistetaanko tili?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                        Button("Poista tili", role: .destructive) { Task { _ = await account.deleteAccount() } }
+                        Button("Peru", role: .cancel) {}
+                    } message: {
+                        Text("Tunnus, kirjautumiset, laitesidonnat, tilin spotit ja hälytykset poistetaan palvelimelta heti. Julkaisemasi spotit ja kommentit jäävät yhteisölle nimimerkin tekstinä, mutta niitä ei voi enää yhdistää sinuun. Puhelimen omat spotit ja sessiot säilyvät.")
+                    }
             } else {
                 SignInWithAppleButton(.signIn) { request in
                     request.requestedScopes = []
