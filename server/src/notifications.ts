@@ -6,6 +6,7 @@
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { Db } from "./db/index.js";
 import { notifications, spotComments, spotRevisions, userDevices } from "./db/schema.js";
+import { and as andAlso, eq as eqAlso } from "drizzle-orm";
 import type { PublicSpot } from "./public.js";
 
 /** Käyttäjät, joita spotti koskee: omistaja, laitteen kautta omistavat, kommentoineet, muokanneet. */
@@ -31,6 +32,20 @@ export async function notify(db: Db, userIds: Iterable<string>, input: {
   if (!rows.length) return 0;
   await db.insert(notifications).values(rows);
   return rows.length;
+}
+
+/** Yksittäinen ilmoitus dedup-avaimella: sama avain samalle käyttäjälle vain kerran. */
+export async function notifyOnce(db: Db, userId: string, input: {
+  kind: string; spotId: string; spotName: string; message: string; dedupKey: string; now: Date;
+}): Promise<boolean> {
+  const existing = await db.select({ id: notifications.id }).from(notifications)
+    .where(andAlso(eqAlso(notifications.userId, userId), eqAlso(notifications.dedupKey, input.dedupKey))).limit(1);
+  if (existing.length) return false;
+  await db.insert(notifications).values({
+    userId, kind: input.kind, spotId: input.spotId, spotName: input.spotName, message: input.message,
+    dedupKey: input.dedupKey, createdAt: input.now,
+  });
+  return true;
 }
 
 export async function listNotifications(db: Db, userId: string, limit = 50) {

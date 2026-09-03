@@ -3,7 +3,7 @@
  * ja kommentit. Poistot ovat pehmeitä (deleted_at) — wikimäinen kulttuuri tarvitsee
  * historian, ja moderaatio palautuksen.
  */
-import { doublePrecision, integer, jsonb, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { doublePrecision, integer, jsonb, pgTable, primaryKey, serial, text, timestamp } from "drizzle-orm/pg-core";
 
 export const publicSpots = pgTable("public_spots", {
   id: text("id").primaryKey(),
@@ -121,6 +121,26 @@ export const notifications = pgTable("notifications", {
   spotId: text("spot_id").notNull(),
   spotName: text("spot_name").notNull(),
   message: text("message").notNull(),
+  /** Estää saman asian toistumisen (esim. kelivahdin sama ikkuna). */
+  dedupKey: text("dedup_key"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   readAt: timestamp("read_at", { withTimezone: true }),
 });
+
+// --- Tilin synkka (spotit ja hälytykset; sessiot pysyvät puhelimessa) ---
+
+/** Käyttäjän omat spotit tilin alla: varmuuskopio + kelivahdin sijainnit. */
+export const userSpots = pgTable("user_spots", {
+  userId: text("user_id").notNull(),
+  spotId: text("spot_id").notNull(),
+  data: jsonb("data").$type<Record<string, unknown>>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+}, (t) => [primaryKey({ columns: [t.userId, t.spotId] })]);
+
+/** Käyttäjän kelivahtihälytykset tilin alla. */
+export const userAlerts = pgTable("user_alerts", {
+  userId: text("user_id").notNull(),
+  alertId: text("alert_id").notNull(),
+  data: jsonb("data").$type<Record<string, unknown>>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+}, (t) => [primaryKey({ columns: [t.userId, t.alertId] })]);

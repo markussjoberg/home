@@ -101,7 +101,6 @@ describe("app", () => {
     expect((await app.request("/api/observation?lat=60.1&lon=24.9", client)).status).not.toBe(401);
     // Yksityiset reitit (synkka, kelivahti) vaativat täyden tokenin.
     expect((await app.request("/api/spots", client)).status).toBe(401);
-    expect((await app.request("/api/sessions", client)).status).toBe(401);
     expect((await app.request("/api/alerts", client)).status).toBe(401);
   });
 
@@ -148,18 +147,6 @@ describe("app", () => {
     expect(put.status).toBe(200);
     const get = await app.request("/api/spots", auth);
     expect(await get.json()).toEqual(spots);
-  });
-
-  it("sessiolistaus pudottaa raakajäljen", async () => {
-    const post = await app.request("/api/sessions", {
-      method: "POST",
-      headers: { ...auth.headers, "content-type": "application/json" },
-      body: JSON.stringify({ id: "x1", startDate: "2026-08-21T07:00:00Z", sport: "pumpFoil", summary: { a: 1 }, track: [1, 2, 3] }),
-    });
-    expect(post.status).toBe(200);
-    const list = await (await app.request("/api/sessions", auth)).json();
-    expect(list).toHaveLength(1);
-    expect(list[0].track).toBeUndefined();
   });
 
   it("kelivahti löytää ikkunan spotin ennusteesta", async () => {
@@ -263,8 +250,6 @@ describe("app", () => {
       method: "PUT", ...auth, body: JSON.stringify([null, { id: 1, latitude: "x" }]),
     });
     expect(invalid.status).toBe(400);
-    const session = await app.request("/api/sessions", { method: "POST", ...auth, body: "[" });
-    expect(session.status).toBe(400);
   });
 
   it("bbox-reitit tarkistavat alueen", async () => {
@@ -272,22 +257,6 @@ describe("app", () => {
     expect((await app.request("/api/windfield?bbox=26,59,24,60", client)).status).toBe(400);
     expect((await app.request("/api/wavefield?bbox=0,0,50,50", client)).status).toBe(400);
     expect((await app.request("/api/seastate?bbox=24,59,26", client)).status).toBe(400);
-  });
-
-  it("sessiot tallentuvat tiedosto per sessio, listaus kevyt, haku id:llä", async () => {
-    const session = (id: string, start: string) => JSON.stringify({
-      id, startDate: start, sport: "wingFoil", summary: { duration: 10 }, track: [{ t: 0 }], motion: "AAAA",
-    });
-    expect((await app.request("/api/sessions", { method: "POST", ...auth, body: session("a1", "2026-08-20T10:00:00Z") })).status).toBe(200);
-    expect((await app.request("/api/sessions", { method: "POST", ...auth, body: session("b2", "2026-08-21T10:00:00Z") })).status).toBe(200);
-    expect((await app.request("/api/sessions", { method: "POST", ...auth, body: session("../x", "2026-08-21T10:00:00Z") })).status).toBe(400);
-    const list = await (await app.request("/api/sessions", auth)).json() as Record<string, unknown>[];
-    expect(list.map((s) => s.id)).toEqual(["b2", "a1"]);
-    expect(list[0]).not.toHaveProperty("track");
-    expect(list[0]).not.toHaveProperty("motion");
-    const one = await (await app.request("/api/sessions/a1", auth)).json() as Record<string, unknown>;
-    expect(one.track).toEqual([{ t: 0 }]);
-    expect((await app.request("/api/sessions/none", auth)).status).toBe(404);
   });
 
   it("samanaikaiset yhteisölisäykset säilyvät molemmat", async () => {

@@ -38,7 +38,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     port: Number(env.PORT ?? 8080),
     databaseUrl: env.DATABASE_URL ?? "",
-    appleAudiences: (env.APPLE_BUNDLE_IDS ?? "fi.markussjoberg.noste").split(",").map((s) => s.trim()).filter(Boolean),
+    appleAudiences: (env.APPLE_BUNDLE_IDS ?? "com.aihiolabs.noste,fi.markussjoberg.noste").split(",").map((s) => s.trim()).filter(Boolean),
     mmlApiKey: env.MML_API_KEY ?? "",
     marineTileTemplate: env.MARINE_TILE_TEMPLATE ?? DEFAULT_MARINE_TEMPLATE,
     apiToken: env.NOSTE_TOKEN ?? "",

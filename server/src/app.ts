@@ -19,7 +19,8 @@ import {
   cancelDeletion, commentsByUser, deleteComment, executeDueDeletions, fileReport, hasOthersContent, isContributor,
   objectDeletion, openProposal, openProposals, openReports, proposeDeletion, resolveReport,
 } from "./governance.js";
-import { listNotifications, markRead, notify, stakeholders } from "./notifications.js";
+import { listNotifications, markRead, notify, notifyOnce, stakeholders } from "./notifications.js";
+import { allUserAlerts, listUserAlerts, listUserSpots, replaceUserAlerts, replaceUserSpots } from "./sync.js";
 import { type WaveFieldSeries, expandWaveBBox, fetchWaveField } from "./wavefield.js";
 import { fetchLipasPlaces, fetchOsmPlaces, nearestPerCategory, type Place } from "./places.js";
 import { LipasMirror, lipasNearby } from "./lipas.js";
@@ -51,19 +52,6 @@ export interface SpotSync {
 }
 
 
-export interface SessionSync {
-  id: string;
-  startDate: string;
-  sport: string;
-  summary: unknown;
-  track?: unknown;
-  /** Tuuliarvosana 0–5 (0 = ei riittänyt). Uudelleenvienti samalla id:llä päivittää. */
-  rating?: number;
-  /** Session aikana vallinnut tuuli {speed, gust, direction}. */
-  wind?: unknown;
-  /** Kiihtyvyysraakadata (MotionLog-binääri base64:na) — kalibrointia varten. */
-  motion?: string;
-}
 
 export interface AppDeps {
   config: Config;
@@ -704,50 +692,47 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
     return c.json({ ok: true, count: body.length });
   });
 
-  // Sessiot yksi per tiedosto (sessions/<id>.json): jälki + kiihtyvyysraakadata
-  // ovat isoja, eikä koko arkistoa lueta ja kirjoiteta joka uploadilla.
-  const SESSION_ID = /^[A-Za-z0-9-]{1,64}$/;
-  let sessionsMigrated: Promise<void> | null = null;
-  const migrateSessions = () => {
-    sessionsMigrated ??= (async () => {
-      const legacy = await store.read<SessionSync[] | null>("sessions", null);
-      if (!legacy) return;
-      for (const session of legacy) {
-        if (SESSION_ID.test(session.id)) await store.write(`sessions/${session.id}`, session);
-      }
-      await store.remove("sessions");
-    })();
-    return sessionsMigrated;
-  };
+  // --- Tilin synkka: spotit ja hälytykset (sessiot pysyvät puhelimessa) ---
 
-  app.get("/api/sessions", async (c) => {
-    await migrateSessions();
-    const ids = await store.list("sessions");
-    const sessions = await Promise.all(ids.map((id) => store.read<SessionSync | null>(`sessions/${id}`, null)));
-    // Kevyt listaus: ilman jälkeä ja raakadataa.
-    const light = sessions
-      .filter((s): s is SessionSync => s !== null)
-      .map(({ track, motion, ...rest }) => rest)
-      .sort((a, b) => (a.startDate < b.startDate ? 1 : -1));
-    return c.json(light);
+  const SPOT_LIST_MAX = 500;
+  const validSpotList = (body: unknown): body is Record<string, unknown>[] =>
+    Array.isArray(body) && body.length <= SPOT_LIST_MAX && body.every(
+      (spot) => spot && typeof spot === "object" && typeof (spot as Record<string, unknown>).id === "string"
+        && Number.isFinite((spot as Record<string, unknown>).latitude) && Number.isFinite((spot as Record<string, unknown>).longitude),
+    );
+
+  app.get("/api/me/spots", async (c) => {
+    const user = await currentUser(c);
+    if (!user) return c.json({ error: "ei kirjautunut" }, 401);
+    return c.json({ spots: await listUserSpots(db, user.id) });
   });
 
-  app.get("/api/sessions/:id", async (c) => {
-    await migrateSessions();
-    const id = c.req.param("id");
-    if (!SESSION_ID.test(id)) return c.json({ error: "kelvoton id" }, 400);
-    const session = await store.read<SessionSync | null>(`sessions/${id}`, null);
-    if (!session) return c.json({ error: "sessiota ei ole" }, 404);
-    return c.json(session);
+  app.put("/api/me/spots", async (c) => {
+    const user = await currentUser(c);
+    if (!user) return c.json({ error: "ei kirjautunut" }, 401);
+    const body = await readJson<unknown>(c);
+    if (!validSpotList(body)) return c.json({ error: "odotettiin spottilistaa (id, latitude, longitude)" }, 400);
+    await replaceUserSpots(db, user.id, body, now());
+    return c.json({ ok: true, count: body.length });
   });
 
-  app.post("/api/sessions", async (c) => {
-    await migrateSessions();
-    const body = await readJson<SessionSync>(c);
-    if (!body?.id || !body?.startDate) return c.json({ error: "id ja startDate vaaditaan" }, 400);
-    if (!SESSION_ID.test(body.id)) return c.json({ error: "kelvoton id" }, 400);
-    await store.write(`sessions/${body.id}`, body);
-    return c.json({ ok: true });
+  app.get("/api/me/alerts", async (c) => {
+    const user = await currentUser(c);
+    if (!user) return c.json({ error: "ei kirjautunut" }, 401);
+    return c.json({ alerts: await listUserAlerts(db, user.id) });
+  });
+
+  app.put("/api/me/alerts", async (c) => {
+    const user = await currentUser(c);
+    if (!user) return c.json({ error: "ei kirjautunut" }, 401);
+    const body = await readJson<unknown>(c);
+    const valid = Array.isArray(body) && body.length <= 200 && body.every(
+      (a) => a && typeof a === "object" && typeof (a as Record<string, unknown>).id === "string"
+        && Number.isFinite((a as Record<string, unknown>).minWind),
+    );
+    if (!valid) return c.json({ error: "odotettiin hälytyslistaa (id, minWind)" }, 400);
+    await replaceUserAlerts(db, user.id, body as Record<string, unknown>[], now());
+    return c.json({ ok: true, count: (body as unknown[]).length });
   });
 
   // --- Kelivahti ---
@@ -767,14 +752,21 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
     return c.json(result);
   });
 
-  async function checkAlerts(): Promise<{ alertId: string; spotName: string; windows: AlertWindow[] }[]> {
-    // Hälytykset ovat käyttäjän omia tietueita omalla rajallaan; spotin
-    // tuuli-ikkuna ei itsessään hälytä.
-    const alerts = (await store.read<Alert[]>("alerts", [])).filter((a) => a?.enabled && Number.isFinite(a.minWind));
-    const spots = await store.read<SpotSync[]>("spots", []);
-    const results: { alertId: string; spotName: string; windows: AlertWindow[] }[] = [];
+  type AlertResult = { alertId: string; spotName: string; windows: AlertWindow[]; userId?: string };
 
-    for (const alert of alerts) {
+  async function checkAlerts(): Promise<AlertResult[]> {
+    // Hälytykset ovat käyttäjän omia tietueita omalla rajallaan; spotin
+    // tuuli-ikkuna ei itsessään hälytä. Admin-listan (täysi token) osumat
+    // menevät ntfy:hyn, tilien hälytykset appin ilmoituksiin.
+    const legacy = (await store.read<Alert[]>("alerts", [])).filter((a) => a?.enabled && Number.isFinite(a.minWind))
+      .map((alert) => ({ alert, userId: undefined as string | undefined }));
+    const personal = (await allUserAlerts(db))
+      .map(({ userId, data }) => ({ alert: data as unknown as Alert, userId }))
+      .filter(({ alert }) => alert?.enabled !== false && Number.isFinite(alert?.minWind));
+    const spots = await store.read<SpotSync[]>("spots", []);
+    const results: AlertResult[] = [];
+
+    for (const { alert, userId } of [...legacy, ...personal]) {
       // Sijainti hälytyksestä itsestään; vanhoissa hälytyksissä spotista.
       const spot = spots.find((s) => s.id === alert.spotId);
       const latitude = alert.latitude ?? spot?.latitude;
@@ -791,7 +783,7 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
         const nowHour = `${now().toISOString().slice(0, 13)}:00`; // käynnissä oleva tunti mukaan
         const windows = matchAlert(alert, forecast.wind.filter((h) => h.time >= nowHour));
         if (windows.length > 0) {
-          results.push({ alertId: alert.id, spotName: alert.spotName || spot?.name || "Kelivahti", windows });
+          results.push({ alertId: alert.id, spotName: alert.spotName || spot?.name || "Kelivahti", windows, userId });
         }
       } catch {
         // Yhden spotin hakuvirhe ei kaada kierrosta.
@@ -800,7 +792,17 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
 
     if (results.length > 0) {
       await store.write("kelivahti-matches", { checkedAt: now().toISOString(), results });
-      await notifyNewWindows(results);
+      await notifyNewWindows(results.filter((r) => !r.userId));
+      for (const result of results) {
+        if (!result.userId) continue;
+        for (const window of result.windows) {
+          await notifyOnce(db, result.userId, {
+            kind: "kelivahti", spotId: result.alertId, spotName: result.spotName, now: now(),
+            dedupKey: `kelivahti|${result.alertId}|${window.start}`,
+            message: `Kelit ${formatLocal(window.start)}–${formatLocal(window.end)} (${window.hours} h, max ${window.maxSpeed.toFixed(1)} m/s).`,
+          });
+        }
+      }
     }
     return results;
   }

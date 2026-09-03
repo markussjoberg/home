@@ -226,4 +226,38 @@ describe("tunnukset", () => {
     mine = await (await app.request("/api/me/notifications", asUser(owner.token))).json();
     expect(mine.unread).toBe(0);
   });
+
+  it("tilin synkka: spotit ja hälytykset tilin alla, kelivahti ilmoittaa appiin", async () => {
+    const { token } = await signIn("sync-user", "laite-S");
+    expect((await app.request("/api/me/spots", asUser(token))).status).toBe(200);
+    const spots = [{ id: "s1", name: "Koti", latitude: 60.1, longitude: 24.9, waterType: "sea", sports: [], isFavorite: true, notes: "" }];
+    expect((await app.request("/api/me/spots", { method: "PUT", ...asUser(token), body: JSON.stringify(spots) })).status).toBe(200);
+    expect((await app.request("/api/me/spots", { method: "PUT", ...asUser(token), body: JSON.stringify([{ id: 1 }]) })).status).toBe(400);
+    const stored = await (await app.request("/api/me/spots", asUser(token))).json();
+    expect(stored.spots).toHaveLength(1);
+    // Toinen käyttäjä ei näe.
+    const other = await signIn("other");
+    expect((await (await app.request("/api/me/spots", asUser(other.token))).json()).spots).toHaveLength(0);
+
+    const alerts = [{ id: "a1", spotId: "s1", spotName: "Koti", latitude: 60.1, longitude: 24.9, waterType: "sea", minWind: 8, minHours: 2, enabled: true }];
+    expect((await app.request("/api/me/alerts", { method: "PUT", ...asUser(token), body: JSON.stringify(alerts) })).status).toBe(200);
+    // Kelivahti käyttää tilin hälytystä ja ilmoittaa appiin (ei ntfy), sama ikkuna vain kerran.
+    const built = createApp({
+      config: loadConfig({ NOSTE_TOKEN: "secret", CLIENT_TOKEN: "client", DATA_DIR: join(dir, "k"), TILE_CACHE_DIR: join(dir, "kt") } as NodeJS.ProcessEnv),
+      db: database.db,
+      fetchImpl: (async (url: string) => new Response(JSON.stringify(url.includes("api.open-meteo.com") ? {
+        hourly: { time: ["2026-08-21T10:00", "2026-08-21T11:00", "2026-08-21T12:00"], wind_speed_10m: [9, 10, 11], wind_gusts_10m: [12, 13, 15], wind_direction_10m: [225, 230, 240] },
+      } : {}), { status: 200 })) as never,
+      now: () => new Date("2026-08-21T08:00:00Z"),
+    });
+    const results = await built.checkAlerts();
+    expect(results).toHaveLength(1);
+    await built.checkAlerts();
+    const inbox = await (await app.request("/api/me/notifications", asUser(token))).json();
+    expect(inbox.notifications.filter((n: { kind: string }) => n.kind === "kelivahti")).toHaveLength(1);
+  });
+
+  it("sessioreittejä ei ole — GPS ja terveysdata pysyvät puhelimessa", async () => {
+    expect((await app.request("/api/sessions", { headers: { authorization: "Bearer secret" } })).status).toBe(404);
+  });
 });
