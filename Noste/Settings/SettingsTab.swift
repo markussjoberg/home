@@ -197,6 +197,9 @@ private struct AccountSection: View {
             if let error = account.lastError {
                 Text(error).font(.caption).foregroundStyle(.red)
             }
+            Link(destination: URL(string: "https://github.com/markussjoberg/home/blob/claude/wing-foil-surf-app-pqvliz/docs/TIETOSUOJA.md")!) {
+                Label("Tietosuojaseloste", systemImage: "hand.raised")
+            }
         } header: {
             Text("Tili")
         } footer: {
