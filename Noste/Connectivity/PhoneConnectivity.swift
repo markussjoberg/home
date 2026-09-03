@@ -64,12 +64,7 @@ final class PhoneConnectivity: NSObject, ObservableObject {
         }
         try? context.save()
 
-        // Varmuuskopio palvelimelle (best effort — paikallinen talletus on jo tehty).
-        let recordID = record.id
-        let motion = record.motionData
-        Task {
-            await ServerClient.shared.backupSession(payload, id: recordID, motion: motion)
-        }
+        // Sessio jää puhelimeen (GPS ja syke eivät kulje palvelimelle).
 
         // Pumppisessiolle sää haetaan automaattisesti, ei kysytä käyttäjältä.
         // Tuuli session AJALTA (kello synkkaa usein tunteja myöhemmin, joten
@@ -106,15 +101,6 @@ final class PhoneConnectivity: NSObject, ObservableObject {
         }
         record.motionData = data
         try? context.save()
-        if let summary = record.summary {
-            let payload = WatchSync.SessionPayload(summary: summary, track: record.track)
-            let recordID = record.id
-            let rating = record.rating
-            let wind = record.sessionWind
-            Task {
-                await ServerClient.shared.backupSession(payload, id: recordID, rating: rating, wind: wind, motion: data)
-            }
-        }
     }
 
     /// Kellosta tullut tuuliarvosana: etsi sessio alkuhetkellä ja käsittele.

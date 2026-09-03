@@ -1,7 +1,7 @@
 # XcodeGen-määritys: aja `xcodegen` tämän kansion juuressa → Noste.xcodeproj
 name: Noste
 options:
-  bundleIdPrefix: fi.markussjoberg
+  bundleIdPrefix: com.aihiolabs
   deploymentTarget:
     iOS: "17.0"
     watchOS: "10.0"
@@ -29,7 +29,7 @@ targets:
           - Default
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: fi.markussjoberg.noste
+        PRODUCT_BUNDLE_IDENTIFIER: com.aihiolabs.noste
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.9"
         CURRENT_PROJECT_VERSION: "6"
@@ -71,7 +71,7 @@ targets:
         com.apple.developer.submerged-shallow-depth-and-pressure: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: fi.markussjoberg.noste.watchkitapp
+        PRODUCT_BUNDLE_IDENTIFIER: com.aihiolabs.noste.watchkitapp
         SWIFT_VERSION: "5.9"
         CURRENT_PROJECT_VERSION: "6"
         MARKETING_VERSION: "0.1"
@@ -83,7 +83,7 @@ targets:
         CFBundleDisplayName: Noste
         ITSAppUsesNonExemptEncryption: false
         WKApplication: true
-        WKCompanionAppBundleIdentifier: fi.markussjoberg.noste
+        WKCompanionAppBundleIdentifier: com.aihiolabs.noste
         WKRunsIndependentlyOfCompanionApp: true
         WKBackgroundModes:
           - workout-processing

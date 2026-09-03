@@ -103,7 +103,7 @@ final class UserAccount: ObservableObject {
 
 /// Pieni Keychain-kuori yhdelle palvelulle: istuntotunniste ei kuulu UserDefaultsiin.
 enum KeychainStore {
-    private static let service = "fi.markussjoberg.noste"
+    private static let service = "com.aihiolabs.noste"
 
     static func read(_ key: String) -> String? {
         let query: [String: Any] = [

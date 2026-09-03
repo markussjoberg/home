@@ -24,18 +24,6 @@ struct ServerClient {
         var observation: Observation?
     }
 
-    private struct SessionUpload: Codable {
-        var id: String
-        var startDate: String
-        var sport: String
-        var summary: SessionSummary
-        var track: [TrackPoint]
-        var rating: Int?
-        var wind: RatedWind?
-        /// MotionLog-binääri (JSONissa base64) — kalibrointidata palvelimelle.
-        var motion: Data?
-    }
-
     /// Maastoanalyysi: fetch (km) ja avoimuus (0–1) ilmansuunnittain.
     struct SpotMetaOctant: Codable {
         var octant: Int
@@ -608,39 +596,48 @@ struct ServerClient {
     }
 
     /// Vie koko spottilistan palvelimelle (varmuuskopio + kelivahdin lähtödata).
+    /// Omat spotit palvelimelle: kirjautuneena tilin alle (varmuuskopio +
+    /// kelivahdin sijainnit), kehittäjän omalla palvelimella vanhaan admin-listaan.
+    /// Puhelin on totuus, palvelin kopio.
     func backupSpots(_ spots: [SpotData]) async {
-        guard let body = try? JSONEncoder().encode(spots),
-              let request = request(path: "api/spots", method: "PUT", body: body)
-        else { return }
-        _ = try? await URLSession.shared.data(for: request)
+        guard let body = try? JSONEncoder().encode(spots) else { return }
+        if UserAccount.shared.token != nil, let request = communityRequest(path: "api/me/spots", method: "PUT", body: body) {
+            _ = try? await URLSession.shared.data(for: request)
+        } else if let request = request(path: "api/spots", method: "PUT", body: body) {
+            _ = try? await URLSession.shared.data(for: request)
+        }
     }
 
     /// Käyttäjän kelivahtihälytykset palvelimelle (koko lista korvaa edellisen).
     func backupAlerts(_ alerts: [WindAlert]) async {
-        guard let body = try? JSONEncoder().encode(alerts),
-              let request = request(path: "api/alerts", method: "PUT", body: body)
-        else { return }
-        _ = try? await URLSession.shared.data(for: request)
+        guard let body = try? JSONEncoder().encode(alerts) else { return }
+        if UserAccount.shared.token != nil, let request = communityRequest(path: "api/me/alerts", method: "PUT", body: body) {
+            _ = try? await URLSession.shared.data(for: request)
+        } else if let request = request(path: "api/alerts", method: "PUT", body: body) {
+            _ = try? await URLSession.shared.data(for: request)
+        }
     }
 
-    /// Vie yhden session palvelimelle raakajälkineen. Vakaa id → uudelleenvienti
-    /// (esim. reittauksen jälkeen) päivittää saman session, ei duplikoi.
-    func backupSession(_ payload: WatchSync.SessionPayload, id: UUID,
-                       rating: WindRating? = nil, wind: RatedWind? = nil,
-                       motion: Data? = nil) async {
-        let upload = SessionUpload(
-            id: id.uuidString,
-            startDate: ISO8601DateFormatter().string(from: payload.summary.startDate),
-            sport: payload.summary.sport.rawValue,
-            summary: payload.summary,
-            track: payload.track,
-            rating: rating?.rawValue,
-            wind: wind,
-            motion: motion.flatMap { $0.count <= 8_000_000 ? $0 : nil }
-        )
-        guard let body = try? JSONEncoder().encode(upload),
-              let request = request(path: "api/sessions", method: "POST", body: body)
-        else { return }
-        _ = try? await URLSession.shared.data(for: request)
+    /// Tilin spotit palautusta varten (uusi puhelin, uudelleenasennus).
+    func fetchMySpots() async -> [SpotData]? {
+        struct Reply: Codable { var spots: [SpotData] }
+        guard UserAccount.shared.token != nil, let request = request(path: "api/me/spots"),
+              let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200
+        else { return nil }
+        return (try? JSONDecoder().decode(Reply.self, from: data))?.spots
     }
+
+    func fetchMyAlerts() async -> [WindAlert]? {
+        struct Reply: Codable { var alerts: [WindAlert] }
+        guard UserAccount.shared.token != nil, let request = request(path: "api/me/alerts"),
+              let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200
+        else { return nil }
+        return (try? JSONDecoder().decode(Reply.self, from: data))?.alerts
+    }
+
+    // Sessioita (GPS-jälki, syke, kiihtyvyys) ei viedä palvelimelle: ne pysyvät
+    // puhelimessa ja HealthKitissä. Laitteiden välinen siirto tehdään tarvittaessa
+    // käyttäjän omaan iCloudiin (CloudKit), ei meidän palvelimelle.
 }

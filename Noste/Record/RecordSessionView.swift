@@ -255,14 +255,8 @@ struct RecordSessionView: View {
         modelContext.insert(record)
         try? modelContext.save()
         let context = modelContext
-        let chosenRating = rating
-        let motion = record.motionData
-        Task {
-            if let chosenRating {
-                await RatingService.apply(rating: chosenRating, to: record, context: context)
-            } else {
-                await ServerClient.shared.backupSession(payload, id: record.id, motion: motion)
-            }
+        if let chosenRating = rating {
+            Task { await RatingService.apply(rating: chosenRating, to: record, context: context) }
         }
     }
 }

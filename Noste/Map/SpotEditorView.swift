@@ -12,6 +12,7 @@ struct SpotEditorView: View {
     var onDone: (Action) -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @ObservedObject private var account = UserAccount.shared
 
     // Kelivahti on käyttäjän oma hälytys omalla rajalla — ei spotin ominaisuus.
     @State private var alertEnabled = false
@@ -68,9 +69,8 @@ struct SpotEditorView: View {
                     Text("Toimivat suunnat ja voimakkuus. Ennusteesta korostetaan ikkunaan osuvat tunnit — myös kellossa.")
                 }
 
-                // Vain oma palvelin: kelivahti vaatii täyden tokenin, sisäänrakennettu
-                // client-token ei riitä.
-                if ServerSettings.userConfigured != nil {
+                // Kelivahti kulkee tilin kautta (tai kehittäjän omalla palvelimella).
+                if account.isSignedIn || ServerSettings.userConfigured != nil {
                     Section {
                         Toggle("Kelivahti", isOn: $alertEnabled)
                         if alertEnabled {
@@ -86,11 +86,16 @@ struct SpotEditorView: View {
                         Text("Oma hälytys")
                     } footer: {
                         Text(alertEnabled
-                             ? "Ilmoitus (ntfy), kun ennuste ylittää rajan vähintään 2 h putkeen\(draft.goodDirections?.isEmpty == false ? " spotin toimivista suunnista" : ""). Raja on sinun, ei spotin."
+                             ? "Ilmoitus appiin (Asetukset → Ilmoitukset), kun ennuste ylittää rajan vähintään 2 h putkeen\(draft.goodDirections?.isEmpty == false ? " spotin toimivista suunnista" : ""). Raja on sinun, ei spotin."
                              : "Henkilökohtainen ilmoitus tämän paikan ennusteesta. Spotin tuuli-ikkuna kuvaa spottia, hälytysraja on oma valintasi.")
                     }
                     .onChange(of: alertEnabled) { _, _ in saveAlert() }
                     .onChange(of: alertThreshold) { _, _ in saveAlert() }
+                } else {
+                    Section {
+                        Text("Kirjaudu Asetuksissa (Sign in with Apple), niin voit asettaa tälle spotille oman kelivahdin.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    } header: { Text("Oma hälytys") }
                 }
 
                 Section {

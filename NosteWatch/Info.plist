@@ -41,7 +41,7 @@
 		<string>workout-processing</string>
 	</array>
 	<key>WKCompanionAppBundleIdentifier</key>
-	<string>fi.markussjoberg.noste</string>
+	<string>com.aihiolabs.noste</string>
 	<key>WKRunsIndependentlyOfCompanionApp</key>
 	<true/>
 </dict>

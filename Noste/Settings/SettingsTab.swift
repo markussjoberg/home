@@ -130,6 +130,7 @@ struct SettingsTab: View {
 /// tili tekee spoteista ja kommenteista käyttäjän omia laitteiden yli.
 private struct AccountSection: View {
     @ObservedObject private var account = UserAccount.shared
+    @Environment(\.modelContext) private var modelContext
     @State private var nicknameDraft = ""
     @State private var saving = false
 
@@ -175,7 +176,10 @@ private struct AccountSection: View {
                     request.requestedScopes = []
                 } onCompletion: { result in
                     if case .success(let authorization) = result {
-                        Task { await account.signIn(with: authorization) }
+                        Task {
+                            await account.signIn(with: authorization)
+                            if account.isSignedIn { await AccountSync.afterSignIn(context: modelContext) }
+                        }
                     }
                 }
                 .signInWithAppleButtonStyle(.black)
@@ -189,8 +193,8 @@ private struct AccountSection: View {
             Text("Tili")
         } footer: {
             Text(account.user == nil
-                 ? "Tilillä spotit ja kommentit ovat sinun laitteesta riippumatta. Ilman tiliä kaikki toimii, mutta omistus on laitekohtainen."
-                 : "Nimimerkki näkyy kommenteissasi ja julkaisemissasi spoteissa.")
+                 ? "Tilillä spotit, kelivahti ja kommentit seuraavat sinua laitteesta toiseen. Sessiot (GPS, syke) pysyvät aina puhelimessa. Ilman tiliä kaikki muu toimii, mutta omistus on laitekohtainen."
+                 : "Nimimerkki näkyy kommenteissasi ja julkaisemissasi spoteissa. Sessiot pysyvät puhelimessa.")
         }
         .onAppear {
             nicknameDraft = account.user?.nickname ?? ""

@@ -24,16 +24,6 @@ enum RatingService {
                 try? context.save()
             }
         }
-
-        if let summary = record.summary {
-            await ServerClient.shared.backupSession(
-                WatchSync.SessionPayload(summary: summary, track: record.track),
-                id: record.id,
-                rating: record.rating,
-                wind: record.sessionWind,
-                motion: record.motionData
-            )
-        }
     }
 
     /// Rakentaa spotin tuuliprofiilin reittatuista sessioista.
