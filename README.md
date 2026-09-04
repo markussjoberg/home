@@ -79,10 +79,12 @@ kaikille ennustetunneille (kartan tuulipartikkelit ja aaltokenttä) ·
 `/api/shop/catalog` Lappis-katalogi · yhteisö: `/api/public/spots` (listaus,
 PUT/DELETE — poisto etenee ehdotuksena jos muiden sisältöä), `/:id/comments`,
 `/:id/history` + `/:revisionId/restore`, `/:id/deletion{,/object,/cancel}`,
-`/api/public/reports` · tili: `/api/auth/apple`, `/api/auth/logout`, `/api/me`,
-`/api/me/content`, `/api/me/notifications` · admin (täysi token): `/api/reports`
-· `/api/spots`, `/api/sessions{,/:id}` synkka · `/api/alerts`,
-`/api/alerts/matches` kelivahti · `/healthz`.
+`/api/public/reports` · tili: `/api/auth/apple`, `/api/auth/logout`, `/api/me`
+(GET/PUT/DELETE), `/api/me/content`, `/api/me/notifications{,/read}`,
+`/api/me/spots`, `/api/me/alerts` (tilin synkka), `/api/me/push-token` ·
+admin (täysi token): `/api/reports{,/:id/resolve}`, `/api/spots`, `/api/alerts`,
+`/api/alerts/matches` (kehittäjän oma lista, ntfy) · `/healthz`.
+Sessioita (GPS, syke) ei viedä palvelimelle — ne pysyvät puhelimessa.
 
 Yhteisön säännöt: julkinen spotti on yhteinen. Nimimerkillä kirjautunut voi
 täydentää kuvausta, lajeja, suuntia ja rajoja (versiohistoria, palautus);
@@ -91,7 +93,7 @@ spotille ilman muiden sisältöä, muuten 7 vrk ehdotus jonka osallistunut voi
 vastustaa. Poistot ovat pehmeitä. `precision: coarse` näyttää sijainnin
 muille ~1 km tarkkuudella.
 
-Kehitys: `pnpm install && pnpm test && pnpm dev` (96 testiä, vitest).
+Kehitys: `pnpm install && pnpm test && pnpm dev` (98 testiä, vitest).
 
 ## Kartat
 
