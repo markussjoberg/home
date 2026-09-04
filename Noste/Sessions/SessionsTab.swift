@@ -184,6 +184,23 @@ struct SessionDetailView: View {
 
     var body: some View {
         List {
+            // Pääluvut ensin — kartta ja rivit selittävät.
+            if let summary = record.summary {
+                HStack(spacing: 12) {
+                    StatTile(value: Format.duration(summary.duration), label: "kesto", size: 26)
+                    StatTile(value: Format.distance(summary.distance), label: "matka", size: 26)
+                    StatTile(value: Format.speedKmh(summary.maxSpeed), label: "max", size: 26)
+                    if summary.sport.countsPumps, let pumps = summary.pumps {
+                        StatTile(value: "\(pumps.strokeCount)", label: "pumppua", tint: Theme.ride, size: 26)
+                    } else if summary.sport.usesFoil {
+                        StatTile(value: Format.percent(summary.rideFraction), label: "foililla", tint: Theme.ride, size: 26)
+                    } else {
+                        StatTile(value: "\(summary.rides.count)", label: summary.sport == .surf ? "aaltoa" : "vetoa", tint: Theme.wind, size: 26)
+                    }
+                }
+                .card()
+                .cardRow()
+            }
             if !record.track.isEmpty {
                 Section {
                     SessionTrackMap(track: record.track,
