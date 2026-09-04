@@ -122,9 +122,22 @@ export async function fileReport(db: Db, input: {
   return "created";
 }
 
+/** Avoimet ilmoitukset kohteen tiedoilla (spotin nimi / kommentin teksti), jotta admin näkee mitä käsittelee. */
 export async function openReports(db: Db) {
   const rows = await db.select().from(reports).where(isNull(reports.resolvedAt));
-  return rows.map(({ reporterHash, ...rest }) => ({ ...rest, createdAt: rest.createdAt.toISOString(), resolvedAt: null }));
+  const result = [];
+  for (const { reporterHash, ...rest } of rows) {
+    let target: { spotId?: string; spotName?: string; text?: string; author?: string; deleted?: boolean } = {};
+    if (rest.targetType === "spot") {
+      const spot = (await db.select().from(publicSpots).where(eq(publicSpots.id, rest.targetId)).limit(1))[0];
+      target = spot ? { spotId: spot.id, spotName: spot.name, deleted: spot.deletedAt !== null } : { deleted: true };
+    } else {
+      const comment = (await db.select().from(spotComments).where(eq(spotComments.id, rest.targetId)).limit(1))[0];
+      target = comment ? { spotId: comment.spotId, text: comment.text, author: comment.author, deleted: comment.deletedAt !== null } : { deleted: true };
+    }
+    result.push({ ...rest, createdAt: rest.createdAt.toISOString(), resolvedAt: null, target });
+  }
+  return result;
 }
 
 export async function resolveReport(db: Db, id: number, resolution: string, now: Date): Promise<boolean> {

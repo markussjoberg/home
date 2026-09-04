@@ -157,6 +157,7 @@ describe("tunnukset", () => {
     const admin = { headers: { authorization: "Bearer secret" } };
     const open = await (await app.request("/api/reports", admin)).json();
     expect(open.reports).toHaveLength(1);
+    expect(open.reports[0].target).toMatchObject({ spotId: "s1", text: "Moi", author: "Eka", deleted: false });
     expect((await app.request(`/api/reports/${open.reports[0].id}/resolve`, { method: "POST", ...admin, body: JSON.stringify({ resolution: "poistettu" }) })).status).toBe(200);
 
     const mine = await (await app.request("/api/me/content", asUser(token))).json();
