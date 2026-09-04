@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 import SwiftData
 import Charts
 import NosteCore
@@ -10,6 +11,9 @@ struct ForecastTab: View {
     @Environment(\.modelContext) private var modelContext
     @State private var editingSpot: SpotData?
     @State private var notice: String?
+    /// Yhteisön julkiset spotit lähimmästä alkaen — löytyy paikkoja ilman omia spotteja.
+    @State private var nearby: [ServerClient.PublicSpot] = []
+    @State private var selectedPublic: ServerClient.PublicSpot?
 
     private var sortedSpots: [SpotData] {
         spots.map(\.data).sorted { a, b in
@@ -21,23 +25,37 @@ struct ForecastTab: View {
     var body: some View {
         NavigationStack {
             Group {
-                if spots.isEmpty {
+                if spots.isEmpty && nearby.isEmpty {
                     ContentUnavailableView(
                         "Ei spotteja",
                         systemImage: "mappin.slash",
                         description: Text("Lisää ensimmäinen spotti kartalta pitkällä painalluksella.")
                     )
                 } else {
-                    List(sortedSpots) { spot in
-                        ZStack {
-                            NavigationLink {
-                                SpotForecastView(spot: spot, allSpots: sortedSpots, onEdit: { editingSpot = spot })
-                            } label: { EmptyView() }
-                            .opacity(0) // kortti itse on nappi, ei oikean reunan nuolta
-                            SpotRow(spot: spot, forecast: forecastStore.forecast(for: spot),
-                                    alertThreshold: alerts.first { $0.spotID == spot.id && $0.enabled }?.minWind)
+                    List {
+                        ForEach(sortedSpots) { spot in
+                            ZStack {
+                                NavigationLink {
+                                    SpotForecastView(spot: spot, allSpots: sortedSpots, onEdit: { editingSpot = spot })
+                                } label: { EmptyView() }
+                                .opacity(0) // kortti itse on nappi, ei oikean reunan nuolta
+                                SpotRow(spot: spot, forecast: forecastStore.forecast(for: spot),
+                                        alertThreshold: alerts.first { $0.spotID == spot.id && $0.enabled }?.minWind)
+                            }
+                            .cardRow()
                         }
-                        .cardRow()
+                        if !nearbyOthers.isEmpty {
+                            Text("Lähellä · yhteisön spotit")
+                                .font(.statLabel).foregroundStyle(Theme.muted)
+                                .cardRow()
+                            ForEach(nearbyOthers.prefix(6)) { spot in
+                                Button { selectedPublic = spot } label: {
+                                    NearbySpotRow(spot: spot, distanceKm: distanceKm(to: spot))
+                                }
+                                .buttonStyle(.plain)
+                                .cardRow()
+                            }
+                        }
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
@@ -64,10 +82,68 @@ struct ForecastTab: View {
                 Button("OK") { notice = nil }
             } message: { Text(notice ?? "") }
             .navigationTitle("Spotit")
+            .sheet(item: $selectedPublic) { spot in PublicSpotView(spot: spot) }
+            .task {
+                if let shared = await ServerClient.shared.publicSpots() { nearby = shared }
+            }
             .task {
                 await forecastStore.refreshFavorites(spots: sortedSpots)
             }
         }
+    }
+}
+
+private extension ForecastTab {
+    /// Vertailupiste: oma sijainti, muuten ensimmäinen suosikki, muuten Helsinki.
+    var referencePoint: CLLocationCoordinate2D {
+        if let here = MapLocation.manager.location?.coordinate { return here }
+        if let favorite = sortedSpots.first { return CLLocationCoordinate2D(latitude: favorite.latitude, longitude: favorite.longitude) }
+        return CLLocationCoordinate2D(latitude: 60.17, longitude: 24.94)
+    }
+
+    func distanceKm(to spot: ServerClient.PublicSpot) -> Double {
+        let ref = referencePoint
+        return GeoMath.distanceMeters(lat1: ref.latitude, lon1: ref.longitude, lat2: spot.latitude, lon2: spot.longitude) / 1000
+    }
+
+    /// Julkiset spotit, jotka eivät ole omia, lähimmästä alkaen.
+    var nearbyOthers: [ServerClient.PublicSpot] {
+        let ownIDs = Set(spots.map { $0.id.uuidString.lowercased() })
+        return nearby.filter { !ownIDs.contains($0.id.lowercased()) && $0.mine != true }
+            .sorted { distanceKm(to: $0) < distanceKm(to: $1) }
+    }
+}
+
+private struct NearbySpotRow: View {
+    let spot: ServerClient.PublicSpot
+    let distanceKm: Double
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "person.2.fill")
+                .font(.title3)
+                .foregroundStyle(.white)
+                .frame(width: 48, height: 48)
+                .background(Color.purple.opacity(0.8), in: Circle())
+            VStack(alignment: .leading, spacing: 3) {
+                Text(spot.name).font(.cardTitle).lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(spot.waterType == "sea" ? "Meri" : "Järvi")
+                    if let dirs = spot.goodDirections, !dirs.isEmpty {
+                        Text(dirs.map { ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][$0] }.joined(separator: " "))
+                    }
+                    if spot.commentCount > 0 { Text("· \(spot.commentCount) kokemusta") }
+                }
+                .font(.statLabel).foregroundStyle(Theme.muted)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 0) {
+                Text(distanceKm < 10 ? String(format: "%.1f", distanceKm).replacingOccurrences(of: ".", with: ",") : "\(Int(distanceKm))")
+                    .font(.stat(26)).monospacedDigit()
+                Text("km").font(.statLabel).foregroundStyle(Theme.muted)
+            }
+        }
+        .card()
     }
 }
 
