@@ -2,9 +2,10 @@ import SwiftUI
 import WatchKit
 import NosteCore
 
+/// Sama foilin oranssi kuin puhelimessa (Theme.ride).
+private let rideColor = Color(red: 1.0, green: 0.62, blue: 0.25)
+
 struct SessionPagingView: View {
-    /// Sama foilin oranssi kuin puhelimessa (Theme.ride).
-    static let ride = Color(red: 1.0, green: 0.62, blue: 0.25)
     @State private var selection: Tab = .metrics
 
     enum Tab {
@@ -105,11 +106,11 @@ struct MetricsView: View {
             switch workout.sport {
             case .pumpFoil:
                 row("Pumput", "\(workout.livePumpCount)", .cyan)
-                row("Lennot", "\(workout.rideState.rideCount)", Self.ride)
-                row("Foiliaika", Format.duration(workout.rideState.totalRideTime), Self.ride)
+                row("Lennot", "\(workout.rideState.rideCount)", rideColor)
+                row("Foiliaika", Format.duration(workout.rideState.totalRideTime), rideColor)
             case .wingFoil, .parawing, .kite, .proneFoil, .dwSup:
-                row("Foiliaika", Format.duration(workout.rideState.totalRideTime), Self.ride)
-                row("Lennot", "\(workout.rideState.rideCount)", Self.ride)
+                row("Foiliaika", Format.duration(workout.rideState.totalRideTime), rideColor)
+                row("Lennot", "\(workout.rideState.rideCount)", rideColor)
                 row("Matka", Format.distance(workout.liveDistance), .primary)
             case .surf, .sup:
                 row(workout.sport == .surf ? "Aallot" : "Vedot", "\(workout.rideState.rideCount)", .cyan)
@@ -127,7 +128,7 @@ struct MetricsView: View {
         switch workout.sport {
         case .pumpFoil:
             if workout.rideState.isRiding {
-                heroText(Format.duration(workout.rideState.currentRideDuration), label: "LENNOSSA", color: Self.ride)
+                heroText(Format.duration(workout.rideState.currentRideDuration), label: "LENNOSSA", color: rideColor)
             } else {
                 heroText("\(workout.livePumpCount)", label: "pumppua", color: .cyan)
             }
@@ -135,13 +136,13 @@ struct MetricsView: View {
             heroText(
                 Format.speedKmh(workout.currentSpeed),
                 label: workout.rideState.isRiding ? "FOILILLA · \(Format.duration(workout.rideState.currentRideDuration))" : "nopeus",
-                color: workout.rideState.isRiding ? Self.ride : .primary
+                color: workout.rideState.isRiding ? rideColor : .primary
             )
         case .surf, .sup:
             heroText(
                 Format.speedKmh(workout.currentSpeed),
                 label: workout.rideState.isRiding ? "AALLOSSA · \(Format.duration(workout.rideState.currentRideDuration))" : "nopeus",
-                color: workout.rideState.isRiding ? Self.ride : .primary
+                color: workout.rideState.isRiding ? rideColor : .primary
             )
         }
     }
