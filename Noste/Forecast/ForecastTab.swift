@@ -145,6 +145,27 @@ struct SpotForecastView: View {
                 Text(error).foregroundStyle(.red).font(.footnote)
             }
 
+            // Pääluvut ensin: ennuste nyt isona, havainto ja aalto sen rinnalla.
+            if let now = forecastStore.forecast(for: spot)?.upcoming(from: Date(), hours: 1).wind.first {
+                HStack(alignment: .top, spacing: 16) {
+                    WindGlyph(speed: now.speed, gust: now.gust, direction: now.direction, size: 44)
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 6) {
+                        Text(GeoMath.compassName(degrees: now.direction))
+                            .font(.stat(26))
+                        Text(spot.matches(now) ? "ikkunassa" : "ennuste nyt")
+                            .font(.statLabel)
+                            .foregroundStyle(spot.matches(now) ? Theme.ok : Theme.muted)
+                        if let buoy = fmiWave?.buoy, let height = buoy.waveHeight {
+                            Text(String(format: "aalto %.1f m", height).replacingOccurrences(of: ".", with: ","))
+                                .font(.statLabel).foregroundStyle(Theme.wind)
+                        }
+                    }
+                }
+                .card()
+                .cardRow()
+            }
+
             if let observation, let speed = observation.windSpeed {
                 Section {
                     HStack {
@@ -310,6 +331,9 @@ struct SpotForecastView: View {
             }
         }
         .navigationTitle(spot.name)
+        .scrollContentBackground(.hidden)
+        .background(Theme.background)
+        .listRowBackground(Theme.surface)
         .toolbar {
             Button {
                 Task { await refresh(force: true) }
