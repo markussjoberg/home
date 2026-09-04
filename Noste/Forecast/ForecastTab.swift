@@ -28,12 +28,18 @@ struct ForecastTab: View {
                     )
                 } else {
                     List(sortedSpots) { spot in
-                        NavigationLink {
-                            SpotForecastView(spot: spot, allSpots: sortedSpots, onEdit: { editingSpot = spot })
-                        } label: {
+                        ZStack {
+                            NavigationLink {
+                                SpotForecastView(spot: spot, allSpots: sortedSpots, onEdit: { editingSpot = spot })
+                            } label: { EmptyView() }
+                            .opacity(0) // kortti itse on nappi, ei oikean reunan nuolta
                             SpotRow(spot: spot, forecast: forecastStore.forecast(for: spot))
                         }
+                        .cardRow()
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .background(Theme.background)
                     .refreshable {
                         for spot in sortedSpots {
                             await forecastStore.refresh(spot: spot, force: true, allSpots: sortedSpots)
@@ -68,13 +74,23 @@ private struct SpotRow: View {
     let forecast: SpotForecast?
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
+        HStack(spacing: 14) {
+            if let exposure = spot.exposureByOctant, exposure.count == 8 {
+                ExposureRoseGlyph(exposure: exposure, diameter: 40)
+                    .frame(width: 48, height: 48)
+            } else {
+                Image(systemName: spot.waterType == .sea ? "water.waves" : "drop.fill")
+                    .font(.title3)
+                    .foregroundStyle(Theme.wind)
+                    .frame(width: 48, height: 48)
+                    .background(Theme.surfaceElevated, in: Circle())
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(spot.name).font(.cardTitle).lineLimit(1)
                     if spot.isFavorite {
-                        Image(systemName: "star.fill").foregroundStyle(.orange).font(.caption)
+                        Image(systemName: "star.fill").foregroundStyle(Theme.ride).font(.caption)
                     }
-                    Text(spot.name).font(.headline)
                 }
                 if let match = nextMatch {
                     Label {
@@ -82,25 +98,20 @@ private struct SpotRow: View {
                     } icon: {
                         Image(systemName: "checkmark.circle.fill")
                     }
-                    .font(.caption)
-                    .foregroundStyle(.green)
+                    .font(.statLabel)
+                    .foregroundStyle(Theme.ok)
                 } else {
-                    Text(spot.waterType.displayName).font(.caption).foregroundStyle(.secondary)
+                    Text(spot.waterType.displayName).font(.statLabel).foregroundStyle(Theme.muted)
                 }
             }
-            Spacer()
+            Spacer(minLength: 8)
             if let hour = forecast?.upcoming(from: Date(), hours: 1).wind.first {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.up")
-                        .rotationEffect(.degrees(hour.direction + 180))
-                        .foregroundStyle(.cyan)
-                    VStack(alignment: .trailing) {
-                        Text(Format.speedMs(hour.speed)).fontWeight(.medium)
-                        Text("puuskat \(Format.speedMs(hour.gust))").font(.caption2).foregroundStyle(.secondary)
-                    }
-                }
+                WindGlyph(speed: hour.speed, gust: hour.gust, direction: hour.direction, size: 30)
+            } else {
+                Text("—").font(.stat(30)).foregroundStyle(Theme.muted)
             }
         }
+        .card()
     }
 
     /// Ensimmäinen tuuli-ikkunaan osuva tunti seuraavan 48 h aikana.

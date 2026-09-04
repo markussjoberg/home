@@ -21,16 +21,19 @@ struct SessionsTab: View {
                 } else {
                     List {
                         if sessions.count >= 3 {
-                            Section("Kehitys") {
-                                TrendChart(sessions: sessions)
-                            }
+                            TrendChart(sessions: sessions)
+                                .card()
+                                .cardRow()
                         }
                         ForEach(sessions) { session in
-                            NavigationLink {
-                                SessionDetailView(record: session)
-                            } label: {
+                            ZStack {
+                                NavigationLink {
+                                    SessionDetailView(record: session)
+                                } label: { EmptyView() }
+                                .opacity(0)
                                 SessionRow(record: session)
                             }
+                            .cardRow()
                         }
                         .onDelete { offsets in
                             for offset in offsets {
@@ -39,6 +42,9 @@ struct SessionsTab: View {
                             try? modelContext.save()
                         }
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .background(Theme.background)
                 }
             }
             .navigationTitle("Sessiot")
@@ -135,42 +141,38 @@ private struct SessionRow: View {
     let record: SessionRecord
 
     var body: some View {
-        HStack {
-            SportIcon(sport: record.sport, size: 28)
-                .foregroundStyle(.tint)
-                .frame(width: 36)
-            VStack(alignment: .leading) {
-                Text(record.sport.displayName).font(.headline)
-                Text(record.startDate, format: .dateTime.day().month().hour().minute())
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 12) {
+            TrackThumbnail(id: record.id, track: record.track, size: CGSize(width: 88, height: 88))
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
-                    if let spotName = record.spotName {
-                        Text(spotName).font(.caption).foregroundStyle(.secondary)
-                    }
-                    if let rating = record.rating {
-                        if rating == .insufficient {
-                            Text("ei tuulta").font(.caption2).foregroundStyle(.orange)
+                    SportIcon(sport: record.sport, size: 18).foregroundStyle(Theme.wind)
+                    Text(record.spotName ?? record.sport.displayName).font(.cardTitle).lineLimit(1)
+                }
+                Text(record.startDate, format: .dateTime.weekday(.abbreviated).day().month().hour().minute())
+                    .font(.statLabel).foregroundStyle(Theme.muted)
+                if let summary = record.summary {
+                    HStack(spacing: 14) {
+                        StatTile(value: Format.duration(summary.duration), label: "kesto", size: 22)
+                        if summary.sport.countsPumps, let pumps = summary.pumps {
+                            StatTile(value: "\(pumps.strokeCount)", label: "pumppua", tint: Theme.ride, size: 22)
+                        } else if summary.sport.usesFoil {
+                            StatTile(value: Format.percent(summary.rideFraction), label: "foililla", tint: Theme.ride, size: 22)
                         } else {
-                            StarBadge(value: rating.score, highlight: false)
+                            StatTile(value: Format.distance(summary.distance), label: "matka", size: 22)
                         }
+                        StatTile(value: Format.speedKmh(summary.maxSpeed), label: "max", size: 22)
                     }
                 }
-            }
-            Spacer()
-            if let summary = record.summary {
-                VStack(alignment: .trailing) {
-                    Text(Format.duration(summary.duration)).fontWeight(.medium)
-                    if summary.sport.countsPumps, let pumps = summary.pumps {
-                        Text("\(pumps.strokeCount) pumppua").font(.caption).foregroundStyle(.secondary)
-                    } else if summary.sport.usesFoil {
-                        Text("foili \(Format.percent(summary.rideFraction))").font(.caption).foregroundStyle(.secondary)
+                if let rating = record.rating {
+                    if rating == .insufficient {
+                        Text("ei tuulta").font(.caption2).foregroundStyle(Theme.ride)
                     } else {
-                        Text(Format.distance(summary.distance)).font(.caption).foregroundStyle(.secondary)
+                        StarBadge(value: rating.score, highlight: false)
                     }
                 }
             }
         }
+        .card()
     }
 }
 

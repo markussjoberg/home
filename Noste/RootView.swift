@@ -42,6 +42,8 @@ struct RootView: View {
             RecordSessionView()
         }
         .environmentObject(forecastStore)
+        // Tumma ensin: kuvavetoinen ilme, isot luvut erottuvat myös kirkkaassa.
+        .preferredColorScheme(.dark)
         .task {
             let data = spots.map(\.data)
             await forecastStore.refreshFavorites(spots: data)
