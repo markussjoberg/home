@@ -59,6 +59,7 @@ struct StatTile: View {
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
+                .frame(height: size * 1.25, alignment: .bottomLeading) // kutistuva luku ei siirrä selitettä
             Text(label)
                 .font(.statLabel)
                 .foregroundStyle(Theme.muted)

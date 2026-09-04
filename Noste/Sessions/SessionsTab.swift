@@ -376,6 +376,8 @@ struct SessionDetailView: View {
             }
         }
         .navigationTitle(record.startDate.formatted(.dateTime.day().month()))
+        .scrollContentBackground(.hidden)
+        .background(Theme.background)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let url = gpxURL() {
