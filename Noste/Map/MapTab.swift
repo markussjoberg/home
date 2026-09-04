@@ -27,7 +27,8 @@ struct MapTab: View {
     @State private var zoomedOut = false
 
     // Merisää-kerros: FMI:n poijut + tuuliasemat näkyvältä alueelta.
-    @AppStorage("mapSeaState") private var seaStateEnabled = false
+    /// Merisää on appin tunnusmerkki — päällä oletuksena, käyttäjä voi sammuttaa.
+    @AppStorage("mapSeaState") private var seaStateEnabled = true
     /// Kenttien tila ja logiikka (hilat, aikajana, maski, poijunudjaus).
     @StateObject private var fields = MarineFieldsModel()
     /// Ennustepiste (Windy-tyyliin): napautettu kohta, jonka arvot luetaan kentistä.
@@ -780,7 +781,8 @@ struct SpotMapView: UIViewRepresentable {
                 view.canShowCallout = false
                 view.markerTintColor = .systemPurple
                 view.glyphImage = UIImage(systemName: "person.2.fill")
-                view.displayPriority = .defaultHigh
+                // Yhteisön spotit eivät saa jäädä merisää-chippien alle.
+                view.displayPriority = .required
                 _ = publicAnnotation
                 return view
             }
