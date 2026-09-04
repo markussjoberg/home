@@ -24,6 +24,8 @@ struct ForecastProbeCard: View {
     var wave: Wave?
     var onForecast: () -> Void
     var onMakeSpot: () -> Void
+    /// Kelivahti tähän pisteeseen (nil = ei kirjautunut → ei näytetä).
+    var onAlert: (() -> Void)? = nil
     var onClose: () -> Void
 
     var body: some View {
@@ -89,6 +91,15 @@ struct ForecastProbeCard: View {
                     .foregroundStyle(.orange)
             }
             .accessibilityLabel("Lisää spotti tähän")
+
+            if let onAlert {
+                Button(action: onAlert) {
+                    Image(systemName: "bell.circle.fill")
+                        .font(.title)
+                        .foregroundStyle(Theme.wind)
+                }
+                .accessibilityLabel("Kelivahti tähän pisteeseen")
+            }
 
             Button(action: onClose) {
                 Image(systemName: "xmark.circle.fill")

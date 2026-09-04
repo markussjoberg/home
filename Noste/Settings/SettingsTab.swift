@@ -173,6 +173,11 @@ private struct AccountSection: View {
                         .badge(account.unreadNotifications)
                 }
                 NavigationLink {
+                    AlertsView()
+                } label: {
+                    Label("Omat hälytykset", systemImage: "bell.badge")
+                }
+                NavigationLink {
                     MyContentView()
                 } label: {
                     Label("Omat julkaisut", systemImage: "square.and.pencil")

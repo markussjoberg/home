@@ -221,6 +221,19 @@ struct MapTab: View {
                                 editingSpot = SpotData(name: "", latitude: coordinate.latitude, longitude: coordinate.longitude)
                                 probeCoordinate = nil
                             },
+                            onAlert: UserAccount.shared.isSignedIn ? {
+                                // Hälytys mihin tahansa pisteeseen ilman spottia: oletusraja 8 m/s,
+                                // muokkaus Asetukset → Omat hälytykset.
+                                let onWater = fields.waveField?.mask?.isWater(lat: coordinate.latitude, lon: coordinate.longitude)
+                                AlertStore.upsert(WindAlert(
+                                    spotId: UUID(),
+                                    spotName: String(format: "Piste %.2f°N %.2f°E", coordinate.latitude, coordinate.longitude),
+                                    latitude: coordinate.latitude, longitude: coordinate.longitude,
+                                    waterType: onWater == false ? .lake : .sea, minWind: 8
+                                ), context: modelContext)
+                                communityNotice = "Kelivahti asetettu tähän pisteeseen (raja 8 m/s). Rajaa ja päällä/pois voit muuttaa Asetukset → Omat hälytykset."
+                                probeCoordinate = nil
+                            } : nil,
                             onClose: { probeCoordinate = nil }
                         )
                     }
@@ -384,7 +397,8 @@ struct MapTab: View {
                     set: { placesFilterRaw = $0.sorted().joined(separator: "|") }
                 ))
             }
-            .alert("Julkinen spotti on yhteinen", isPresented: Binding(get: { communityNotice != nil }, set: { if !$0 { communityNotice = nil } })) {
+            .alert(communityNotice?.hasPrefix("Kelivahti") == true ? "Kelivahti" : "Julkinen spotti on yhteinen",
+                   isPresented: Binding(get: { communityNotice != nil }, set: { if !$0 { communityNotice = nil } })) {
                 Button("OK") { communityNotice = nil }
             } message: {
                 Text(communityNotice ?? "")
