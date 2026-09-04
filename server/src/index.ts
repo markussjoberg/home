@@ -14,6 +14,7 @@ const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
   if (!config.clientToken) console.warn("VAROITUS: CLIENT_TOKEN puuttuu — appin sisäänrakennettu palvelin ei toimi");
   if (!config.mmlApiKey) console.warn("HUOM: MML_API_KEY puuttuu — maastokarttatiilet eivät toimi");
   if (!config.ntfyUrl) console.warn("HUOM: NTFY_URL puuttuu — kelivahti kirjaa osumat vain lokiin");
+  if (!config.apnsKeyId) console.warn("HUOM: APNS_KEY_ID/TEAM_ID/KEY_P8 puuttuu — push pois, ilmoitukset vain appin sisällä");
 });
 
 // Kelivahti: heti käynnistyksessä (deployn jälkeen ei odoteta puolta tuntia)

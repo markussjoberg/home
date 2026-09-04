@@ -19,7 +19,8 @@ import {
   cancelDeletion, commentsByUser, deleteComment, executeDueDeletions, fileReport, hasOthersContent, isContributor,
   objectDeletion, openProposal, openProposals, openReports, proposeDeletion, resolveReport,
 } from "./governance.js";
-import { listNotifications, markRead, notify, notifyOnce, stakeholders } from "./notifications.js";
+import { listNotifications, markRead, notify, notifyOnce, setPushSender, stakeholders } from "./notifications.js";
+import { type PushSender, createApnsSender, pushConfigFromEnv, registerPushToken, removePushToken, removeUserPushTokens } from "./push.js";
 import { allUserAlerts, listUserAlerts, listUserSpots, replaceUserAlerts, replaceUserSpots } from "./sync.js";
 import { type WaveFieldSeries, expandWaveBBox, fetchWaveField } from "./wavefield.js";
 import { fetchLipasPlaces, fetchOsmPlaces, nearestPerCategory, type Place } from "./places.js";
@@ -61,10 +62,18 @@ export interface AppDeps {
   db: Db;
   /** Applen identity tokenin tarkistus; testeissä stubi. */
   verifyIdentity?: IdentityVerifier;
+  /** Push-lähettäjä; oletus APNs jos avaimet on, testeissä stubi tai null. */
+  pushSender?: PushSender | null;
 }
 
-export function createApp({ config, fetchImpl = fetch, now = () => new Date(), db, verifyIdentity }: AppDeps) {
+export function createApp({ config, fetchImpl = fetch, now = () => new Date(), db, verifyIdentity, pushSender }: AppDeps) {
   const verifyAppleIdentity = verifyIdentity ?? appleIdentityVerifier(config.appleAudiences);
+  const apnsConfig = pushConfigFromEnv(
+    { APNS_KEY_ID: config.apnsKeyId, APNS_TEAM_ID: config.apnsTeamId, APNS_KEY_P8: config.apnsKeyP8 } as NodeJS.ProcessEnv,
+    config.apnsTopic,
+  );
+  setPushSender(pushSender !== undefined ? pushSender : apnsConfig ? createApnsSender(apnsConfig) : null);
+  const pushEnabled = pushSender !== undefined ? pushSender !== null : apnsConfig !== null;
   const app = new Hono();
   const store = new JsonStore(config.dataDir);
   const tiles = new TileProxy(config.tileCacheDir, config.tileCacheTtl, fetchImpl);
@@ -375,7 +384,26 @@ export function createApp({ config, fetchImpl = fetch, now = () => new Date(), d
   app.delete("/api/me", async (c) => {
     const user = await currentUser(c);
     if (!user) return c.json({ error: "ei kirjautunut" }, 401);
+    await removeUserPushTokens(db, user.id);
     await deleteAccount(db, user.id);
+    return c.json({ ok: true });
+  });
+
+  /** Push-laitetunniste tilille; appi kutsuu joka käynnistyksessä (tunniste voi vaihtua). */
+  app.put("/api/me/push-token", async (c) => {
+    const user = await currentUser(c);
+    if (!user) return c.json({ error: "ei kirjautunut" }, 401);
+    const body = await readJson<{ token?: unknown; sandbox?: unknown }>(c);
+    const token = cleanText(body?.token, 200);
+    if (!/^[0-9a-f]{32,200}$/i.test(token)) return c.json({ error: "kelvoton tunniste" }, 400);
+    await registerPushToken(db, user.id, token.toLowerCase(), body?.sandbox === true, now());
+    return c.json({ ok: true, pushEnabled });
+  });
+
+  app.delete("/api/me/push-token/:token", async (c) => {
+    const user = await currentUser(c);
+    if (!user) return c.json({ error: "ei kirjautunut" }, 401);
+    await removePushToken(db, cleanText(c.req.param("token"), 200).toLowerCase());
     return c.json({ ok: true });
   });
 

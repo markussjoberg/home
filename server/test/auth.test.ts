@@ -15,6 +15,7 @@ describe("tunnukset", () => {
   let dir: string;
   let database: DbHandle;
   let app: ReturnType<typeof createApp>["app"];
+  let pushed: { token: string; sandbox: boolean; title: string; body: string }[];
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "noste-auth-"));
@@ -22,10 +23,16 @@ describe("tunnukset", () => {
     const config = loadConfig({
       NOSTE_TOKEN: "secret", CLIENT_TOKEN: "client", DATA_DIR: join(dir, "data"), TILE_CACHE_DIR: join(dir, "tiles"),
     } as NodeJS.ProcessEnv);
+    pushed = [];
     ({ app } = createApp({
       config,
       db: database.db,
       fetchImpl: (async () => new Response("{}")) as never,
+      pushSender: async (token, sandbox, message) => {
+        if (token.startsWith("dead")) return "invalid";
+        pushed.push({ token, sandbox, title: message.title, body: message.body });
+        return "ok";
+      },
       // Stubi: "apple:<sub>" kelpaa, muu hylätään.
       verifyIdentity: async (token) => {
         if (!token.startsWith("apple:")) throw new Error("bad token");
@@ -279,5 +286,24 @@ describe("tunnukset", () => {
     // Sama Apple-tunnus voi luoda tilin uudelleen puhtaalta pöydältä.
     const again = await signIn("gone");
     expect(again.user.nickname).toBeNull();
+  });
+
+  it("push: tunniste talletetaan, ilmoitus menee laitteelle, kelvoton tunniste siivotaan", async () => {
+    const owner = await signIn("push-owner", "laite-P");
+    await app.request("/api/public/spots/p1", { method: "PUT", ...asUser(owner.token), body: spot("laite-P", "Pushranta") });
+    expect((await app.request("/api/me/push-token", { method: "PUT", ...asUser(owner.token), body: JSON.stringify({ token: "zz" }) })).status).toBe(400);
+    const good = "a".repeat(64);
+    expect((await app.request("/api/me/push-token", { method: "PUT", ...asUser(owner.token), body: JSON.stringify({ token: good, sandbox: true }) })).status).toBe(200);
+    await app.request("/api/me/push-token", { method: "PUT", ...asUser(owner.token), body: JSON.stringify({ token: "dead" + "b".repeat(60) }) });
+
+    const other = await signIn("push-other");
+    await app.request("/api/me", { method: "PUT", ...asUser(other.token), body: JSON.stringify({ nickname: "Kommentoija" }) });
+    await app.request("/api/public/spots/p1/comments", { method: "POST", ...asUser(other.token), body: JSON.stringify({ text: "Hyvä" }) });
+
+    expect(pushed).toHaveLength(1);
+    expect(pushed[0]).toMatchObject({ token: good, sandbox: true, title: "Uusi kommentti · Pushranta" });
+    // Kelvoton tunniste poistui: toinen kommentti tuottaa edelleen vain yhden pushin.
+    await app.request("/api/public/spots/p1/comments", { method: "POST", ...asUser(other.token), body: JSON.stringify({ text: "Toinen" }) });
+    expect(pushed).toHaveLength(2);
   });
 });

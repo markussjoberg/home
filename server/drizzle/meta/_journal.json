@@ -50,6 +50,13 @@
       "when": 1788416160858,
       "tag": "0006_lethal_rumiko_fujikawa",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788501785929,
+      "tag": "0007_steep_lucky_pierre",
+      "breakpoints": true
     }
   ]
 }

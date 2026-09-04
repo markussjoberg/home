@@ -8,6 +8,24 @@ import type { Db } from "./db/index.js";
 import { notifications, spotComments, spotRevisions, userDevices } from "./db/schema.js";
 import { and as andAlso, eq as eqAlso } from "drizzle-orm";
 import type { PublicSpot } from "./public.js";
+import { type PushSender, pushToUser } from "./push.js";
+
+/** Push-lähettäjä (null = pois päältä); asetetaan createAppissa. */
+let pushSender: PushSender | null = null;
+export function setPushSender(sender: PushSender | null): void { pushSender = sender; }
+
+const KIND_TITLES: Record<string, string> = {
+  kelivahti: "Kelivahti", comment: "Uusi kommentti", deletion_proposed: "Poistoehdotus", deletion_executed: "Spotti poistettu",
+};
+
+async function pushAlso(db: Db, userIds: string[], kind: string, spotName: string, message: string, spotId: string): Promise<void> {
+  if (!pushSender) return;
+  for (const userId of userIds) {
+    await pushToUser(db, pushSender, userId, {
+      title: `${KIND_TITLES[kind] ?? "Noste"} · ${spotName}`, body: message, data: { kind, spotId },
+    }).catch(() => undefined);
+  }
+}
 
 /** Käyttäjät, joita spotti koskee: omistaja, laitteen kautta omistavat, kommentoineet, muokanneet. */
 export async function stakeholders(db: Db, spot: PublicSpot): Promise<Set<string>> {
@@ -31,6 +49,7 @@ export async function notify(db: Db, userIds: Iterable<string>, input: {
   }));
   if (!rows.length) return 0;
   await db.insert(notifications).values(rows);
+  await pushAlso(db, rows.map((r) => r.userId), input.kind, input.spot.name, input.message, input.spot.id);
   return rows.length;
 }
 
@@ -45,6 +64,7 @@ export async function notifyOnce(db: Db, userId: string, input: {
     userId, kind: input.kind, spotId: input.spotId, spotName: input.spotName, message: input.message,
     dedupKey: input.dedupKey, createdAt: input.now,
   });
+  await pushAlso(db, [userId], input.kind, input.spotName, input.message, input.spotId);
   return true;
 }
 

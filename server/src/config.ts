@@ -5,6 +5,11 @@ export interface Config {
   databaseUrl: string;
   /** Sign in with Apple: hyväksytyt yleisöt (bundle id:t). */
   appleAudiences: string[];
+  /** APNs (push): tyhjä = pois päältä, ilmoitukset vain appin sisäisinä. */
+  apnsKeyId: string;
+  apnsTeamId: string;
+  apnsKeyP8: string;
+  apnsTopic: string;
   /** MML avoin karttakuvapalvelu -avain (maastokarttatiilet). */
   mmlApiKey: string;
   /** Merikarttatiilien WMTS-osoite, {z}/{y}/{x} korvataan. */
@@ -39,6 +44,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port: Number(env.PORT ?? 8080),
     databaseUrl: env.DATABASE_URL ?? "",
     appleAudiences: (env.APPLE_BUNDLE_IDS ?? "com.aihiolabs.noste,fi.markussjoberg.noste").split(",").map((s) => s.trim()).filter(Boolean),
+    apnsKeyId: env.APNS_KEY_ID ?? "",
+    apnsTeamId: env.APNS_TEAM_ID ?? "",
+    apnsKeyP8: env.APNS_KEY_P8 ?? "",
+    apnsTopic: env.APNS_TOPIC ?? "com.aihiolabs.noste",
     mmlApiKey: env.MML_API_KEY ?? "",
     marineTileTemplate: env.MARINE_TILE_TEMPLATE ?? DEFAULT_MARINE_TEMPLATE,
     apiToken: env.NOSTE_TOKEN ?? "",

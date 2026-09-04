@@ -144,3 +144,12 @@ export const userAlerts = pgTable("user_alerts", {
   data: jsonb("data").$type<Record<string, unknown>>().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 }, (t) => [primaryKey({ columns: [t.userId, t.alertId] })]);
+
+/** APNs-laitetunnisteet push-ilmoituksiin (kelivahti, kommentit, poistoehdotukset). */
+export const pushTokens = pgTable("push_tokens", {
+  token: text("token").primaryKey(),
+  userId: text("user_id").notNull(),
+  /** true = kehitysbuildi (api.sandbox.push.apple.com). */
+  sandbox: integer("sandbox").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
