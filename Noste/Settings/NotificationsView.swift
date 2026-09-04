@@ -29,6 +29,9 @@ struct NotificationsView: View {
             }
         }
         .navigationTitle("Ilmoitukset")
+        .scrollContentBackground(.hidden)
+        .background(Theme.background)
+        .listRowBackground(Theme.surface)
         .task {
             items = await ServerClient.shared.notifications()
             // Näytetty = luettu; laskuri nollautuu.

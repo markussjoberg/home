@@ -121,6 +121,9 @@ struct SettingsTab: View {
                 }
             }
             .navigationTitle("Asetukset")
+            .scrollContentBackground(.hidden)
+            .background(Theme.background)
+            .listRowBackground(Theme.surface)
         }
     }
 }

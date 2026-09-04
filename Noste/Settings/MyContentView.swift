@@ -55,6 +55,9 @@ struct MyContentView: View {
             }
         }
         .navigationTitle("Omat julkaisut")
+        .scrollContentBackground(.hidden)
+        .background(Theme.background)
+        .listRowBackground(Theme.surface)
         .task { await reload() }
         .refreshable { await reload() }
         .alert("Julkinen spotti on yhteinen", isPresented: Binding(get: { notice != nil }, set: { if !$0 { notice = nil } })) {

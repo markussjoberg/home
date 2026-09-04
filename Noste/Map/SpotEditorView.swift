@@ -129,6 +129,9 @@ struct SpotEditorView: View {
             }
             .onAppear(perform: loadAlert)
             .navigationTitle(isNew ? "Uusi spotti" : draft.name)
+            .scrollContentBackground(.hidden)
+            .background(Theme.background)
+            .listRowBackground(Theme.surface)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

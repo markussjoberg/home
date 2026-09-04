@@ -69,6 +69,9 @@ struct PublicSpotEditor: View {
                 }
             }
             .navigationTitle("Täydennä spottia")
+            .scrollContentBackground(.hidden)
+            .background(Theme.background)
+            .listRowBackground(Theme.surface)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Peru") { dismiss() } }
@@ -130,6 +133,9 @@ struct PublicSpotHistoryView: View {
             }
         }
         .navigationTitle("Historia")
+        .scrollContentBackground(.hidden)
+        .background(Theme.background)
+        .listRowBackground(Theme.surface)
         .task { revisions = await ServerClient.shared.spotHistory(spotID: spotID) }
         .confirmationDialog("Palautetaanko tämä versio?", isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } })) {
             Button("Palauta") {

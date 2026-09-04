@@ -73,6 +73,9 @@ struct GearView: View {
             }
         }
         .navigationTitle("Kalusto")
+        .scrollContentBackground(.hidden)
+        .background(Theme.background)
+        .listRowBackground(Theme.surface)
         .task {
             if catalog.isEmpty, let items = await ServerClient.shared.shopCatalog() {
                 catalog = items
@@ -231,6 +234,9 @@ struct GearEditorView: View {
                     .keyboardType(.numberPad)
             }
             .navigationTitle(record == nil ? "Lisää kalustoa" : "Muokkaa")
+            .scrollContentBackground(.hidden)
+            .background(Theme.background)
+            .listRowBackground(Theme.surface)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -349,6 +355,9 @@ struct CatalogPickerView: View {
         }
         .searchable(text: $query, prompt: "Hae mallia")
         .navigationTitle("Lappiksen valikoima")
+        .scrollContentBackground(.hidden)
+        .background(Theme.background)
+        .listRowBackground(Theme.surface)
         .navigationBarTitleDisplayMode(.inline)
     }
 }

@@ -123,6 +123,9 @@ struct PublicSpotView: View {
                 commentsSection
             }
             .navigationTitle(spot.name)
+            .scrollContentBackground(.hidden)
+            .background(Theme.background)
+            .listRowBackground(Theme.surface)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
