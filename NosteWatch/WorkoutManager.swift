@@ -63,7 +63,7 @@ final class WorkoutManager: NSObject, ObservableObject {
     private var pausedTotal: TimeInterval = 0
     private var pausedAt: Date?
     private var timer: AnyCancellable?
-    private var ticksSinceAutosave = 0
+    private var lastAutosave = Date.distantPast
 
     private var trackPoints: [TrackPoint] = []
     private var heartRateSamples: [HeartRateSample] = []
@@ -142,7 +142,7 @@ final class WorkoutManager: NSObject, ObservableObject {
         pausedTotal = 0
         pausedAt = nil
         startDate = Date()
-        ticksSinceAutosave = 0
+        lastAutosave = Date()
 
         diveCount = 0
         diveTime = 0
@@ -261,12 +261,15 @@ final class WorkoutManager: NSObject, ObservableObject {
             self.livePumpCount = self.pumpDetector.strokeCount
             self.motionLock.unlock()
 
-            self.ticksSinceAutosave += 1
-            if self.ticksSinceAutosave >= 30 {
-                self.ticksSinceAutosave = 0
-                self.autosave()
-            }
+            self.autosaveIfDue()
         }
+    }
+
+    /// Kutsutaan ajastimesta ja GPS-polusta: taustalla ajastin voi hidastua, GPS-delegaatti ei.
+    private func autosaveIfDue() {
+        guard phase == .running, Date().timeIntervalSince(lastAutosave) >= 30 else { return }
+        lastAutosave = Date()
+        autosave()
     }
 
     // MARK: - Sukellukset
@@ -394,6 +397,7 @@ final class WorkoutManager: NSObject, ObservableObject {
                 horizontalAccuracy: location.horizontalAccuracy
             )
             trackPoints.append(point)
+            autosaveIfDue()
             if accurate {
                 routeBuilder?.insertRouteData([location]) { _, _ in }
             }
@@ -477,7 +481,21 @@ extension WorkoutManager: CLLocationManagerDelegate {
         }
     }
 
-    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        guard (error as? CLError)?.code == .denied else { return }
+        Task { @MainActor in self.notice = "Sijaintilupa puuttuu — sessio tallentuu ilman GPS-jälkeä. Salli sijainti kellon asetuksista." }
+    }
+
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
+        Task { @MainActor in
+            if status == .denied || status == .restricted {
+                self.notice = "Sijaintilupa puuttuu — sessio tallentuu ilman GPS-jälkeä. Salli sijainti kellon asetuksista."
+            } else if self.notice?.hasPrefix("Sijaintilupa puuttuu") == true {
+                self.notice = nil
+            }
+        }
+    }
 }
 
 extension WorkoutManager: HKWorkoutSessionDelegate {

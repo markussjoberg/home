@@ -43,6 +43,8 @@ enum SpotEditing {
                 }
                 await forecastStore.refresh(spot: data, force: true, allSpots: updated)
                 await ServerClient.shared.backupSpots(updated)
+                // Uusi suosikki saa offline-kartan ja vesimaskin kelloon heti, ei vasta seuraavassa käynnistyksessä.
+                await MapSnapshotService.shared.syncFavorites(spots: updated)
                 // Maastoanalyysi kerran per spotti: fetch + avoimuus ilmansuunnittain.
                 if record.fetchKmByOctant == nil,
                    let meta = await ServerClient.shared.spotMeta(latitude: data.latitude, longitude: data.longitude) {

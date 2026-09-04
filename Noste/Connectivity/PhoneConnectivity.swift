@@ -116,7 +116,15 @@ final class PhoneConnectivity: NSObject, ObservableObject {
 }
 
 extension PhoneConnectivity: WCSessionDelegate {
-    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {}
+    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        // Kylmäkäynnistyksessä RootView'n synkka ehtii usein ennen aktivointia ja
+        // hylkää hiljaa — yritetään uudelleen nyt kun kanava on auki.
+        guard activationState == .activated, let container else { return }
+        Task { @MainActor in
+            let spots = ((try? container.mainContext.fetch(FetchDescriptor<SpotRecord>())) ?? []).map(\.data)
+            await MapSnapshotService.shared.syncFavorites(spots: spots)
+        }
+    }
     func sessionDidBecomeInactive(_ session: WCSession) {}
     func sessionDidDeactivate(_ session: WCSession) {
         session.activate()

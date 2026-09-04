@@ -42,7 +42,7 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
     private var pausedTotal: TimeInterval = 0
     private var pausedAt: Date?
     private var timer: AnyCancellable?
-    private var ticksSinceAutosave = 0
+    private var lastAutosave = Date.distantPast
 
     private var trackPoints: [TrackPoint] = []
     private let motionLock = NSLock()
@@ -100,7 +100,7 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
         pausedTotal = 0
         pausedAt = nil
         startDate = Date()
-        ticksSinceAutosave = 0
+        lastAutosave = Date()
 
         locationManager.delegate = self
         locationManager.requestWhenInUseAuthorization()
@@ -192,22 +192,26 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
             self.livePumpCount = self.pumpDetector.strokeCount
             self.motionLock.unlock()
 
-            self.ticksSinceAutosave += 1
-            if self.ticksSinceAutosave >= 30 {
-                self.ticksSinceAutosave = 0
-                self.motionLock.lock()
-                let strokes = self.pumpDetector.currentStrokeTimes
-                self.motionLock.unlock()
-                let segments = self.segmentTracker.snapshot(at: self.trackPoints.last?.t ?? 0)
-                SessionRecovery.save(SessionRecovery.State(
-                    sport: self.sport,
-                    startDate: self.startDate,
-                    points: self.trackPoints,
-                    strokeTimes: strokes,
-                    segments: segments.isEmpty ? nil : segments
-                ))
-            }
+            self.autosaveIfDue()
         }
+    }
+
+    /// Kaatumissuoja: talletetaan 30 s välein. Kutsutaan sekä UI-ajastimesta
+    /// että GPS-polusta — taustalla ajastin voi hidastua, GPS-delegaatti ei.
+    private func autosaveIfDue(force: Bool = false) {
+        guard phase == .running, force || Date().timeIntervalSince(lastAutosave) >= 30 else { return }
+        lastAutosave = Date()
+        motionLock.lock()
+        let strokes = pumpDetector.currentStrokeTimes
+        motionLock.unlock()
+        let segments = segmentTracker.snapshot(at: trackPoints.last?.t ?? 0)
+        SessionRecovery.save(SessionRecovery.State(
+            sport: sport,
+            startDate: startDate,
+            points: trackPoints,
+            strokeTimes: strokes,
+            segments: segments.isEmpty ? nil : segments
+        ))
     }
 
     fileprivate func handle(locations: [CLLocation]) {
@@ -227,6 +231,7 @@ final class PhoneWorkoutManager: NSObject, ObservableObject {
                 speed: speed,
                 horizontalAccuracy: location.horizontalAccuracy
             ))
+            autosaveIfDue()
             currentSpeed = max(0, speed)
             motionLock.lock(); gatedSpeed = speed; motionLock.unlock()
             if accurate {
@@ -275,5 +280,21 @@ extension PhoneWorkoutManager: CLLocationManagerDelegate {
         }
     }
 
-    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        guard (error as? CLError)?.code == .denied else { return }
+        Task { @MainActor in self.notice = "Sijaintilupa puuttuu — sessio tallentuu ilman GPS-jälkeä. Salli sijainti Asetuksista." }
+    }
+
+    /// Luvan epääminen ei saa jäädä hiljaiseksi: tallennus jatkuu, mutta käyttäjä tietää miksi jälkeä ei tule.
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
+        Task { @MainActor in
+            switch status {
+            case .denied, .restricted:
+                self.notice = "Sijaintilupa puuttuu — sessio tallentuu ilman GPS-jälkeä. Salli sijainti Asetuksista."
+            default:
+                if self.notice?.hasPrefix("Sijaintilupa puuttuu") == true { self.notice = nil }
+            }
+        }
+    }
 }
