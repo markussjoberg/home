@@ -50,23 +50,33 @@ struct PublicSpotView: View {
             List {
                 deletionSection
 
-                Section {
-                    if !spot.sports.isEmpty {
-                        HStack(spacing: 14) {
-                            ForEach(spot.sports.compactMap(Sport.init(rawValue:))) { sport in
-                                VStack(spacing: 4) {
-                                    SportIcon(sport: sport, size: 26).foregroundStyle(.tint)
-                                    Text(sport.displayName).font(.caption2).foregroundStyle(.secondary)
+                // Pääkortti: toimivat suunnat ruusuna, lajit ja rajat isolla.
+                HStack(spacing: 16) {
+                    ExposureRoseGlyph(exposure: (0..<8).map { spot.goodDirections?.contains($0) == true ? 1.0 : 0.0 }, diameter: 56)
+                        .frame(width: 64, height: 72)
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let directions = spot.goodDirections, !directions.isEmpty {
+                            Text(directions.map { ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][$0] }.joined(separator: " "))
+                                .font(.stat(24))
+                        } else {
+                            Text("Kaikki suunnat").font(.stat(20)).foregroundStyle(Theme.muted)
+                        }
+                        Text(windowText ?? "Toimivat suunnat").font(.statLabel).foregroundStyle(Theme.muted)
+                        if !spot.sports.isEmpty {
+                            HStack(spacing: 10) {
+                                ForEach(spot.sports.compactMap(Sport.init(rawValue:))) { sport in
+                                    SportIcon(sport: sport, size: 20).foregroundStyle(Theme.wind)
+                                        .accessibilityLabel(sport.displayName)
                                 }
                             }
-                            Spacer()
                         }
-                        .padding(.vertical, 2)
                     }
-                    if let windowText {
-                        Label(windowText, systemImage: "wind")
-                            .font(.subheadline)
-                    }
+                    Spacer()
+                }
+                .card()
+                .cardRow()
+
+                Section {
                     LabeledContent("Vesistö", value: spot.waterType == "sea" ? "Meri" : "Järvi")
                     if let description = spot.description, !description.isEmpty {
                         Text(description).font(.subheadline)
