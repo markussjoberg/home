@@ -3,6 +3,7 @@ import SwiftData
 
 @main
 struct NosteApp: App {
+    @UIApplicationDelegateAdaptor(PushDelegate.self) private var pushDelegate
     let container: ModelContainer
 
     init() {

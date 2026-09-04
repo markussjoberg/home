@@ -27,6 +27,8 @@ targets:
         # Tunnukset: Sign in with Apple (ei salasanoja). Vaatii capabilityn App ID:lle.
         com.apple.developer.applesignin:
           - Default
+        # Push-ilmoitukset (kelivahti, kommentit). Xcode vaihtaa production-arvoon jakelussa.
+        aps-environment: development
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aihiolabs.noste

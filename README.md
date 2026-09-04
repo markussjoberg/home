@@ -50,6 +50,10 @@ testit eivät tarvitse erillistä kantaa. Skeema: Drizzle, migraatiot `server/dr
 (`pnpm drizzle-kit generate` skeemamuutoksen jälkeen; ajetaan käynnistyksessä).
 Vanhat JSON-tiedostot siirretään kantaan kertaalleen.
 
+Push-ilmoitukset (kelivahti, kommentit, poistoehdotukset) lähtevät APNs:iin,
+kun `.env`:ssä on `APNS_KEY_ID`, `APNS_TEAM_ID` ja `APNS_KEY_P8` (base64).
+Ilman niitä ilmoitukset näkyvät vain appin Asetukset → Ilmoitukset.
+
 Tuotannossa reverse proxy on **Traefik** (`docker-compose.prod.yml`, verkko
 `wp_web`; polkureitti `aihiolabs.com/noste` tarvitsee `priority: 1000`).
 Paikalliseen kehitykseen `docker-compose.yml` tai `pnpm dev`. Deploy:

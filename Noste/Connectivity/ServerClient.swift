@@ -136,6 +136,16 @@ struct ServerClient {
         return (response as? HTTPURLResponse)?.statusCode == 200
     }
 
+    /// APNs-laitetunniste tilille (kutsutaan joka käynnistyksessä kirjautuneena).
+    func registerPushToken(_ token: String, sandbox: Bool) async {
+        struct Upload: Codable { var token: String; var sandbox: Bool }
+        guard UserAccount.shared.token != nil,
+              let body = try? JSONEncoder().encode(Upload(token: token, sandbox: sandbox)),
+              let request = communityRequest(path: "api/me/push-token", method: "PUT", body: body)
+        else { return }
+        _ = try? await URLSession.shared.data(for: request)
+    }
+
     func logout() async {
         guard let request = communityRequest(path: "api/auth/logout", method: "POST") else { return }
         _ = try? await URLSession.shared.data(for: request)

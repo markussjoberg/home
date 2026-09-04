@@ -54,6 +54,7 @@ final class UserAccount: ObservableObject {
         KeychainStore.write(Self.tokenKey, result.token)
         store(user: result.user)
         lastError = nil
+        await PushRegistrar.registerIfAllowed()
     }
 
     func setNickname(_ nickname: String) async -> Bool {
@@ -76,6 +77,7 @@ final class UserAccount: ObservableObject {
         case .success(let fresh):
             store(user: fresh)
             unreadNotifications = await ServerClient.shared.unreadNotifications() ?? unreadNotifications
+            await PushRegistrar.registerIfAllowed()
         case .unauthorized: signOutLocally()
         case .unavailable: break
         }
