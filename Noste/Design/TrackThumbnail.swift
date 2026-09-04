@@ -7,6 +7,8 @@ import NosteCore
 struct TrackThumbnail: View {
     let id: UUID
     let track: [TrackPoint]
+    /// Ilman jälkeä näytetään lajin kuvake, ei "ei sijaintia" -virhettä.
+    var sport: Sport? = nil
     var size: CGSize = CGSize(width: 96, height: 96)
 
     @State private var image: UIImage?
@@ -23,9 +25,11 @@ struct TrackThumbnail: View {
                     .frame(width: size.width, height: size.height)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             } else if track.count < 2 {
-                Image(systemName: "location.slash")
-                    .font(.title3)
-                    .foregroundStyle(Theme.muted)
+                if let sport {
+                    SportIcon(sport: sport, size: 34).foregroundStyle(Theme.wind.opacity(0.7))
+                } else {
+                    Image(systemName: "location.slash").font(.title3).foregroundStyle(Theme.muted)
+                }
             }
         }
         .frame(width: size.width, height: size.height)

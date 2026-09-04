@@ -142,7 +142,7 @@ private struct SessionRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            TrackThumbnail(id: record.id, track: record.track, size: CGSize(width: 88, height: 88))
+            TrackThumbnail(id: record.id, track: record.track, sport: record.sport, size: CGSize(width: 88, height: 88))
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     SportIcon(sport: record.sport, size: 18).foregroundStyle(Theme.wind)
@@ -200,6 +200,11 @@ struct SessionDetailView: View {
                 }
                 .card()
                 .cardRow()
+            }
+            if record.track.count < 2 {
+                Label("Ei GPS-jälkeä — sessio tallentui ilman sijaintia (lupa puuttui tai GPS ei löytänyt).", systemImage: "location.slash")
+                    .font(.footnote).foregroundStyle(Theme.muted)
+                    .cardRow()
             }
             if !record.track.isEmpty {
                 Section {
