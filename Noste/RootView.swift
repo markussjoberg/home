@@ -4,6 +4,7 @@ import NosteCore
 
 struct RootView: View {
     @StateObject private var forecastStore = ForecastStore()
+    @ObservedObject private var account = UserAccount.shared
     @Query private var spots: [SpotRecord]
 
     @State private var selection: Tab = .map
@@ -30,6 +31,7 @@ struct RootView: View {
                 .tag(Tab.sessions)
             SettingsTab()
                 .tabItem { Label("Asetukset", systemImage: "gearshape") }
+                .badge(account.unreadNotifications) // kelivahti, kommentit, poistoehdotukset
                 .tag(Tab.settings)
         }
         .onChange(of: selection) { previous, current in
@@ -45,6 +47,7 @@ struct RootView: View {
         // Tumma ensin: kuvavetoinen ilme, isot luvut erottuvat myös kirkkaassa.
         .preferredColorScheme(.dark)
         .task {
+            await account.refresh() // lukemattomat ilmoitukset merkkiin
             let data = spots.map(\.data)
             await forecastStore.refreshFavorites(spots: data)
             await MapSnapshotService.shared.syncFavorites(spots: data)
