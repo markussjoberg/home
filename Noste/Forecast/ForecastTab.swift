@@ -166,6 +166,15 @@ struct SpotForecastView: View {
                 .cardRow()
             }
 
+            // Tuuli- ja aaltokenttä spotin ympärillä aikajanalla (Windyn tapaan).
+            Section {
+                SpotFieldMap(spot: spot)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    .listRowBackground(Color.clear)
+            } header: {
+                Text("Kenttä")
+            }
+
             if let observation, let speed = observation.windSpeed {
                 Section {
                     HStack {
