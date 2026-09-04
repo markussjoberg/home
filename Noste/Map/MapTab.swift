@@ -28,24 +28,12 @@ struct MapTab: View {
 
     // Merisää-kerros: FMI:n poijut + tuuliasemat näkyvältä alueelta.
     @AppStorage("mapSeaState") private var seaStateEnabled = false
-    @State private var seaState: ServerClient.SeaState?
-    @State private var seaStateTask: Task<Void, Never>?
-    @State private var windModel = WindParticleModel()
-    @State private var windSeries: WindFieldSeries?
-    @State private var waveSeries: WaveFieldSeries?
-    @State private var waterMask: WaterSnapshotMask?
-    @State private var waveField: WaveField?
-    @State private var waveRaster: WaveFieldRaster?
-    @State private var rasterTask: Task<Void, Never>?
-    /// Aikajana: tunteja nykyhetkestä (0 = nyt). Sama valinta ohjaa tuuli- ja aaltokenttää.
-    @State private var timelineOffset: Double = 0
+    /// Kenttien tila ja logiikka (hilat, aikajana, maski, poijunudjaus).
+    @StateObject private var fields = MarineFieldsModel()
     /// Ennustepiste (Windy-tyyliin): napautettu kohta, jonka arvot luetaan kentistä.
     @State private var probeCoordinate: CLLocationCoordinate2D?
     /// Kartalta napautettu oma spotti: kortti, ei suoraan editori.
     @State private var selectedSpot: SpotData?
-    /// Merisää-kerroksen tila käyttäjälle: nil = kaikki hyvin, muuten lyhyt syy
-    /// (haku kesken / ei yhteyttä). Hiljaa tyhjänä oleva kerros näyttäisi rikkinäiseltä.
-    @State private var seaStateStatus: String?
     /// Yhteisöviesti (esim. poisto eteni ehdotuksena, koska muut ovat lisänneet sisältöä).
     @State private var communityNotice: String?
     /// Panoroinnin/zoomin aikana tuulipartikkelit piilotetaan: SwiftUI-kerros
@@ -84,137 +72,7 @@ struct MapTab: View {
 
     private func refreshSeaState(_ region: MKCoordinateRegion) {
         guard seaStateEnabled else { return }
-        seaStateTask?.cancel()
-        if windSeries == nil && waveSeries == nil { seaStateStatus = "Haetaan merisäätä…" }
-        seaStateTask = Task {
-            try? await Task.sleep(nanoseconds: 600_000_000)
-            guard !Task.isCancelled else { return }
-            let halfLat = region.span.latitudeDelta / 2
-            let halfLon = region.span.longitudeDelta / 2
-            async let stateTask = ServerClient.shared.seaState(
-                minLat: region.center.latitude - halfLat,
-                minLon: region.center.longitude - halfLon,
-                maxLat: region.center.latitude + halfLat,
-                maxLon: region.center.longitude + halfLon
-            )
-            async let fieldTask = ServerClient.shared.windField(
-                minLat: region.center.latitude - halfLat,
-                minLon: region.center.longitude - halfLon,
-                maxLat: region.center.latitude + halfLat,
-                maxLon: region.center.longitude + halfLon
-            )
-            async let waveTask = ServerClient.shared.waveField(
-                minLat: region.center.latitude - halfLat,
-                minLon: region.center.longitude - halfLon,
-                maxLat: region.center.latitude + halfLat,
-                maxLon: region.center.longitude + halfLon
-            )
-            let (state, wind, waves) = await (stateTask, fieldTask, waveTask)
-            guard !Task.isCancelled else { return }
-            if state == nil && wind == nil && waves == nil {
-                seaStateStatus = (windSeries == nil && waveSeries == nil)
-                    ? "Merisäätä ei saatu — tarkista verkkoyhteys."
-                    : "Merisään päivitys epäonnistui, näytetään edellinen."
-            } else if wind == nil && waves == nil && windSeries == nil && waveSeries == nil {
-                // Chipit tulivat mutta kentät eivät (palvelin vanha tai Open-Meteo alhaalla).
-                seaStateStatus = "Tuuli- ja aaltokenttä ei ole saatavilla juuri nyt."
-            } else {
-                seaStateStatus = nil
-            }
-            if let state { seaState = state }
-            if let wind, !wind.isEmpty {
-                windSeries = wind
-                let index = FieldTime.index(of: selectedTime, in: wind.dates) ?? 0
-                windModel.update(cells: wind.cells(at: index), region: region)
-            }
-            if let waves, !waves.isEmpty {
-                let bboxChanged = waveSeries?.bbox != waves.bbox
-                waveSeries = waves
-                if bboxChanged { waterMask = nil }
-                applyWaveTimeline()
-                if bboxChanged {
-                    // Vesimaski Applen peruskartasta; aaltosolut kalibroivat vesivärin.
-                    let samples = waves.cells.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
-                    let mask = await WaterSnapshotMask.build(center: waves.center, spanLat: waves.spanLat,
-                                                             spanLon: waves.spanLon, waterSamples: samples)
-                    guard !Task.isCancelled, waveSeries?.bbox == waves.bbox else { return }
-                    waterMask = mask
-                    applyWaveTimeline()
-                }
-            }
-        }
-    }
-
-    /// Aikajanan valittu hetki tasatunteina.
-    private var selectedTime: Date {
-        FieldTime.currentHour().addingTimeInterval(timelineOffset * 3600)
-    }
-
-    /// Aikajanan pituus tunteina (ennusteen loppuun asti).
-    private var timelineHours: Double {
-        let ends = [windSeries?.dates.last, waveSeries?.dates.last].compactMap { $0 }
-        guard let end = ends.min() else { return 0 }
-        return max(0, floor(end.timeIntervalSince(FieldTime.currentHour()) / 3600))
-    }
-
-    /// Aikajana liikkui: tuulikenttä vaihdetaan alta, aaltokenttä lasketaan uudelleen.
-    private func timelineChanged() {
-        if let windSeries, let index = FieldTime.index(of: selectedTime, in: windSeries.dates) {
-            windModel.setCells(windSeries.cells(at: index))
-        }
-        applyWaveTimeline()
-    }
-
-    /// Aaltokenttä valitulle tunnille: poijukorjaus + maski → rasteri taustalla.
-    private func applyWaveTimeline() {
-        guard let series = waveSeries, let index = FieldTime.index(of: selectedTime, in: series.dates) else { return }
-        let corrections = buoyCorrections(series: series, at: selectedTime)
-        let field = series.field(at: index, mask: waterMask, corrections: corrections)
-        waveField = field
-        rasterTask?.cancel()
-        guard field.mask != nil else { waveRaster = nil; return }
-        rasterTask = Task.detached(priority: .userInitiated) {
-            let raster = WaveFieldRaster.build(field: field)
-            guard !Task.isCancelled else { return }
-            await MainActor.run { waveRaster = raster }
-        }
-    }
-
-    /// Poijujen havainnot nudjaavat mallia: ln(havaittu/malli) poijun kohdalla
-    /// havaintohetkeltä, vaimennettuna ennusteen etäisyyden mukaan (12 h e-aika).
-    private func buoyCorrections(series: WaveFieldSeries, at time: Date) -> [WaveCorrection] {
-        guard let buoys = seaState?.buoys else { return [] }
-        let iso = ISO8601DateFormatter()
-        var corrections: [WaveCorrection] = []
-        for buoy in buoys {
-            guard let observed = buoy.waveHeight, observed > 0.05,
-                  let observedAt = iso.date(from: buoy.time),
-                  let index = FieldTime.index(of: observedAt, in: series.dates) else { continue }
-            let model = series.field(at: index).height(atLat: buoy.latitude, lon: buoy.longitude)
-            guard model.weight > 0.2, model.height > 0.05 else { continue }
-            let decay = exp(-abs(time.timeIntervalSince(observedAt)) / (12 * 3600))
-            let logRatio = max(-log(2), min(log(2), log(observed / model.height))) * decay
-            corrections.append(WaveCorrection(latitude: buoy.latitude, longitude: buoy.longitude, logRatio: logRatio))
-        }
-        return corrections
-    }
-
-    /// Tuuli napautetussa pisteessä valitulle tunnille (kentän interpolointi).
-    private func probeWind(at coordinate: CLLocationCoordinate2D) -> ForecastProbeCard.Wind? {
-        guard let wind = windModel.wind(atLat: coordinate.latitude, lon: coordinate.longitude), wind.speed > 0 else { return nil }
-        // Kulkusuunta (u, v) → meteorologinen "mistä"-suunta.
-        let from = (atan2(wind.u, wind.v) * 180 / .pi + 180).truncatingRemainder(dividingBy: 360)
-        return .init(speed: wind.speed, direction: from < 0 ? from + 360 : from)
-    }
-
-    /// Aallokko napautetussa pisteessä; nil maalla tai kentän ulkopuolella.
-    private func probeWave(at coordinate: CLLocationCoordinate2D) -> ForecastProbeCard.Wave? {
-        guard let field = waveField else { return nil }
-        if let mask = field.mask, mask.isWater(lat: coordinate.latitude, lon: coordinate.longitude) == false { return nil }
-        let s = field.sample(atLat: coordinate.latitude, lon: coordinate.longitude)
-        guard s.weight > 0.2 else { return nil }
-        let from = (atan2(s.u, s.v) * 180 / .pi + 180).truncatingRemainder(dividingBy: 360)
-        return .init(height: s.height, direction: from < 0 ? from + 360 : from, period: s.period)
+        fields.refresh(region: region)
     }
 
     /// Julkaisun poisto voi edetä ehdotuksena: kerrotaan käyttäjälle miksi ja milloin.
@@ -229,15 +87,6 @@ struct MapTab: View {
         communityNotice = "Muut ovat lisänneet spottiin sisältöä, joten julkinen spotti ei poistu heti. Poisto toteutuu \(when), ellei kukaan osallistunut vastusta. Oma yksityinen kopiosi on jo poistettu tai piilotettu."
     }
 
-    /// Aikajanan otsikko: "Nyt" tai viikonpäivä + tunti Suomen ajassa.
-    private var timelineLabel: String {
-        guard timelineOffset > 0 else { return "Nyt" }
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "fi_FI")
-        f.timeZone = TimeZone(identifier: "Europe/Helsinki")
-        f.dateFormat = "EEE HH:mm"
-        return f.string(from: selectedTime)
-    }
 
     /// Hakee rantainfran näkyvän alueen keskeltä (viive perää nopeaa panorointia).
     private func regionChanged(_ region: MKCoordinateRegion) {
@@ -298,9 +147,9 @@ struct MapTab: View {
                     marineTemplate: marineTemplateResolved,
                     places: visiblePlaces,
                     publicSpots: visiblePublicSpots,
-                    seaState: seaStateEnabled ? seaState : nil,
-                    waveField: seaStateEnabled ? waveField : nil,
-                    waveRaster: seaStateEnabled ? waveRaster : nil,
+                    seaState: seaStateEnabled ? fields.seaState : nil,
+                    waveField: seaStateEnabled ? fields.waveField : nil,
+                    waveRaster: seaStateEnabled ? fields.waveRaster : nil,
                     probeCoordinate: probeCoordinate,
                     onLongPress: { coordinate in
                         editingSpot = SpotData(
@@ -337,8 +186,8 @@ struct MapTab: View {
                 )
                 .ignoresSafeArea(edges: .top)
 
-                if seaStateEnabled, !isMapMoving, let region = currentRegion, windModel.isReady {
-                    WindFieldOverlay(model: windModel, region: region)
+                if seaStateEnabled, !isMapMoving, let region = currentRegion, fields.windModel.isReady {
+                    WindFieldOverlay(model: fields.windModel, region: region)
                         .ignoresSafeArea(edges: .top)
                         .transition(.opacity)
                 }
@@ -356,11 +205,11 @@ struct MapTab: View {
                     if let coordinate = probeCoordinate, seaStateEnabled {
                         ForecastProbeCard(
                             coordinate: coordinate,
-                            timeLabel: timelineLabel,
-                            wind: probeWind(at: coordinate),
-                            wave: probeWave(at: coordinate),
+                            timeLabel: fields.timelineLabel,
+                            wind: fields.probeWind(at: coordinate),
+                            wave: fields.probeWave(at: coordinate),
                             onForecast: {
-                                let onWater = waveField?.mask?.isWater(lat: coordinate.latitude, lon: coordinate.longitude)
+                                let onWater = fields.waveField?.mask?.isWater(lat: coordinate.latitude, lon: coordinate.longitude)
                                 forecastPoint = SpotData(
                                     name: "Ennustepiste",
                                     latitude: coordinate.latitude,
@@ -399,36 +248,35 @@ struct MapTab: View {
                             .padding(.vertical, 6)
                             .background(.thinMaterial, in: Capsule())
                     }
-                    if seaStateEnabled, let status = seaStateStatus, timelineHours == 0 {
+                    if seaStateEnabled, let status = fields.status, fields.timelineHours == 0 {
                         Text(status)
                             .font(.caption)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
                             .background(.thinMaterial, in: Capsule())
                     }
-                    if seaStateEnabled, timelineHours > 0 {
+                    if seaStateEnabled, fields.timelineHours > 0 {
                         VStack(spacing: 2) {
                             HStack {
-                                if waveField != nil { WaveLegend() }
+                                if fields.waveField != nil { WaveLegend() }
                                 Spacer()
-                                Text(timelineLabel)
+                                Text(fields.timelineLabel)
                                     .font(.caption.monospacedDigit().weight(.medium))
-                                if timelineOffset > 0 {
-                                    Button("Nyt") { timelineOffset = 0 }
+                                if fields.timelineOffset > 0 {
+                                    Button("Nyt") { fields.timelineOffset = 0 }
                                         .font(.caption)
                                         .buttonStyle(.bordered)
                                         .controlSize(.mini)
                                 }
                             }
-                            Slider(value: $timelineOffset, in: 0...max(1, timelineHours), step: 1)
+                            Slider(value: $fields.timelineOffset, in: 0...max(1, fields.timelineHours), step: 1)
                                 .accessibilityLabel("Ennusteen ajankohta")
-                                .accessibilityValue(timelineLabel)
+                                .accessibilityValue(fields.timelineLabel)
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
                         .padding(.horizontal)
-                        .onChange(of: timelineOffset) { _, _ in timelineChanged() }
                     }
                     Picker("Taso", selection: $layerRaw) {
                         ForEach(MapLayer.allCases) { layer in
@@ -461,17 +309,8 @@ struct MapTab: View {
                             // Haetaan heti — muuten kerros ilmestyisi vasta panoroinnin jälkeen.
                             if let region = currentRegion { refreshSeaState(region) }
                         } else {
-                            seaStateTask?.cancel()
-                            rasterTask?.cancel()
-                            seaState = nil
-                            windSeries = nil
-                            waveSeries = nil
-                            waveField = nil
-                            waveRaster = nil
-                            waterMask = nil
-                            timelineOffset = 0
+                            fields.clear()
                             probeCoordinate = nil
-                            seaStateStatus = nil
                         }
                     } label: {
                         Image(systemName: seaStateEnabled ? "water.waves" : "water.waves")
