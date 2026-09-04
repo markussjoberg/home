@@ -46,6 +46,9 @@ struct RootView: View {
         .environmentObject(forecastStore)
         // Tumma ensin: kuvavetoinen ilme, isot luvut erottuvat myös kirkkaassa.
         .preferredColorScheme(.dark)
+        // Käyttöliittymä on suomeksi — päivämäärät ja luvut samaan kieleen laitteen
+        // kielestä riippumatta (muuten "Wednesday 2. Sep" suomenkielisessä listassa).
+        .environment(\.locale, Locale(identifier: "fi_FI"))
         .task {
             await account.refresh() // lukemattomat ilmoitukset merkkiin
             let data = spots.map(\.data)
