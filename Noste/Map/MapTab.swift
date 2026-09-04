@@ -724,9 +724,11 @@ struct SpotMapView: UIViewRepresentable {
         context.coordinator.waveSignature = "" // aaltokenttä lisätään uudelleen tiilien päälle
         // Ilma käyttää Applen satelliittikuvastoa (tarkempi ja globaali kuin
         // MML-ortot); muut tasot normaalia pohjakarttaa + tiilioverlayta.
+        // Vaimennettu peruskartta (Windyn tapaan): säädata ja merkit erottuvat,
+        // kartta ei kilpaile värillä.
         map.preferredConfiguration = layer == .aerial
             ? MKImageryMapConfiguration()
-            : MKStandardMapConfiguration()
+            : MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
         switch layer {
         case .standard:
             break
