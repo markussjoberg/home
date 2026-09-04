@@ -136,6 +136,71 @@ struct ServerClient {
         return (response as? HTTPURLResponse)?.statusCode == 200
     }
 
+    // MARK: - Moderointi (admin-token, kehittäjäasetukset)
+
+    struct AdminReport: Codable, Identifiable {
+        struct Target: Codable {
+            var spotId: String?
+            var spotName: String?
+            var text: String?
+            var author: String?
+            var deleted: Bool?
+        }
+        var id: Int
+        var targetType: String
+        var targetId: String
+        var reason: String
+        var createdAt: String
+        var target: Target
+    }
+
+    /// Admin-pyyntö täydellä tokenilla (vaatii oman palvelimen asetuksissa).
+    private func adminRequest(path: String, method: String = "GET", body: Data? = nil) -> URLRequest? {
+        guard let server = ServerSettings.userConfigured else { return nil }
+        var request = URLRequest(url: server.baseURL.appendingPathComponent(path))
+        request.httpMethod = method
+        request.setValue("Bearer \(server.token)", forHTTPHeaderField: "Authorization")
+        if let body {
+            request.httpBody = body
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        request.timeoutInterval = 15
+        return request
+    }
+
+    func adminReports() async -> [AdminReport]? {
+        struct Reply: Codable { var reports: [AdminReport] }
+        guard let request = adminRequest(path: "api/reports"),
+              let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200
+        else { return nil }
+        return (try? JSONDecoder().decode(Reply.self, from: data))?.reports
+    }
+
+    func resolveReport(id: Int, resolution: String) async -> Bool {
+        struct Upload: Codable { var resolution: String }
+        guard let body = try? JSONEncoder().encode(Upload(resolution: resolution)),
+              let request = adminRequest(path: "api/reports/\(id)/resolve", method: "POST", body: body),
+              let (_, response) = try? await URLSession.shared.data(for: request)
+        else { return false }
+        return (response as? HTTPURLResponse)?.statusCode == 200
+    }
+
+    /// Admin poistaa julkisen spotin heti (ohittaa poistoehdotuksen).
+    func adminDeleteSpot(id: String) async -> Bool {
+        guard let request = adminRequest(path: "api/public/spots/\(id)", method: "DELETE"),
+              let (_, response) = try? await URLSession.shared.data(for: request)
+        else { return false }
+        return (response as? HTTPURLResponse)?.statusCode == 200
+    }
+
+    func adminDeleteComment(spotID: String, commentID: String) async -> Bool {
+        guard let request = adminRequest(path: "api/public/spots/\(spotID)/comments/\(commentID)", method: "DELETE"),
+              let (_, response) = try? await URLSession.shared.data(for: request)
+        else { return false }
+        return (response as? HTTPURLResponse)?.statusCode == 200
+    }
+
     /// APNs-laitetunniste tilille (kutsutaan joka käynnistyksessä kirjautuneena).
     func registerPushToken(_ token: String, sandbox: Bool) async {
         struct Upload: Codable { var token: String; var sandbox: Bool }

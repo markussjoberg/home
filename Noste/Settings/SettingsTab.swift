@@ -96,9 +96,14 @@ struct SettingsTab: View {
                             .textInputAutocapitalization(.never)
                         SecureField("Token (NOSTE_TOKEN)", text: $serverToken)
                         if serverConfigured {
-                            Label("Oma palvelin käytössä — myös synkka ja kelivahti toimivat", systemImage: "checkmark.circle.fill")
+                            Label("Oma palvelin käytössä — admin-token", systemImage: "checkmark.circle.fill")
                                 .foregroundStyle(.green)
                                 .font(.footnote)
+                            NavigationLink {
+                                AdminReportsView()
+                            } label: {
+                                Label("Ilmoitukset (admin)", systemImage: "flag.fill")
+                            }
                         }
                         TextField("Oma MML-avain", text: $mmlApiKey)
                             .autocorrectionDisabled()
