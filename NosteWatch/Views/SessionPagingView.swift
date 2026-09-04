@@ -3,6 +3,8 @@ import WatchKit
 import NosteCore
 
 struct SessionPagingView: View {
+    /// Sama foilin oranssi kuin puhelimessa (Theme.ride).
+    static let ride = Color(red: 1.0, green: 0.62, blue: 0.25)
     @State private var selection: Tab = .metrics
 
     enum Tab {
@@ -71,7 +73,7 @@ struct MetricsView: View {
             HStack {
                 Text(Format.duration(workout.elapsed))
                     .font(.system(size: 26, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(.white)
                 if workout.phase == .paused {
                     Text("TAUKO")
                         .font(.caption2.bold())
@@ -103,11 +105,11 @@ struct MetricsView: View {
             switch workout.sport {
             case .pumpFoil:
                 row("Pumput", "\(workout.livePumpCount)", .cyan)
-                row("Lennot", "\(workout.rideState.rideCount)", .green)
-                row("Foiliaika", Format.duration(workout.rideState.totalRideTime), .green)
+                row("Lennot", "\(workout.rideState.rideCount)", Self.ride)
+                row("Foiliaika", Format.duration(workout.rideState.totalRideTime), Self.ride)
             case .wingFoil, .parawing, .kite, .proneFoil, .dwSup:
-                row("Foiliaika", Format.duration(workout.rideState.totalRideTime), .green)
-                row("Lennot", "\(workout.rideState.rideCount)", .green)
+                row("Foiliaika", Format.duration(workout.rideState.totalRideTime), Self.ride)
+                row("Lennot", "\(workout.rideState.rideCount)", Self.ride)
                 row("Matka", Format.distance(workout.liveDistance), .primary)
             case .surf, .sup:
                 row(workout.sport == .surf ? "Aallot" : "Vedot", "\(workout.rideState.rideCount)", .cyan)
@@ -125,7 +127,7 @@ struct MetricsView: View {
         switch workout.sport {
         case .pumpFoil:
             if workout.rideState.isRiding {
-                heroText(Format.duration(workout.rideState.currentRideDuration), label: "LENNOSSA", color: .green)
+                heroText(Format.duration(workout.rideState.currentRideDuration), label: "LENNOSSA", color: Self.ride)
             } else {
                 heroText("\(workout.livePumpCount)", label: "pumppua", color: .cyan)
             }
@@ -133,13 +135,13 @@ struct MetricsView: View {
             heroText(
                 Format.speedKmh(workout.currentSpeed),
                 label: workout.rideState.isRiding ? "FOILILLA · \(Format.duration(workout.rideState.currentRideDuration))" : "nopeus",
-                color: workout.rideState.isRiding ? .green : .primary
+                color: workout.rideState.isRiding ? Self.ride : .primary
             )
         case .surf, .sup:
             heroText(
                 Format.speedKmh(workout.currentSpeed),
                 label: workout.rideState.isRiding ? "AALLOSSA · \(Format.duration(workout.rideState.currentRideDuration))" : "nopeus",
-                color: workout.rideState.isRiding ? .green : .primary
+                color: workout.rideState.isRiding ? Self.ride : .primary
             )
         }
     }

@@ -140,7 +140,7 @@ struct SummaryView: View {
             if rating != nil {
                 Text("Kiitos — spotti oppii tästä.")
                     .font(.footnote)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color(red: 1.0, green: 0.62, blue: 0.25))
             }
         }
     }
