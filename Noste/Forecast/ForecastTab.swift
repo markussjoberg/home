@@ -5,6 +5,7 @@ import NosteCore
 
 struct ForecastTab: View {
     @Query(sort: \SpotRecord.name) private var spots: [SpotRecord]
+    @Query private var alerts: [AlertRecord]
     @EnvironmentObject private var forecastStore: ForecastStore
     @Environment(\.modelContext) private var modelContext
     @State private var editingSpot: SpotData?
@@ -33,7 +34,8 @@ struct ForecastTab: View {
                                 SpotForecastView(spot: spot, allSpots: sortedSpots, onEdit: { editingSpot = spot })
                             } label: { EmptyView() }
                             .opacity(0) // kortti itse on nappi, ei oikean reunan nuolta
-                            SpotRow(spot: spot, forecast: forecastStore.forecast(for: spot))
+                            SpotRow(spot: spot, forecast: forecastStore.forecast(for: spot),
+                                    alertThreshold: alerts.first { $0.spotID == spot.id && $0.enabled }?.minWind)
                         }
                         .cardRow()
                     }
@@ -72,6 +74,8 @@ struct ForecastTab: View {
 private struct SpotRow: View {
     let spot: SpotData
     let forecast: SpotForecast?
+    /// Oma kelivahti päällä tälle spotille (raja m/s); nil = ei hälytystä.
+    var alertThreshold: Double? = nil
 
     var body: some View {
         HStack(spacing: 14) {
@@ -90,6 +94,12 @@ private struct SpotRow: View {
                     Text(spot.name).font(.cardTitle).lineLimit(1)
                     if spot.isFavorite {
                         Image(systemName: "star.fill").foregroundStyle(Theme.ride).font(.caption)
+                    }
+                    if let alertThreshold {
+                        Label("\(Int(alertThreshold))", systemImage: "bell.fill")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Theme.wind)
+                            .accessibilityLabel("Kelivahti \(Int(alertThreshold)) metriä sekunnissa")
                     }
                 }
                 if let match = nextMatch {
