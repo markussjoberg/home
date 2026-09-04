@@ -88,8 +88,9 @@ struct RecordSessionView: View {
         VStack(spacing: 16) {
             HStack {
                 Text(Format.duration(workout.elapsed))
-                    .font(.system(size: 54, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.yellow)
+                    .font(.system(size: 64, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(workout.phase == .paused ? Theme.muted : .white)
                 if workout.phase == .paused {
                     Text("TAUKO")
                         .font(.caption.bold())
@@ -120,23 +121,23 @@ struct RecordSessionView: View {
                 GridRow {
                     metric(Format.speedKmh(workout.currentSpeed),
                            workout.rideState.isRiding ? "foililla" : "nopeus",
-                           workout.rideState.isRiding ? .green : .primary)
-                    metric(Format.distance(workout.liveDistance), "matka", .primary)
+                           workout.rideState.isRiding ? Theme.ride : .white)
+                    metric(Format.distance(workout.liveDistance), "matka", .white)
                 }
                 GridRow {
                     if workout.sport.usesFoil {
-                        metric(Format.duration(workout.rideState.totalRideTime), "foiliaika", .green)
-                        metric("\(workout.rideState.rideCount)", "lennot", .green)
+                        metric(Format.duration(workout.rideState.totalRideTime), "foiliaika", Theme.ride)
+                        metric("\(workout.rideState.rideCount)", "lennot", Theme.ride)
                     } else {
                         metric("\(workout.rideState.rideCount)",
-                               workout.sport == .surf ? "aallot" : "vedot", .cyan)
-                        metric(Format.duration(workout.rideState.currentRideDuration), "meneillään", .green)
+                               workout.sport == .surf ? "aallot" : "vedot", Theme.wind)
+                        metric(Format.duration(workout.rideState.currentRideDuration), "meneillään", Theme.ride)
                     }
                 }
                 if workout.sport.countsPumps {
                     GridRow {
-                        metric("\(workout.livePumpCount)", "pumput", .cyan)
-                        metric(Format.duration(workout.rideState.currentRideDuration), "lento nyt", .green)
+                        metric("\(workout.livePumpCount)", "pumput", Theme.wind)
+                        metric(Format.duration(workout.rideState.currentRideDuration), "lento nyt", Theme.ride)
                     }
                 }
             }
@@ -238,11 +239,12 @@ struct RecordSessionView: View {
     private func metric(_ value: String, _ label: String, _ color: Color) -> some View {
         VStack(spacing: 2) {
             Text(value)
-                .font(.system(.title, design: .rounded).weight(.semibold))
+                .font(.stat(36))
+                .monospacedDigit()
                 .foregroundStyle(color)
             Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.statLabel)
+                .foregroundStyle(Theme.muted)
         }
         .frame(minWidth: 130)
     }
